@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GTK4 Icon Browser</title>
+<style>
+  /* Self-hosted fonts (subset to Latin, WOFF2) — no CDN required */
+  @font-face {
+    font-family: 'Bebas Neue';
+    src: url('fonts/BebasNeue-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Inter';
+    src: url('fonts/Inter-Variable.woff2') format('woff2-variations');
+    font-weight: 100 900; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Iosevka';
+    src: url('fonts/IosevkaMono-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Iosevka';
+    src: url('fonts/IosevkaMono-Medium.woff2') format('woff2');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+
+  :root {
+    --font-head: 'Bebas Neue', 'Arial Narrow', sans-serif;
+    --font-mono: 'Iosevka', 'Roboto Mono', 'Courier New', monospace;
+    --font-body: 'Inter', 'Helvetica', 'Arial', sans-serif;
+    --sizes: 16px;
+  }
+  [data-theme="dark"] {
+    --bg: #101317;
+    --surface: #171b21;
+    --surface-2: #1e232b;
+    --border: #2a313b;
+    --border-strong: #3a434f;
+    --ink: #e8ecf1;
+    --ink-muted: #9aa6b2;
+    --ink-faint: #5c6774;
+    --accent: #e8925a;
+    --accent-ink: #14100c;
+    --accent-soft: rgba(232, 146, 90, 0.14);
+    --checker: rgba(255, 255, 255, 0.045);
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+  [data-theme="light"] {
+    --bg: #f4f2ee;
+    --surface: #fdfcfa;
+    --surface-2: #eeece6;
+    --border: #dcd8d0;
+    --border-strong: #c2bcb0;
+    --ink: #22262b;
+    --ink-muted: #5d646d;
+    --ink-faint: #9aa0a8;
+    --accent: #c96a2e;
+    --accent-ink: #fff;
+    --accent-soft: rgba(201, 106, 46, 0.12);
+    --checker: rgba(0, 0, 0, 0.04);
+    --shadow: 0 12px 32px rgba(30, 25, 18, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.5;
+    padding-bottom: 76px; /* room for inspector */
+  }
+
+  h1, h2, h3 { font-family: var(--font-head); font-weight: 400; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+
+  /* ---------- header / controls ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px 12px;
+  }
+  .title-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .title-row h1 { font-size: 34px; line-height: 1; }
+  .title-row .count { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); letter-spacing: 0.08em; }
+  .spacer { flex: 1; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+
+  .field {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0 12px; height: 38px;
+  }
+  .field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field svg { flex: none; color: var(--ink-faint); }
+  .field input, .field select {
+    background: none; border: none; outline: none; color: var(--ink);
+    font-family: var(--font-mono); font-size: 13px; height: 100%;
+  }
+  .field input { width: 210px; }
+  .field select { cursor: pointer; appearance: none; padding-right: 4px; }
+  .field select option { background: var(--surface); color: var(--ink); }
+
+  .label {
+    font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: 0.14em; color: var(--ink-muted);
+  }
+
+  /* size slider */
+  .size-ctl { display: flex; align-items: center; gap: 10px; height: 38px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; }
+  input[type="range"] { appearance: none; width: 150px; height: 3px; background: var(--border-strong); border-radius: 2px; outline: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none; width: 15px; height: 15px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--accent);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--accent);
+  }
+  .size-readout { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); min-width: 52px; text-align: right; font-weight: 500; }
+
+  /* theme (light/dark) toggle */
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; border-radius: 8px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border); color: var(--ink-muted);
+  }
+  .icon-btn:hover { color: var(--ink); border-color: var(--border-strong); }
+  [data-theme="dark"] .sun { display: block; } [data-theme="dark"] .moon { display: none; }
+  [data-theme="light"] .sun { display: none; } [data-theme="light"] .moon { display: block; }
+
+  /* theme chips */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .chip {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+    background: var(--surface); color: var(--ink-muted);
+    border: 1px solid var(--border); border-radius: 99px;
+    padding: 5px 14px; cursor: pointer; transition: all 0.12s ease;
+  }
+  .chip:hover { color: var(--ink); border-color: var(--border-strong); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  .chip .n { opacity: 0.65; margin-left: 5px; font-size: 11px; }
+
+  /* ---------- grid ---------- */
+  main { padding: 20px 24px 40px; }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--cell), 1fr));
+    gap: 10px;
+  }
+  .card {
+    position: relative; display: flex; flex-direction: column; align-items: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 8px 10px; cursor: default;
+    transition: border-color 0.12s ease, transform 0.12s ease;
+    min-width: 0;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-2px); z-index: 2; }
+  .card:hover .copy-btn { opacity: 1; }
+  .thumb {
+    height: var(--isize); width: 100%;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+    /* faint checkerboard so dark/transparent icons stay visible on dark cards */
+    background-image:
+      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
+      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
+    background-size: 12px 12px;
+    background-position: 0 0, 6px 6px;
+  }
+  .thumb img { width: var(--isize); height: var(--isize); object-fit: contain; }
+  .thumb img.broken { display: none; }
+  .thumb .missing { display: none; font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.1em; }
+  .thumb.broken-img .missing { display: block; }
+
+  .card-name {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--ink);
+    margin-top: 10px; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .card-meta {
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-faint); margin-top: 3px;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 6px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-muted);
+    opacity: 0; transition: opacity 0.12s ease;
+  }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--accent); border-color: var(--accent); opacity: 1; }
+
+  /* ---------- inspector (hover details) ---------- */
+  #inspector {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 12px 24px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);
+    min-height: 52px;
+  }
+  #inspector .name { color: var(--accent); font-weight: 500; font-size: 13px; }
+  #inspector .path { color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 200px; direction: rtl; text-align: left; }
+  #inspector kbd {
+    font-family: var(--font-mono); font-size: 10px; border: 1px solid var(--border-strong);
+    border-radius: 4px; padding: 1px 5px; color: var(--ink-faint);
+  }
+
+  /* toast */
+  #toast {
+    position: fixed; bottom: 66px; left: 50%; transform: translateX(-50%) translateY(8px);
+    background: var(--accent); color: var(--accent-ink);
+    font-family: var(--font-mono); font-size: 12.5px; letter-spacing: 0.04em;
+    padding: 8px 18px; border-radius: 8px; opacity: 0; pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease; z-index: 50;
+    box-shadow: var(--shadow);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* loading / error overlay */
+  #gate {
+    position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+    background: var(--bg); padding: 24px; text-align: center;
+  }
+  #gate .box { max-width: 560px; }
+  #gate h1 { font-size: 48px; color: var(--accent); }
+  #gate p { color: var(--ink-muted); }
+  #gate code { font-family: var(--font-mono); background: var(--surface-2); padding: 2px 7px; border-radius: 5px; font-size: 12.5px; }
+  .spinner {
+    width: 34px; height: 34px; margin: 0 auto 18px; border-radius: 50%;
+    border: 3px solid var(--border-strong); border-top-color: var(--accent);
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #gate.hidden { display: none; }
+
+  @media (max-width: 640px) {
+    header { padding: 12px 14px 10px; }
+    main { padding: 14px 14px 40px; }
+    .title-row h1 { font-size: 28px; }
+    .field input { width: 100%; flex: 1; }
+    .field { flex: 1 1 100%; }
+    .size-ctl { flex: 1 1 100%; }
+    #inspector { padding: 10px 14px; }
+    #inspector .path { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="box">
+    <div class="spinner" id="gate-spinner"></div>
+    <h1>Loading icons</h1>
+    <p id="gate-msg">Reading <code>list.txt</code>…</p>
+  </div>
+</div>
+
+<header>
+  <div class="title-row">
+    <h1>GTK4 Icon Browser</h1>
+    <span class="count" id="count-line"></span>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="mode-btn" title="Toggle light / dark" aria-label="Toggle light or dark mode">
+      <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+
+  <div class="controls">
+    <div class="field">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search" type="search" placeholder="search icons  ( / )" aria-label="Search icons">
+    </div>
+
+    <div class="size-ctl" title="Preview size — standard icon sizes">
+      <span class="label">Size</span>
+      <input id="size" type="range" min="0" max="8" step="1" value="3" aria-label="Icon preview size">
+      <span class="size-readout" id="size-readout">48px</span>
+    </div>
+
+    <div class="field">
+      <span class="label">Sort</span>
+      <select id="sort" aria-label="Sort icons">
+        <option value="name-asc">Name A–Z</option>
+        <option value="name-desc">Name Z–A</option>
+        <option value="theme">Theme</option>
+        <option value="context">Context</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <span class="label">Context</span>
+      <select id="context" aria-label="Filter by context">
+        <option value="">All</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="chips" id="theme-chips"></div>
+</header>
+
+<main>
+  <div id="grid" style="--cell:96px; --isize:48px;"></div>
+  <div id="sentinel" style="height:1px;"></div>
+</main>
+
+<div id="inspector">
+  <span class="label" style="letter-spacing:0.14em;">Hover an icon for details</span>
+  <span class="spacer"></span>
+  <span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>
+</div>
+
+<div id="toast" role="status"></div>
+
+<!-- file:// fallback data (generated by install.sh alongside list.txt) -->
+<script src="list.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 256];
+  var PAGE = 240; // chunked render size
+
+  var els = {
+    gate: document.getElementById('gate'),
+    gateSpinner: document.getElementById('gate-spinner'),
+    gateMsg: document.getElementById('gate-msg'),
+    grid: document.getElementById('grid'),
+    sentinel: document.getElementById('sentinel'),
+    search: document.getElementById('search'),
+    size: document.getElementById('size'),
+    sizeReadout: document.getElementById('size-readout'),
+    sort: document.getElementById('sort'),
+    context: document.getElementById('context'),
+    chips: document.getElementById('theme-chips'),
+    count: document.getElementById('count-line'),
+    inspector: document.getElementById('inspector'),
+    toast: document.getElementById('toast'),
+    modeBtn: document.getElementById('mode-btn')
+  };
+
+  var icons = [];        // grouped: {key, name, theme, context, variants: [{path,size,px,ext}]}
+  var themes = [];       // [{name, count}]
+  var contexts = [];
+  var filtered = [];
+  var rendered = 0;
+  var state = {
+    size: 48, search: '', theme: '', context: '', sort: 'name-asc'
+  };
+
+  /* ---------- data parsing ---------- */
+
+  var SIZE_RE = /^(\d+)x\d+(@2)?$/;
+
+  function parseLine(line) {
+    line = line.trim();
+    if (!line || line[0] !== '/') return null;
+    var marker = '/icons/';
+    var mi = line.indexOf(marker);
+    var rel, theme;
+    if (mi !== -1) {
+      rel = line.slice(mi + marker.length);
+      theme = rel.slice(0, rel.indexOf('/')) || 'other';
+    } else {
+      // custom root: theme = first dir under the scan root's parent is unknowable;
+      // treat the parent directory name as the theme
+      var segs = line.split('/');
+      segs.pop();
+      theme = segs.pop() || 'other';
+      rel = line.slice(line.indexOf(theme));
+    }
+    var segs = rel.split('/');
+    var file = segs.pop();
+    var dot = file.lastIndexOf('.');
+    if (dot <= 0) return null;
+    var name = file.slice(0, dot);
+    var ext = file.slice(dot + 1).toLowerCase();
+    var size = '', px = 0, context = '';
+    if (segs.length && (SIZE_RE.test(segs[0]) || segs[0] === 'scalable')) {
+      var m = segs[0].match(SIZE_RE);
+      if (m) { size = segs[0]; px = parseInt(m[1], 10) * (m[2] ? 2 : 1); }
+      else { size = 'scalable'; px = 512; }
+      context = segs.length > 1 ? segs[1] : '';
+    } else {
+      context = segs.length ? segs[0] : '';
+    }
+    return { path: line, rel: rel, theme: theme, context: context || 'uncategorized', name: name, ext: ext, size: size, px: px };
+  }
+
+  function iconSrc(v) {
+    if (location.protocol === 'file:') return 'file://' + v.path;
+    return 'icons/' + v.rel; // http-served layout: <webroot>/icons/<theme>/...
+  }
+
+  function buildIcons(rows) {
+    var map = new Map();
+    rows.forEach(function (r) {
+      if (!r) return;
+      var key = r.theme + '|' + r.context + '|' + r.name;
+      var g = map.get(key);
+      if (!g) { g = { key: key, name: r.name, theme: r.theme, context: r.context, variants: [] }; map.set(key, g); }
+      g.variants.push({ path: r.path, rel: r.rel, size: r.size, px: r.px, ext: r.ext });
+    });
+    var list = Array.from(map.values());
+    list.forEach(function (g) {
+      g.variants.sort(function (a, b) { return a.px - b.px; });
+      g.exts = Array.from(new Set(g.variants.map(function (v) { return v.ext; }))).join('+');
+    });
+    return list;
+  }
+
+  /* ---------- variant choice for display size ---------- */
+
+  function pickVariant(g, target) {
+    var best = null, bestScore = Infinity;
+    g.variants.forEach(function (v) {
+      var score = Math.abs(v.px - target);
+      if (v.ext === 'svg') score += 1.5;      // exact raster beats stretched svg at small sizes
+      if (score < bestScore) { bestScore = score; best = v; }
+    });
+    return best;
+  }
+
+  /* ---------- filtering / sorting ---------- */
+
+  function applyFilters() {
+    var q = state.search.toLowerCase();
+    filtered = icons.filter(function (g) {
+      if (state.theme && g.theme !== state.theme) return false;
+      if (state.context && g.context !== state.context) return false;
+      if (q && g.name.toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+    var cmp = {
+      'name-asc': function (a, b) { return a.name.localeCompare(b.name) || a.theme.localeCompare(b.theme); },
+      'name-desc': function (a, b) { return b.name.localeCompare(a.name); },
+      'theme': function (a, b) { return a.theme.localeCompare(b.theme) || a.name.localeCompare(b.name); },
+      'context': function (a, b) { return a.context.localeCompare(b.context) || a.name.localeCompare(b.name); }
+    }[state.sort];
+    filtered.sort(cmp);
+    els.count.textContent = filtered.length + ' icons' +
+      (filtered.length !== icons.length ? ' of ' + icons.length : '');
+    rerender();
+  }
+
+  /* ---------- rendering ---------- */
+
+  var io = new IntersectionObserver(function (entries) {
+    if (entries[0].isIntersecting) renderChunk();
+  }, { rootMargin: '600px' });
+  io.observe(els.sentinel);
+
+  function rerender() {
+    els.grid.innerHTML = '';
+    rendered = 0;
+    renderChunk();
+  }
+
+  function renderChunk() {
+    if (rendered >= filtered.length) return;
+    var end = Math.min(rendered + PAGE, filtered.length);
+    var frag = document.createDocumentFragment();
+    for (var i = rendered; i < end; i++) frag.appendChild(makeCard(filtered[i]));
+    rendered = end;
+    els.grid.appendChild(frag);
+  }
+
+  function makeCard(g) {
+    var v = pickVariant(g, state.size);
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.key = g.key;
+
+    var thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    var img = document.createElement('img');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.src = iconSrc(v);
+    img.alt = g.name + ' icon (' + g.theme + ')';
+    img.addEventListener('error', function () {
+      img.classList.add('broken');
+      thumb.classList.add('broken-img');
+    });
+    thumb.appendChild(img);
+    var miss = document.createElement('span');
+    miss.className = 'missing';
+    miss.textContent = 'missing';
+    thumb.appendChild(miss);
+
+    var name = document.createElement('div');
+    name.className = 'card-name';
+    name.textContent = g.name;
+    name.title = g.name;
+
+    var meta = document.createElement('div');
+    meta.className = 'card-meta';
+    meta.textContent = g.theme + ' · ' + (v.size || v.ext);
+
+    var copy = document.createElement('button');
+    copy.className = 'copy-btn';
+    copy.title = 'Copy icon name';
+    copy.setAttribute('aria-label', 'Copy icon name: ' + g.name);
+    copy.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    copy.addEventListener('click', function (e) {
+      e.stopPropagation();
+      copyText(g.name, copy);
+    });
+
+    card.addEventListener('mouseenter', function () { showInspector(g, v); });
+    card.addEventListener('mouseleave', hideInspector);
+
+    card.appendChild(copy);
+    card.appendChild(thumb);
+    card.appendChild(name);
+    card.appendChild(meta);
+    return card;
+  }
+
+  /* ---------- inspector ---------- */
+
+  /* All innerHTML assignments below interpolate only esc()-escaped values or static
+     markup — no raw untrusted data reaches the parser. */
+  function showInspector(g, v) {
+    var sizes = g.variants.map(function (x) { return x.size || 'flat'; }).join(' ');
+    els.inspector.innerHTML =
+      '<span class="name">' + esc(g.name) + '</span>' +
+      '<span>' + esc(g.theme) + ' / ' + esc(g.context) + '</span>' +
+      '<span>' + esc(sizes) + ' &nbsp;[' + esc(g.exts) + ']</span>' +
+      '<span class="path" title="' + esc(v.path) + '">' + esc(v.path) + '</span>';
+  }
+  function hideInspector() {
+    els.inspector.innerHTML =
+      '<span class="label" style="letter-spacing:0.14em;">Hover an icon for details</span>' +
+      '<span class="spacer"></span><span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>';
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ---------- clipboard ---------- */
+
+  var toastTimer;
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { els.toast.classList.remove('show'); }, 1400);
+  }
+
+  function copyText(text, btn) {
+    function done() {
+      if (btn) {
+        btn.classList.add('copied');
+        setTimeout(function () { btn.classList.remove('copied'); }, 900);
+      }
+      toast('Copied: ' + text);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallback(); });
+    } else fallback();
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) { toast('Copy failed'); }
+      document.body.removeChild(ta);
+    }
+  }
+
+  /* ---------- controls ---------- */
+
+  var searchTimer;
+  els.search.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () {
+      state.search = els.search.value.trim();
+      applyFilters();
+    }, 120);
+  });
+  els.sort.addEventListener('change', function () {
+    state.sort = els.sort.value;
+    localStorage.setItem('gib-sort', state.sort);
+    applyFilters();
+  });
+  els.context.addEventListener('change', function () {
+    state.context = els.context.value;
+    localStorage.setItem('gib-context', state.context);
+    applyFilters();
+  });
+  els.size.addEventListener('input', function () {
+    var s = SIZES[+els.size.value];
+    state.size = s;
+    els.sizeReadout.textContent = s + 'px';
+    var cell = Math.max(s + 56, 96);
+    els.grid.style.setProperty('--isize', s + 'px');
+    els.grid.style.setProperty('--cell', cell + 'px');
+    localStorage.setItem('gib-size', els.size.value);
+    clearTimeout(els.size._t);
+    els.size._t = setTimeout(rerender, 150);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && document.activeElement !== els.search) {
+      e.preventDefault(); els.search.focus();
+    } else if (e.key === 'Escape' && document.activeElement === els.search) {
+      els.search.value = ''; state.search = ''; applyFilters();
+      els.search.blur();
+    }
+  });
+
+  /* light / dark */
+  function setMode(mode) {
+    document.documentElement.dataset.theme = mode;
+    localStorage.setItem('gib-mode', mode);
+  }
+  els.modeBtn.addEventListener('click', function () {
+    setMode(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  });
+  (function initMode() {
+    var saved = localStorage.getItem('gib-mode');
+    if (!saved) saved = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    setMode(saved);
+  })();
+
+  /* chips */
+  function renderChips() {
+    els.chips.innerHTML = '';
+    var all = document.createElement('button');
+    all.className = 'chip' + (state.theme ? '' : ' active');
+    all.textContent = 'All';
+    var span = document.createElement('span');
+    span.className = 'n';
+    span.textContent = icons.length;
+    all.appendChild(span);
+    all.addEventListener('click', function () { state.theme = ''; localStorage.setItem('gib-theme', ''); markChips(); applyFilters(); });
+    els.chips.appendChild(all);
+    themes.forEach(function (t) {
+      var b = document.createElement('button');
+      b.className = 'chip' + (state.theme === t.name ? ' active' : '');
+      b.textContent = t.name;
+      var n = document.createElement('span');
+      n.className = 'n'; n.textContent = t.count;
+      b.appendChild(n);
+      b.addEventListener('click', function () { state.theme = t.name; localStorage.setItem('gib-theme', t.name); markChips(); applyFilters(); });
+      els.chips.appendChild(b);
+    });
+  }
+  function markChips() {
+    Array.prototype.forEach.call(els.chips.children, function (c) {
+      var t = c.textContent.replace(/\d+$/, '').trim();
+      c.classList.toggle('active', t === (state.theme || 'All'));
+    });
+  }
+
+  /* ---------- boot ---------- */
+
+  // list data can arrive two ways:
+  //  - fetch('list.txt')        — works over http(s) (spec's list.txt format)
+  //  - window.ICON_LIST (list.js) — works on file://, where fetch() is blocked
+  function finish(rows) {
+    icons = buildIcons(rows);
+
+    // facets
+    var tMap = new Map(), cSet = new Set();
+    icons.forEach(function (g) {
+      tMap.set(g.theme, (tMap.get(g.theme) || 0) + 1);
+      cSet.add(g.context);
+    });
+    themes = Array.from(tMap, function (e) { return { name: e[0], count: e[1] }; })
+      .sort(function (a, b) { return b.count - a.count; });
+    contexts = Array.from(cSet).sort();
+
+    var co = document.createElement('option');
+    co.value = ''; co.textContent = 'All (' + icons.length + ')';
+    els.context.appendChild(co);
+    contexts.forEach(function (c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      els.context.appendChild(o);
+    });
+
+    // restore state
+    var sv = localStorage.getItem('gib-size'); if (sv !== null) els.size.value = sv;
+    var ss = localStorage.getItem('gib-sort'); if (ss) els.sort.value = ss;
+    var st = localStorage.getItem('gib-theme'); if (st && tMap.has(st)) state.theme = st;
+    var sc = localStorage.getItem('gib-context');
+    if (sc && contexts.indexOf(sc) !== -1) { state.context = sc; els.context.value = sc; }
+
+    state.size = SIZES[+els.size.value];
+    els.sizeReadout.textContent = state.size + 'px';
+    els.grid.style.setProperty('--isize', state.size + 'px');
+    els.grid.style.setProperty('--cell', Math.max(state.size + 56, 96) + 'px');
+
+    renderChips();
+    applyFilters();
+    els.gate.classList.add('hidden');
+  }
+
+  function fail(msg) {
+    els.gateSpinner.style.display = 'none';
+    els.gate.querySelector('h1').textContent = 'No icon list found';
+    els.gateMsg.innerHTML = msg;
+  }
+
+  if (Array.isArray(window.ICON_LIST) && window.ICON_LIST.length) {
+    finish(window.ICON_LIST.map(parseLine).filter(Boolean));
+  } else {
+    fetch('list.txt')
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.text();
+      })
+      .then(function (text) {
+        var rows = text.split('\n').map(parseLine).filter(Boolean);
+        if (!rows.length) throw new Error('empty');
+        finish(rows);
+      })
+      .catch(function (err) {
+        fail('Could not read <code>list.txt</code> (' + esc(err.message) + ').<br><br>' +
+          'Generate it with:<br><br><code>find /usr/share/icons -type f \\( -name \'*.png\' -o -name \'*.svg\' -o -name \'*.xpm\' \\) &gt; list.txt</code><br><br>' +
+          'and keep it next to this HTML file — or run <code>install.sh</code>.');
+      });
+  }
+})();
+</script>
+</body>
+</html>
