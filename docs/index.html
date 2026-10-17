@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GTK4 Icon Browser — a local icon showcase</title>
+<meta name="description" content="A single-file, dependency-free showcase for the GTK icon themes installed on your machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-head: 'Bebas Neue', 'Arial Narrow', sans-serif;
+    --font-mono: 'Iosevka', 'Roboto Mono', 'Courier New', monospace;
+    --font-body: 'Inter', 'Helvetica', 'Arial', sans-serif;
+    --bg: #101317;
+    --surface: #171b21;
+    --surface-2: #1e232b;
+    --border: #2a313b;
+    --border-strong: #3a434f;
+    --ink: #e8ecf1;
+    --ink-muted: #9aa6b2;
+    --ink-faint: #5c6774;
+    --accent: #e8925a;
+    --accent-ink: #14100c;
+    --checker: rgba(255, 255, 255, 0.045);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1, h2 { font-family: var(--font-head); font-weight: 400; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+  .mono { font-family: var(--font-mono); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  /* top bar */
+  .top { border-bottom: 1px solid var(--border); }
+  .top .wrap { display: flex; align-items: center; gap: 16px; height: 64px; }
+  .top h1 { font-size: 26px; }
+  .ver {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+    color: var(--ink-muted); border: 1px solid var(--border); border-radius: 99px;
+    padding: 3px 11px; text-decoration: none; white-space: nowrap;
+  }
+  .ver:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); text-decoration: none; }
+  .spacer { flex: 1; }
+  .top .mono-link { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-muted); }
+  .top .mono-link:hover { color: var(--accent); text-decoration: none; }
+
+  /* hero */
+  .hero { padding: 72px 0 48px; }
+  .hero h1 { font-size: clamp(52px, 9vw, 96px); line-height: 0.95; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p.lede { color: var(--ink-muted); max-width: 560px; margin: 22px 0 0; font-size: 16px; }
+
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 30px; }
+  .btn {
+    font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.04em;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 11px 20px; border-radius: 8px; border: 1px solid var(--border-strong);
+    color: var(--ink); text-decoration: none; transition: all 0.12s ease;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  .btn.primary:hover { filter: brightness(1.08); text-decoration: none; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+
+  /* install command */
+  .cmd {
+    margin-top: 34px; display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px; max-width: 620px;
+  }
+  .cmd code { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+  .cmd code b { color: var(--accent); font-weight: 500; }
+  .cmd .hint { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-faint); margin-left: auto; }
+
+  /* screenshot */
+  .shot { margin: 56px 0 0; }
+  .shot .frame {
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    background:
+      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
+      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
+    background-size: 16px 16px; background-position: 0 0, 8px 8px;
+  }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot figcaption { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-faint); margin-top: 10px; }
+
+  /* features */
+  .features { padding: 56px 0 8px; border-top: 1px solid var(--border); }
+  .features h2 { font-size: 30px; margin-bottom: 26px; }
+  .features ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px 28px; }
+  .features li { border-left: 2px solid var(--accent); padding-left: 14px; }
+  .features li .k { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
+  .features li .d { color: var(--ink-muted); font-size: 13.5px; margin-top: 3px; }
+
+  /* footer */
+  footer { margin-top: 72px; border-top: 1px solid var(--border); padding: 26px 0 40px; }
+  footer .wrap { display: flex; gap: 20px; flex-wrap: wrap; align-items: center; font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
+
+  @media (max-width: 640px) {
+    .top .mono-link { display: none; }
+    .hero { padding: 48px 0 32px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="wrap">
+    <h1>GTK4 Icon Browser</h1>
+    <a class="ver" href="https://github.com/nativeit/gtk4-icon-browser/releases">v0.0.1</a>
+    <span class="spacer"></span>
+    <a class="mono-link" href="https://github.com/nativeit/gtk4-icon-browser">github.com/nativeit/gtk4-icon-browser</a>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>Every icon<br>on your machine,<br><em>one page.</em></h1>
+    <p class="lede">A single-file, dependency-free showcase for the GTK icon themes
+    installed on your machine. Filter it, search it, resize it, copy icon names
+    out of it — no build step, no runtime, no server required.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/nativeit/gtk4-icon-browser/releases">Download release</a>
+      <a class="btn" href="https://github.com/nativeit/gtk4-icon-browser#readme">README</a>
+      <a class="btn" href="https://github.com/nativeit/gtk4-icon-browser/blob/main/QUICKSTART.md">Quickstart</a>
+    </div>
+    <div class="cmd">
+      <code>git clone <b>https://github.com/nativeit/gtk4-icon-browser.git</b> &amp;&amp; bash install.sh</code>
+      <span class="hint">no sudo required</span>
+    </div>
+
+    <figure class="shot">
+      <div class="frame"><img src="assets/screenshot.png" alt="GTK4 Icon Browser — dark theme, icon grid with search, size slider, and theme filter chips"></div>
+      <figcaption>Dark theme · 32px grid · search + size slider + theme chips</figcaption>
+    </figure>
+  </section>
+
+  <section class="features">
+    <h2>What it does</h2>
+    <ul>
+      <li><span class="k">Every installed icon</span><span class="d">Grouped by theme, size variants deduplicated, best variant chosen per preview size.</span></li>
+      <li><span class="k">Size slider</span><span class="d">Snaps to standard icon sizes — 16 through 256.</span></li>
+      <li><span class="k">Search &amp; filter</span><span class="d">By name, theme (with counts), and context: actions, devices, status, …</span></li>
+      <li><span class="k">Hover inspector</span><span class="d">Name, theme, context, every size variant, formats, full path.</span></li>
+      <li><span class="k">One-click copy</span><span class="d">Corner button on every card copies the icon's name.</span></li>
+      <li><span class="k">Fully local</span><span class="d">Self-hosted fonts, no CDN, no framework. Works offline over file://.</span></li>
+    </ul>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>MIT © Native IT (S. Davis)</span>
+    <a href="https://github.com/nativeit/gtk4-icon-browser/blob/main/LICENSE.md">License</a>
+    <a href="https://github.com/nativeit/gtk4-icon-browser">Source</a>
+    <a href="https://github.com/nativeit/gtk4-icon-browser/releases">Releases</a>
+    <a href="https://github.com/nativeit/gtk4-icon-browser/blob/main/DEVELOPMENT.md">Development</a>
+    <span style="margin-left:auto">a casual side project — contributions welcome</span>
+  </div>
+</footer>
+
+</body>
+</html>

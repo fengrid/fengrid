@@ -148,6 +148,16 @@
   .chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
   .chip .n { opacity: 0.65; margin-left: 5px; font-size: 11px; }
 
+  /* version badge -> GitHub releases */
+  .ver-badge {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
+    color: var(--ink-muted); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 99px;
+    padding: 3px 11px; text-decoration: none; white-space: nowrap;
+    transition: all 0.12s ease;
+  }
+  .ver-badge:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
   /* ---------- grid ---------- */
   main { padding: 20px 24px 40px; }
   #grid {
@@ -272,6 +282,7 @@
   <div class="title-row">
     <h1>GTK4 Icon Browser</h1>
     <span class="count" id="count-line"></span>
+    <a class="ver-badge" id="ver-badge" href="https://github.com/nativeit/gtk4-icon-browser/releases" target="_blank" rel="noopener" title="Releases"></a>
     <span class="spacer"></span>
     <button class="icon-btn" id="mode-btn" title="Toggle light / dark" aria-label="Toggle light or dark mode">
       <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -333,6 +344,9 @@
 
   var SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 256];
   var PAGE = 240; // chunked render size
+  var APP_VERSION = 'v0.0.1'; // keep in sync with the latest git tag
+
+  document.getElementById('ver-badge').textContent = APP_VERSION;
 
   var els = {
     gate: document.getElementById('gate'),
