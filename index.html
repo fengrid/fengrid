@@ -401,8 +401,9 @@
   }
 
   function iconSrc(v) {
-    if (location.protocol === 'file:') return 'file://' + v.path;
-    return 'icons/' + v.rel; // http-served layout: <webroot>/icons/<theme>/...
+    // relative layout: <app dir>/icons/<theme>/... — works under file:// (Firefox
+    // blocks cross-directory file:// images) and over http alike
+    return 'icons/' + v.rel;
   }
 
   function buildIcons(rows) {
@@ -491,7 +492,15 @@
     img.decoding = 'async';
     img.src = iconSrc(v);
     img.alt = g.name + ' icon (' + g.theme + ')';
+    var retried = false;
     img.addEventListener('error', function () {
+      // one fallback: if the local icons/ copy is absent, try the absolute
+      // system path (works where the browser permits cross-directory file://)
+      if (!retried) {
+        retried = true;
+        img.src = 'file://' + v.path;
+        return;
+      }
       img.classList.add('broken');
       thumb.classList.add('broken-img');
     });
@@ -540,7 +549,7 @@
       '<span class="name">' + esc(g.name) + '</span>' +
       '<span>' + esc(g.theme) + ' / ' + esc(g.context) + '</span>' +
       '<span>' + esc(sizes) + ' &nbsp;[' + esc(g.exts) + ']</span>' +
-      '<span class="path" title="' + esc(v.path) + '">' + esc(v.path) + '</span>';
+      '<span class="path" title="' + esc(v.path) + '"><span dir="ltr">' + esc(v.path) + '</span></span>';
   }
   function hideInspector() {
     els.inspector.innerHTML =

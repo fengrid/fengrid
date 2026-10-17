@@ -134,6 +134,24 @@ cp "$LIST_FILE" "$INSTALL_DIR/$LIST_FILE" || die "Failed to copy list.txt."
 } > "$INSTALL_DIR/list.js"
 ok "Installed index.html + list.txt + list.js"
 
+# Local icon tree: the page must be self-contained — Firefox blocks
+# cross-directory file:// images, so copy every listed icon under
+# icons/<theme>/... next to index.html (relative paths work everywhere).
+info "Copying icon files into $INSTALL_DIR/icons/ ..."
+mkdir -p "$INSTALL_DIR/icons"
+COPIED=0
+while IFS= read -r p; do
+    [ -f "$p" ] || continue
+    case "$p" in
+        */icons/*) rel="${p#*/icons/}" ;;
+        *) d="$(dirname "$p")"; rel="$(basename "$d")/$(basename "$p")" ;;
+    esac
+    mkdir -p "$INSTALL_DIR/icons/$(dirname "$rel")"
+    cp -L "$p" "$INSTALL_DIR/icons/$rel" 2>/dev/null && COPIED=$((COPIED + 1))
+done < "$INSTALL_DIR/$LIST_FILE"
+SIZE=$(du -sh "$INSTALL_DIR/icons" | cut -f1)
+ok "$COPIED icons copied to icons/ ($SIZE)"
+
 # ----------------------------------------------------------------------------
 # 4. Ensure ~/.local/bin exists, is on PATH, and holds the symlink
 # ----------------------------------------------------------------------------
