@@ -137,6 +137,9 @@ ok "Installed index.html + list.txt + list.js"
 # Local icon tree: the page must be self-contained — Firefox blocks
 # cross-directory file:// images, so copy every listed icon under
 # icons/<theme>/... next to index.html (relative paths work everywhere).
+if [ "$N" -gt 1000 ]; then
+    warn "You have $N icon files — copying them all takes a few minutes on large icon sets. Please wait; do not interrupt the install."
+fi
 info "Copying icon files into $INSTALL_DIR/icons/ ..."
 mkdir -p "$INSTALL_DIR/icons"
 COPIED=0
