@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GTK4 Icon Browser</title>
+<title>Icon Browser</title>
 <style>
   /* Self-hosted fonts (subset to Latin, WOFF2) — no CDN required */
   @font-face {
@@ -253,15 +253,32 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   #gate.hidden { display: none; }
 
-  @media (max-width: 640px) {
+  /* ---------- responsive: tablets & phones ---------- */
+  @media (max-width: 720px) {
     header { padding: 12px 14px 10px; }
     main { padding: 14px 14px 40px; }
-    .title-row h1 { font-size: 28px; }
+    .title-row h1 { font-size: 26px; }
+    .ver-badge { padding: 4px 10px; }
+    .controls { gap: 8px; }
+    .field { flex: 1 1 100%; height: 44px; min-height: 44px; }
     .field input { width: 100%; flex: 1; }
-    .field { flex: 1 1 100%; }
-    .size-ctl { flex: 1 1 100%; }
-    #inspector { padding: 10px 14px; }
+    .field:has(select) { flex: 1 1 46%; }
+    .size-ctl { flex: 1 1 100%; height: 44px; }
+    input[type="range"] { flex: 1; width: auto; }
+    .chips { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip { flex: 0 0 auto; padding: 8px 16px; }
+    #grid { gap: 8px; }
+    .card { padding: 10px 6px 8px; border-radius: 8px; }
+    body { padding-bottom: 92px; }
+    #inspector { padding: 10px 14px; min-height: 64px; gap: 14px; }
     #inspector .path { display: none; }
+  }
+  /* touch devices (no hover): copy button stays visible; tapping a card
+     selects it and populates the inspector */
+  @media (hover: none) {
+    .copy-btn { opacity: 1; }
+    .card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
@@ -280,7 +297,7 @@
 
 <header>
   <div class="title-row">
-    <h1>GTK4 Icon Browser</h1>
+    <h1>Icon Browser</h1>
     <span class="count" id="count-line"></span>
     <a class="ver-badge" id="ver-badge" href="https://github.com/nativeit/gtk4-icon-browser/releases" target="_blank" rel="noopener" title="Releases"></a>
     <span class="spacer"></span>
@@ -344,7 +361,7 @@
 
   var SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 256];
   var PAGE = 240; // chunked render size
-  var APP_VERSION = 'v0.0.1'; // keep in sync with the latest git tag
+  var APP_VERSION = 'v0.1.0-dev'; // keep in sync with the latest git tag
 
   document.getElementById('ver-badge').textContent = APP_VERSION;
 
@@ -546,6 +563,16 @@
     card.addEventListener('mouseenter', function () { showInspector(g, v); });
     card.addEventListener('mouseleave', hideInspector);
 
+    // touch devices: tap-to-select shows the inspector (no hover possible)
+    card.addEventListener('click', function () {
+      if (!matchMedia('(hover: none)').matches || card.classList.contains('selected')) return;
+      [].forEach.call(document.querySelectorAll('.card.selected'), function (c) {
+        c.classList.remove('selected');
+      });
+      card.classList.add('selected');
+      showInspector(g, v);
+    });
+
     card.appendChild(copy);
     card.appendChild(thumb);
     card.appendChild(name);
@@ -649,10 +676,24 @@
     }
   });
 
+  // tapping outside any card clears touch selection
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.card')) return;
+    [].forEach.call(document.querySelectorAll('.card.selected'), function (c) {
+      c.classList.remove('selected');
+    });
+  });
+
   /* light / dark */
   function setMode(mode) {
     document.documentElement.dataset.theme = mode;
     localStorage.setItem('gib-mode', mode);
+  }
+  // touch devices have no hover — phrase the idle inspector hint accordingly
+  if (matchMedia('(hover: none)').matches) {
+    els.inspector.innerHTML =
+      '<span class="label" style="letter-spacing:0.14em;">Tap an icon for details</span>' +
+      '<span class="spacer"></span><span><kbd>/</kbd> search</span>';
   }
   els.modeBtn.addEventListener('click', function () {
     setMode(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');

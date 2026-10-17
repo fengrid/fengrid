@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""
+serve.py — optional local webshare for the Icon Browser.
+
+Serves the install directory on the local network so phones and tablets
+can browse the showcase by scanning the QR code on the /_connect page.
+
+CORS / security notes
+---------------------
+- The showcase makes NO cross-origin requests: the page, icons/, and data
+  files are all served same-origin from this directory, so no CORS headers
+  are required and none are added. Do not add permissive
+  Access-Control-Allow-Origin headers to a LAN share.
+- Directory listings are disabled; only real files are served.
+- The listener binds to 0.0.0.0 by default (needed for other devices to
+  reach it). Use --host 127.0.0.1 to keep it local-only.
+- The /_connect page renders a QR code of the URL reachable from other
+  devices; it is served with no-store caching.
+"""
+
+import argparse
+import functools
+import http.server
+import os
+import socket
+import socketserver
+import sys
+from urllib.parse import urlparse
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def lan_ip():
+    """IP of the interface that would route to the internet (best guess)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("203.0.113.1", 80))  # TEST-NET, never actually sent
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def all_ips():
+    """Every non-loopback interface address, best-first."""
+    ips = []
+    best = lan_ip()
+    if best:
+        ips.append(best)
+    try:
+        for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except OSError:
+        pass
+    return ips
+
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    # 'directory' is injected per-server via functools.partial in main()
+    def list_directory(self, path):
+        # disable directory listings
+        self.send_error(404, "File not found")
+        return None
+
+    def end_headers(self):
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if urlparse(self.path).path == "/_connect":
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def do_GET(self):
+        path = urlparse(self.path).path
+        # /_connect is a virtual path, so its relative asset refs resolve to
+        # /vendor/... — serve those from the server/ dir explicitly
+        if path.startswith("/vendor/") and "/" not in path[len("/vendor/"):]:
+            f = os.path.join(APP_DIR, "vendor", os.path.basename(path))
+            if os.path.isfile(f):
+                ctype = "application/javascript" if f.endswith(".js") else "application/octet-stream"
+                with open(f, "rb") as fh:
+                    body = fh.read()
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+        if path == "/_connect":
+            body = self.render_connect()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        super().do_GET()
+
+    def render_connect(self):
+        """Inject the LAN URL the connect page will QR-encode."""
+        tpl = os.path.join(APP_DIR, "connect.html")
+        with open(tpl, "rb") as f:
+            html = f.read().decode("utf-8")
+        alts = [ip for ip in all_ips() if ip != self.server.lan_host]
+        html = html.replace("__LAN_URL__", self.server.lan_url)
+        html = html.replace(
+            "__ALT_INFO__",
+            ("try http://<ip>:%d/ for: " % self.server.port) + ", ".join(alts)
+            if alts else "run `ip addr` / `ifconfig` on this machine",
+        )
+        return html.encode("utf-8")
+
+
+class HTTPServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+    # set in main(); declared here so static analysis sees them
+    lan_url = ""
+    lan_host = ""
+    port = 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Serve the Icon Browser on the local network")
+    ap.add_argument("--port", type=int, default=8642)
+    ap.add_argument("--host", default="0.0.0.0", help="bind address (use 127.0.0.1 for local-only)")
+    ap.add_argument("--dir", default=APP_DIR, help="directory to serve (default: this script's dir)")
+    ns = ap.parse_args()
+
+    app_dir = os.path.abspath(ns.dir)
+    os.chdir(app_dir)
+
+    lan = lan_ip() or socket.gethostname()
+    server = HTTPServer((ns.host, ns.port), functools.partial(Handler, directory=app_dir))
+    server.lan_url = "http://%s:%d/" % (lan, ns.port)
+    server.lan_host = lan
+    server.port = ns.port
+
+    urls = []
+    if ns.host == "0.0.0.0":
+        urls.append(server.lan_url)
+        urls.append("http://127.0.0.1:%d/  (this machine only)" % ns.port)
+    else:
+        urls.append("http://%s:%d/" % (ns.host, ns.port))
+
+    print("Icon Browser webshare")
+    print("  serving: %s" % APP_DIR)
+    for u in urls:
+        print("  open:    %s" % u)
+    print("  connect: %s_connect   <- open this on a desktop; scan the QR with a phone" % server.lan_url)
+    if ns.host == "0.0.0.0":
+        print("  note:    bound to all interfaces — only share on networks you trust")
+    print("  Ctrl-C to stop")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nstopped")
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()

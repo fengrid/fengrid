@@ -1,39 +1,52 @@
-# GTK4 Icon Browser
+# Icon Browser
 
-[![Release](https://img.shields.io/badge/release-v0.0.1-e8925a)](https://github.com/nativeit/gtk4-icon-browser/releases)
+[![Branch: dev](https://img.shields.io/badge/branch-dev-e8925a)](https://github.com/nativeit/gtk4-icon-browser/tree/dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2a313b)](LICENSE.md)
 
-A single-file, dependency-free showcase for the GTK icon themes installed on
-your machine. Point it at a list of icon paths, get a filterable, searchable,
-size-adjustable grid of every icon you have — with one-click copy of each
-icon's name.
+A single-file, dependency-free showcase for the icon themes and icon folders
+on your machine — on Linux, macOS or Windows. Point it at any folder of
+icons (or your installed system themes) and get a filterable, searchable,
+size-adjustable grid of every icon, with one-click copy of each icon's name
+and an optional QR-code webshare for your phone.
 
-![GTK4 Icon Browser screenshot](docs/assets/screenshot.png)
+![Icon Browser screenshot](docs/assets/screenshot.png)
 
 ## Why
 
-Icon themes are documented poorly. When you're writing an app or a custom
-theme, you mostly want to answer: *what's installed, what does it look like,
-and what is it called?* This answers that with a plain HTML page — no build
-step, no runtime, no server required.
+Icon sets are documented poorly. When you're building an app, a website or a
+custom icon theme, you mostly want to answer: *what's installed, what does it
+look like, and what is it called?* This answers that with one plain HTML
+page — no build step, no runtime, no server required.
 
 ## Features
 
-- **Grid of every installed icon** — previews grouped by theme, with size
-  variants deduplicated and the best variant chosen for each preview size
+- **Any icon source** — system theme directories (`/usr/share/icons` on
+  Linux, macOS CoreTypes) or any folder you choose; on Windows, point it at
+  any folder of `.png` / `.svg` / `.ico` files
+- **Common formats rendered** — SVG, PNG and ICO natively in the browser;
+  macOS `.icns` files are converted with the built-in `sips` tool; Linux
+  `.xpm` files convert via ImageMagick when available
 - **Size slider** — snaps to standard icon sizes (16 / 22 / 24 / 32 / 48 /
   64 / 96 / 128 / 256)
-- **Search, filter, sort** — by name, theme (chips with counts), context
-  (`actions`, `devices`, `status`, …), and name/theme/context ordering
-- **Hover inspector** — name, theme, context, all available size variants,
-  formats, and the full file path
+- **Search, filter, sort** — by name, source folder/theme (chips with
+  counts), and context (`actions`, `devices`, `status`, …)
+- **Hover/tap inspector** — name, theme, context, all available size
+  variants, formats, and the full file path
 - **Copy button on every card** — copies the icon's name (filename minus
-  extension), plus a `/` keyboard shortcut to jump to search
+  extension); `/` jumps to search
+- **Mobile-friendly layout** — responsive controls, swipeable filter chips,
+  44px touch targets, tap-to-select on phones
+- **QR webshare (optional)** — a tiny local webserver publishes the showcase
+  to your local network; open the connect page on any desktop and scan the
+  QR with a phone. Same-origin serving means no CORS issues, and directory
+  listings are disabled
 - **Light & dark modes** — persisted between visits
 - **Fully self-contained** — self-hosted subset fonts, no CDN, no JS
-  framework; one HTML file plus its data
+  framework
 
 ## Install
+
+**Linux / macOS**
 
 ```bash
 git clone https://github.com/nativeit/gtk4-icon-browser.git
@@ -41,17 +54,25 @@ cd gtk4-icon-browser
 bash install.sh
 ```
 
-The installer asks before doing anything irreversible, never needs `sudo`
-for itself, installs to a visible `~/gtk4-icon-browser/` (Snap/Flatpak
-browsers can't read hidden paths), places a launcher at
-`~/.local/bin/gtk4-icon-browser`, and warns before copying very large icon
-sets. Custom scan paths and custom install locations are supported — hidden
-or root-owned destinations get an extra confirmation.
+**Windows (PowerShell)**
+
+```powershell
+git clone https://github.com/nativeit/gtk4-icon-browser.git
+cd gtk4-icon-browser
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
+
+The installers ask before doing anything irreversible and never require
+admin rights. Default install is a visible `~/icon-browser` (sandboxed
+browsers can't read hidden paths). Custom scan folders and install locations
+are supported — hidden or system-owned destinations get an extra
+confirmation.
 
 Uninstall any time:
 
 ```bash
-bash install.sh --uninstall   # alias: --remove
+bash install.sh --uninstall                # Linux / macOS (alias: --remove)
+powershell -File install.ps1 -Uninstall    # Windows
 ```
 
 See [QUICKSTART.md](QUICKSTART.md) for the two-minute version.
@@ -60,7 +81,7 @@ See [QUICKSTART.md](QUICKSTART.md) for the two-minute version.
 
 | Doc | Contents |
 |-----|----------|
-| [QUICKSTART.md](QUICKSTART.md) | install, launch, uninstall — the short path |
+| [QUICKSTART.md](QUICKSTART.md) | install, launch, webshare, uninstall — the short path |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | project structure, technical details, versioning |
 | [LICENSE.md](LICENSE.md) | MIT license + bundled font licenses |
 
@@ -72,5 +93,5 @@ plan to grow it beyond that. That said, contributions are welcome — see
 
 ## License
 
-[MIT](LICENSE.md) — Native IT © 2026. Bundled fonts are licensed
-separately (SIL OFL 1.1 / MIT) — see [LICENSE.md](LICENSE.md).
+[MIT](LICENSE.md) — Native IT © 2026. Bundled fonts are licensed separately
+(SIL OFL 1.1 / MIT) — see [LICENSE.md](LICENSE.md).
