@@ -72,5 +72,5 @@ plan to grow it beyond that. That said, contributions are welcome — see
 
 ## License
 
-[MIT](LICENSE.md) © Native IT (S. Davis). Bundled fonts are licensed
+[MIT](LICENSE.md) — Native IT © 2026. Bundled fonts are licensed
 separately (SIL OFL 1.1 / MIT) — see [LICENSE.md](LICENSE.md).
