@@ -12,3 +12,17 @@ Create an HTML-based icon showcase that provides a stylish, modern, and highly f
 - Allow the user to hover over an icon to see its specs/details. 
 - Be sure the icon's name is featured so the user can easily reference it.
 - Include a shortcut button in the corner to copy the icon's name to the clipboard (unless otherwise specified, assume the icon's name is the same as its filename without the extension).
+
+## Install script (install.sh)
+
+- Prompt the user for any package installs or permanent changes to their system; `sudo` is not required for the script's own actions (the optional icon-theme package install is the only elevated step, and only on explicit consent).
+- Determine if the user has gtk themes/icons installed.
+  - If not, prompt the user for either a custom path to scan with `find $CUSTOM_ICON_PATH -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) >> list.txt`, or permission to install the gtk themes/icons using their default package manager.
+  - If so, ask the user if they would like to supply any additional/alternative paths to scan for icons.
+  - Generate the list with `find /usr/share/icons -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) > list.txt && find $CUSTOM_ICON_PATH -type f \( -name '*.png' -o -name '*.svg' -o -name '*.xpm' \) >> list.txt` (parenthesized `-name` groups; the unparenthesized form mis-parses).
+- Installation location:
+  - By default, install to `~/gtk4-icon-browser/` (or `git clone $REPO_URL ~/gtk4-icon-browser`). The default location must NOT be hidden: browsers installed through Snap or Flatpak are commonly sandboxed away from hidden directories such as `~/.local`, and may be unable to open the page or load its icons.
+  - Offer a custom install location. If the chosen path is hidden (any dot-prefixed component) or root-owned/unwritable, warn the user about these potential access/permission issues and ask them to confirm again before proceeding.
+- Ensure the user's local `bin` directory is included in their $PATH; prompt the user for permission and add it if necessary.
+- Install a small launcher script at `~/.local/bin/gtk4-icon-browser` that opens the *real* install path (`exec xdg-open ~/gtk4-icon-browser/index.html`). Do NOT symlink directly to the HTML file: browsers keep the symlink's own URL, so page-relative assets (the copied `icons/` tree, `list.js`) would resolve under `~/.local/bin/` and fail to load.
+- Run `exec ${SHELL}` after launching and return an error if the HTML file doesn't launch successfully.

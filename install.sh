@@ -2,8 +2,12 @@
 #
 # install.sh — install & launch the GTK4 Icon Browser
 #
-# Installs to ~/.local/share/gtk4-icon-browser/ and symlinks
-# ~/.local/bin/gtk4-icon-browser -> .../index.html
+# Installs to ~/gtk4-icon-browser/ (or a custom location you choose) and
+# symlinks ~/.local/bin/gtk4-icon-browser -> .../index.html
+#
+# The default location is deliberately NOT hidden: browsers installed via
+# Snap or Flatpak are commonly unable to access hidden directories such as
+# ~/.local, which would break opening the page or loading its icons.
 #
 # The script itself never requires elevated privileges. The ONLY step that
 # may touch the system with sudo/pkexec is the OPTIONAL icon-theme package
@@ -14,7 +18,8 @@
 
 set -u
 
-INSTALL_DIR="$HOME/.local/share/gtk4-icon-browser"
+DEFAULT_INSTALL_DIR="$HOME/gtk4-icon-browser"
+INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 BIN_DIR="$HOME/.local/bin"
 BIN_LINK="$BIN_DIR/gtk4-icon-browser"
 LIST_FILE="list.txt"
@@ -28,6 +33,77 @@ die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 
 NO_SHELL=false
 [ "${1:-}" = "--no-shell" ] && NO_SHELL=true
+
+# ----------------------------------------------------------------------------
+# 0. Choose the install location (default: ~/gtk4-icon-browser)
+# ----------------------------------------------------------------------------
+# Snap/Flatpak-packaged browsers are sandboxed away from hidden directories,
+# so the default install lives directly in the home directory. A custom
+# location is allowed, but hidden or root-owned destinations get a second,
+# explicit confirmation because of the access problems described below.
+confirm_risky_location() {
+    warn "$1"
+    printf "Install there anyway? [y/N]: "
+    read -r answer
+    case "$answer" in
+        [yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+while :; do
+    printf "Install location? [Enter = %s, or type a custom path]: " "$DEFAULT_INSTALL_DIR"
+    read -r answer
+    INSTALL_DIR="${answer:-$DEFAULT_INSTALL_DIR}"
+    # Expand a leading ~/ (bare ~ or ~/...; leave ~user alone), absolutize
+    # relative paths so the launcher stays valid, strip trailing /. Uses
+    # substring ops — a `~` inside an expansion pattern would itself undergo
+    # tilde expansion (${s#~/} removes "$HOME/", not "~/") and silently break.
+    case "$INSTALL_DIR" in
+        "~")   INSTALL_DIR="$HOME" ;;
+        "~/"*) INSTALL_DIR="$HOME/${INSTALL_DIR:2}" ;;
+    esac
+    [ "${INSTALL_DIR:0:1}" != "/" ] && INSTALL_DIR="$PWD/$INSTALL_DIR"
+    INSTALL_DIR="${INSTALL_DIR%/}"
+    [ -z "$INSTALL_DIR" ] && INSTALL_DIR="/"
+
+    # Hidden? Any dot-prefixed component anywhere in the path.
+    HIDDEN=false
+    REST="$INSTALL_DIR"
+    while [ -n "$REST" ]; do
+        COMPONENT="${REST%%/*}"
+        case "$COMPONENT" in
+            .*) HIDDEN=true; break ;;
+        esac
+        [ "$REST" = "${REST#*/}" ] && REST="" || REST="${REST#*/}"
+    done
+
+    # Root-owned/unwritable? Inspect the directory, or its nearest existing
+    # ancestor, WITHOUT creating anything — a declined location must not
+    # leave stray directories behind.
+    ROOT_OWNED=false
+    CHECK_DIR="$INSTALL_DIR"
+    while [ ! -e "$CHECK_DIR" ] && [ "$CHECK_DIR" != "/" ]; do
+        CHECK_DIR="$(dirname "$CHECK_DIR")"
+    done
+    if [ ! -w "$CHECK_DIR" ]; then
+        ROOT_OWNED=true
+    else
+        DIR_OWNER="$(stat -c '%U' "$CHECK_DIR" 2>/dev/null || stat -f '%Su' "$CHECK_DIR" 2>/dev/null)"
+        [ "$DIR_OWNER" = "root" ] && [ "$(id -u)" -ne 0 ] && ROOT_OWNED=true
+    fi
+
+    CONFIRMED=true
+    if [ "$HIDDEN" = true ]; then
+        confirm_risky_location "Hidden directory chosen: $INSTALL_DIR — Snap and Flatpak browsers usually CANNOT access hidden paths, so the browser may fail to open the page or load its icons." || CONFIRMED=false
+    fi
+    if [ "$CONFIRMED" = true ] && [ "$ROOT_OWNED" = true ]; then
+        confirm_risky_location "Root-owned or unwritable location: $INSTALL_DIR — installing here requires elevated privileges, which this script intentionally avoids, so the install would likely fail." || CONFIRMED=false
+    fi
+    [ "$CONFIRMED" = true ] && break
+    info "Pick a different location."
+done
+ok "Will install to: $INSTALL_DIR"
 
 # ----------------------------------------------------------------------------
 # 1. Icon theme discovery
@@ -118,10 +194,10 @@ N=$(wc -l < "$LIST_FILE")
 ok "$LIST_FILE written ($N icon files)"
 
 # ----------------------------------------------------------------------------
-# 3. Install to ~/.local/share/gtk4-icon-browser/
+# 3. Install to the chosen location
 # ----------------------------------------------------------------------------
 info "Installing to $INSTALL_DIR ..."
-mkdir -p "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR" || die "Cannot create $INSTALL_DIR (permission denied?)"
 cp "$SCRIPT_DIR/index.html" "$INSTALL_DIR/index.html" || die "Failed to copy index.html."
 cp -r "$SCRIPT_DIR/fonts" "$INSTALL_DIR/fonts" || die "Failed to copy fonts/."
 cp "$LIST_FILE" "$INSTALL_DIR/$LIST_FILE" || die "Failed to copy list.txt."
@@ -186,25 +262,52 @@ case ":$PATH:" in
         ;;
 esac
 
-# Symlink the launcher
-if [ -L "$BIN_LINK" ]; then
+# Launcher: a tiny script rather than a symlink to the HTML. Browsers keep
+# the symlink's own URL, so page-relative assets (the copied icons/ tree,
+# list.js) would resolve under ~/.local/bin/ and fail to load. The script
+# opens the real, visible install path instead.
+write_launcher() {
+    # If BIN_LINK is a symlink, `> "$BIN_LINK"` would write THROUGH it into
+    # the target — remove the link itself first. Only ever called on paths
+    # already identified as ours.
+    rm -f "$BIN_LINK"
+    {
+        printf '#!/usr/bin/env bash\n'
+        printf '# gtk4-icon-browser launcher (generated by install.sh)\n'
+        printf 'exec xdg-open "%s/index.html"\n' "$INSTALL_DIR"
+    } > "$BIN_LINK"
+    chmod +x "$BIN_LINK"
+}
+if [ -f "$BIN_LINK" ] && [ ! -L "$BIN_LINK" ] && grep -q 'generated by install.sh' "$BIN_LINK" 2>/dev/null; then
+    write_launcher && ok "Updated $BIN_LINK launcher -> $INSTALL_DIR"
+elif [ -L "$BIN_LINK" ]; then
     TARGET="$(readlink "$BIN_LINK")"
-    if [ "$TARGET" = "$INSTALL_DIR/index.html" ]; then
-        ok "$BIN_LINK symlink already correct"
-    else
-        warn "$BIN_LINK exists but points to $TARGET"
-        printf "Replace it? [y/N]: "
-        read -r answer
-        case "$answer" in
-            [yY]|[yY][eE][sS]) ln -sfn "$INSTALL_DIR/index.html" "$BIN_LINK" && ok "Symlink updated" ;;
-            *) warn "Leaving existing symlink in place" ;;
-        esac
-    fi
+    case "$TARGET" in
+        "$INSTALL_DIR/index.html"|"$HOME/.local/share/gtk4-icon-browser/index.html")
+            write_launcher && ok "Replaced symlink with launcher script -> $INSTALL_DIR/index.html"
+            ;;
+        *)
+            warn "$BIN_LINK is a symlink to $TARGET — not ours, not touching it."
+            warn "Remove it manually and re-run install.sh to install the launcher."
+            ;;
+    esac
 elif [ -e "$BIN_LINK" ]; then
-    warn "$BIN_LINK exists and is not a symlink — not touching it."
-    warn "Use it directly: open $INSTALL_DIR/index.html"
+    warn "$BIN_LINK exists and is not our launcher — not touching it."
+    warn "Open $INSTALL_DIR/index.html directly, or remove $BIN_LINK and re-run."
 else
-    ln -s "$INSTALL_DIR/index.html" "$BIN_LINK" && ok "Created $BIN_LINK -> $INSTALL_DIR/index.html"
+    write_launcher && ok "Created $BIN_LINK -> opens $INSTALL_DIR/index.html"
+fi
+
+# Retired location: installs before the Snap/Flatpak fix lived in a hidden
+# directory. Offer to clean it up once the new install is verified in place.
+OLD_DIR="$HOME/.local/share/gtk4-icon-browser"
+if [ "$INSTALL_DIR" != "$OLD_DIR" ] && [ -f "$OLD_DIR/index.html" ] && [ -f "$OLD_DIR/$LIST_FILE" ]; then
+    printf "Found an older install at %s. Remove it? [y/N]: " "$OLD_DIR"
+    read -r answer
+    case "$answer" in
+        [yY]|[yY][eE][sS]) rm -rf "$OLD_DIR" && ok "Removed $OLD_DIR" ;;
+        *) info "Kept $OLD_DIR (remove manually if unwanted)" ;;
+    esac
 fi
 
 # ----------------------------------------------------------------------------
