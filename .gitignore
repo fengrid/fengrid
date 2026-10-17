@@ -1,3 +1,16 @@
+# Generated at install time — regenerate with install.sh
 list.txt
-icons
 list.js
+
+# Dev-only symlink to system icons
+icons
+
+# Internal design brief — not for distribution
+IDEA.md
+
+# Scratch / cache / editor & OS junk
+*.log
+*.tmp
+.cache/
+.DS_Store
+Thumbs.db
