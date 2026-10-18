@@ -154,6 +154,43 @@ run_uninstall() {
     fi
     [ -e "$BIN_DIR/icon-browser-update" ] && rm -f "$BIN_DIR/icon-browser-update"
 
+    # stop any running web server (serve.py) belonging to an install being
+    # removed — it may be a backgrounded launch from install.sh's webshare
+    # step, or a manual run. Only instances tied to candidate dirs are killed,
+    # so an unrelated serve.py on another port survives.
+    if command -v pgrep >/dev/null 2>&1 && [ "${#CANDIDATES[@]}" -gt 0 ]; then
+        PIDS=$(pgrep -f 'serve\.py' 2>/dev/null || true)
+        for pid in $PIDS; do
+            [ "$pid" = "$$" ] && continue
+            CMD=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
+            case "$CMD" in
+                *serve.py*) ;;
+                *) continue ;;
+            esac
+            CWD=$(readlink "/proc/$pid/cwd" 2>/dev/null || true)
+            # kernel appends " (deleted)" when the dir was removed while the
+            # process still runs (uninstall removes the dir, then we get here)
+            CWD=${CWD% (deleted)}
+            CWD=${CWD%* (deleted)}
+            MATCHED=""
+            for c in "${CANDIDATES[@]}"; do
+                if echo "$CMD" | grep -qF "$c"; then MATCHED="$c"; break; fi
+                case "$CWD" in
+                    "$c"/*|"$c") MATCHED="$c"; break ;;
+                esac
+            done
+            if [ -n "$MATCHED" ]; then
+                kill "$pid" 2>/dev/null \
+                    && ok "Stopped web server for $MATCHED (pid $pid)" \
+                    || warn "Could not stop web server (pid $pid)"
+            else
+                info "Web server pid $pid is not from an install being removed — left running"
+            fi
+        done
+    else
+        info "No running web server instances found (or pgrep unavailable)"
+    fi
+
     ok "Uninstall complete."
 }
 
