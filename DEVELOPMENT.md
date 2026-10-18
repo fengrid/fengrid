@@ -184,6 +184,18 @@ Tags are always `v`-prefixed (`v0.0.1`). The version constant lives in
 [releases page](https://github.com/nativeit/gtk4-icon-browser/releases).
 While on `dev`, the constant carries a `-dev` suffix.
 
+## Automatic updates
+
+`update.sh` (also installed as `~/.local/bin/icon-browser-update`) checks the
+latest release tag on GitHub and applies it in place — it never needs
+credentials (uses `git ls-remote`, no API), never downgrades a dev build, and
+refreshes your icon list from the scan paths recorded at install time
+(`~/.local/state/icon-browser/update.conf`). Run it manually with `--check`
+to just report. The installer can register a **weekly cron job**
+(Mondays 04:17, logged to `~/.local/state/icon-browser/update.log`) via the
+interactive prompt or `bash install.sh --automatic-updates`; `--uninstall`
+removes both.
+
 ## Testing
 
 No test framework — verification is manual, and the minimum bar is:

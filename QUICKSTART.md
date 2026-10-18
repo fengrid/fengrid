@@ -69,6 +69,18 @@ setup.
 Theme (light/dark), preview size, sort order, and the selected theme chip
 are stored in your browser's `localStorage` and restored on the next visit.
 
+## Keep it updated
+
+The installer can enable an automatic **weekly update check** (say yes to the
+prompt, or run `bash install.sh --automatic-updates` later). It installs
+`~/.local/bin/icon-browser-update`, registers a weekly cron job, and logs to
+`~/.local/state/icon-browser/update.log`. Check manually any time:
+
+```bash
+icon-browser-update --check    # report only
+icon-browser-update            # apply a newer release if one exists
+```
+
 ## Uninstall
 
 ```bash
