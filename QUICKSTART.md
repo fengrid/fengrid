@@ -133,4 +133,7 @@ powershell -File install.ps1 -Uninstall    # Windows
 
 Asks per location before deleting; removes the launcher only if it created
 it; optionally strips the PATH entry it added. Directories that don't look
-like an install are refused.
+like an install are refused. It ends with a summary of everything it
+removed, kept, or skipped, and confirms completion — if a running web
+server is stopped during uninstall, your shell may print a `Terminated`
+line for it; that refers to the server, not the script.
