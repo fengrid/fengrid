@@ -18,3 +18,6 @@ Thumbs.db
 # python bytecode caches
 __pycache__/
 *.pyc
+
+# runtime state written by server/serve.py at startup (removed at shutdown)
+server-state.js
