@@ -7,6 +7,13 @@
 #   scan-icons.sh --list       print candidates as "path<TAB>count" and exit
 #   scan-icons.sh --pick       interactive selection UI (menu on stderr,
 #                              selected paths on stdout, one per line)
+#   scan-icons.sh --update-metadata [enabled|disabled|force] [--dir <install dir>]
+#                              after scanning, refresh the install's icon
+#                              metadata ledger (meta.js): enabled (default)
+#                              identifies only new/changed files, disabled
+#                              skips metadata, force re-identifies every icon.
+#                              The install dir defaults to ~/icon-browser
+#                              ($ICON_BROWSER_DIR or --dir override).
 #
 # Candidates cover common locations per platform:
 #   Linux: /usr/share/icons, /usr/local/share/icons, ~/.icons,
@@ -19,15 +26,24 @@
 set -u
 
 MODE="list"
+META_MODE=""
+META_DIR="${ICON_BROWSER_DIR:-$HOME/icon-browser}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --list) MODE="list" ;;
         --pick) MODE="pick" ;;
         --exclude) shift; EXCLUDES+=("${1%/}") ;;
-        *) echo "unknown option: $1 (use --list or --pick)" >&2; exit 1 ;;
+        --dir) META_DIR="$2"; shift ;;
+        --update-metadata)
+            MODE="list"
+            case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac
+            [ -n "$META_MODE" ] || META_MODE="enabled" ;;
+        --update-metadata=*) MODE="list"; META_MODE="${1#--update-metadata=}" ;;
+        *) echo "unknown option: $1 (use --list, --pick or --update-metadata)" >&2; exit 1 ;;
     esac
     shift
 done
+case "$META_MODE" in ""|enabled|disabled|force) ;; *) META_MODE="enabled" ;; esac
 EXCLUDES=("${EXCLUDES[@]:-}")
 
 # --- candidate roots --------------------------------------------------------
@@ -149,4 +165,16 @@ esac
 for s in "${SEL[@]:-}"; do
     printf '%s\n' "$s"
 done
+
+# optional metadata refresh against the install (independent of scan results)
+if [ -n "$META_MODE" ]; then
+    if [ -f "$META_DIR/icon-meta.sh" ]; then
+        bash "$META_DIR/icon-meta.sh" "$META_DIR" --mode "$META_MODE"
+    elif [ -f "$(dirname "$0")/icon-meta.sh" ]; then
+        bash "$(dirname "$0")/icon-meta.sh" "$META_DIR" --mode "$META_MODE"
+    else
+        echo "icon-meta.sh not found — install Icon Browser first" >&2
+        exit 1
+    fi
+fi
 exit 0

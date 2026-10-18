@@ -88,6 +88,25 @@ Loose files in `icons/` itself are filed under a `Manual` theme, and
 Re-running the command also prunes entries for files you've since deleted.
 The weekly updater runs the same merge, so manual additions survive updates.
 
+## Refresh & metadata
+
+Metadata (dimensions, file size, colorspace, mono flag) is fingerprinted —
+re-scans only re-inspect files that are new or changed. The **refresh
+button** in the title row re-scans your `icons/` folder and refreshes
+metadata through the web server; **Shift-click** forces a full re-identify.
+From the shell, every script takes the same switch:
+
+```bash
+icon-browser-refresh --update-metadata enabled   # only changed files (default)
+icon-browser-refresh --update-metadata disabled  # skip metadata entirely
+icon-browser-refresh --update-metadata force     # re-identify every icon
+```
+
+`install.sh` and `scan-icons.sh` accept the same option; installs run it
+enabled by default and record the choice for the weekly updater. On large
+icon sets the scripts warn before a long run, and Ctrl-C cancels safely —
+`meta.js` is only replaced after a complete pass.
+
 ## Preferences are remembered
 
 Theme (light/dark), preview size, sort order, and the selected theme chip

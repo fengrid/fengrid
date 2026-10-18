@@ -23,21 +23,31 @@
 #
 # The install dir defaults to ~/icon-browser (override with --dir or
 # $ICON_BROWSER_DIR). Reload the showcase page after refreshing.
+#
+# --update-metadata [enabled|disabled|force]
+#     metadata mode passed to icon-meta.sh (enabled by default: only
+#     new/changed files are re-identified; force re-identifies everything).
 
 set -u
 
 INSTALL_DIR="${ICON_BROWSER_DIR:-$HOME/icon-browser}"
 MERGE_LIST=""
 QUIET=false
+META_MODE="enabled"
 while [ $# -gt 0 ]; do
     case "$1" in
-        --dir)        INSTALL_DIR="$2"; shift ;;
-        --merge-list) MERGE_LIST="$2"; shift ;;
-        --quiet)      QUIET=true ;;
+        --dir)            INSTALL_DIR="$2"; shift ;;
+        --merge-list)     MERGE_LIST="$2"; shift ;;
+        --quiet)          QUIET=true ;;
+        --update-metadata)
+            case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac ;;
+        --update-metadata=*)
+            META_MODE="${1#--update-metadata=}";;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
     shift
 done
+case "$META_MODE" in enabled|disabled|force) ;; *) META_MODE="enabled" ;; esac
 
 say() { $QUIET || printf '%s\n' "$*"; }
 
@@ -154,10 +164,12 @@ say "icon list refreshed: $TOTAL entries total, $NEW_COUNT new from icons/"
 say "reload the showcase page to see the updated grid."
 
 # rebuild meta.js so the new files get real specs in the details bar
-for META in "$INSTALL_DIR/icon-meta.sh" "$(dirname "$0")/icon-meta.sh"; do
-    if [ -f "$META" ]; then
-        bash "$META" "$INSTALL_DIR" --quiet
-        break
-    fi
-done
+if [ "$META_MODE" != disabled ]; then
+    for META in "$INSTALL_DIR/icon-meta.sh" "$(dirname "$0")/icon-meta.sh"; do
+        if [ -f "$META" ]; then
+            bash "$META" "$INSTALL_DIR" --quiet --mode "$META_MODE"
+            break
+        fi
+    done
+fi
 exit 0

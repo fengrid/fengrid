@@ -2,6 +2,7 @@
 list.txt
 list.js
 meta.js
+meta-state.tsv
 
 # Dev-only symlink to system icons
 icons

@@ -17,6 +17,7 @@
 # install (Linux), which runs only after you explicitly agree.
 #
 # Usage: bash install.sh [--no-shell] [--uninstall] [--automatic-updates]
+#                        [--update-metadata enabled|disabled|force]
 #   --no-shell            skip handing off to an interactive shell at the end
 #   --uninstall, --remove remove installs, launcher, and (on request) the
 #                         PATH entry; asks before deleting anything
@@ -24,6 +25,13 @@
 #                         (installs ~/.local/bin/icon-browser-update and a
 #                         marked crontab entry; the interactive install also
 #                         offers this as a step)
+#   --update-metadata <mode>
+#                         icon metadata handling (meta.js): enabled (default —
+#                         on install every icon is new, so all are identified;
+#                         later runs only identify changed files), disabled
+#                         (skip metadata entirely), force (re-identify
+#                         everything, e.g. after an ImageMagick upgrade).
+#                         The chosen mode is recorded for the weekly updater.
 
 set -u
 
@@ -58,14 +66,20 @@ die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 NO_SHELL=false
 UNINSTALL=false
 AUTO_UPDATES=false
-for arg in "$@"; do
-    case "$arg" in
+META_MODE="enabled"   # --update-metadata default: scan for changes on install
+while [ $# -gt 0 ]; do
+    case "$1" in
         --no-shell)           NO_SHELL=true ;;
         --uninstall|--remove) UNINSTALL=true ;;
         --automatic-updates)  AUTO_UPDATES=true ;;
-        *) die "Unknown option: $arg (supported: --uninstall/--remove, --automatic-updates, --no-shell)" ;;
+        --update-metadata)
+            case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac ;;
+        --update-metadata=*)  META_MODE="${1#--update-metadata=}" ;;
+        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --update-metadata [enabled|disabled|force])" ;;
     esac
+    shift
 done
+case "$META_MODE" in enabled|disabled|force) ;; *) META_MODE="enabled" ;; esac
 
 # ----------------------------------------------------------------------------
 # Uninstaller (--uninstall / --remove)
@@ -498,10 +512,16 @@ ok "$COPIED icon files prepared in icons/ ($SIZE)"
 } > "$INSTALL_DIR/list.js"
 
 # image metadata (real dimensions, file size, colorspace, mono flag) for the
-# inspector's specs, tone filter and color view — best effort, never fatal
+# inspector's specs, tone filter and color view — best effort, never fatal.
+# --update-metadata controls it: enabled (default) identifies only new and
+# changed files, disabled skips metadata entirely, force re-identifies all.
 if command -v identify >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
-    info "Inspecting image files for metadata (meta.js) ..."
-    bash "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR"
+    if [ "$META_MODE" = disabled ]; then
+        info "Skipping image metadata (--update-metadata disabled)."
+    else
+        info "Inspecting image files for metadata (meta.js, mode: $META_MODE) ..."
+        bash "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR" --mode "$META_MODE"
+    fi
 else
     info "ImageMagick not found — skipping metadata (the page falls back to filename-derived specs). Install imagemagick and re-run install.sh or icon-browser-refresh to add richer specs."
 fi
@@ -628,7 +648,8 @@ setup_automatic_updates() {
         || { warn "Could not install the updater"; return 1; }
     SP="$DEFAULT_SCAN_PATH"
     for p in "${CUSTOM_PATHS[@]:-}"; do [ -n "$p" ] && SP="$SP $p"; done
-    printf 'INSTALL_DIR="%s"\nSCAN_PATHS="%s"\n' "$INSTALL_DIR" "$SP" > "$CONF_DIR/update.conf"
+    printf 'INSTALL_DIR="%s"\nSCAN_PATHS="%s"\nUPDATE_META_MODE="%s"\n' \
+        "$INSTALL_DIR" "$SP" "$META_MODE" > "$CONF_DIR/update.conf"
     ok "Updater installed: $BIN_DIR/icon-browser-update (config: $CONF_DIR/update.conf)"
     if ! command -v crontab >/dev/null 2>&1; then
         warn "crontab not available — run the updater manually:  icon-browser-update"
