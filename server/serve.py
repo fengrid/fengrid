@@ -147,13 +147,52 @@ def main():
     ap.add_argument("--port", type=int, default=8642)
     ap.add_argument("--host", default="0.0.0.0", help="bind address (use 127.0.0.1 for local-only)")
     ap.add_argument("--dir", default=WEB_ROOT, help="directory to serve (default: the install dir above server/)")
+    ap.add_argument("--kill-existing", action="store_true",
+                    help="stop any other serve.py instances on this port before starting")
     ns = ap.parse_args()
 
     app_dir = os.path.abspath(ns.dir)
     os.chdir(app_dir)
 
+    if ns.kill_existing and sys.platform != "win32":
+        # stop other serve.py instances bound to the same port (a previous
+        # backgrounded launch is the usual cause of EADDRINUSE)
+        import subprocess
+        try:
+            out = subprocess.run(
+                ["ps", "-eo", "pid,args"],
+                capture_output=True, text=True, timeout=5,
+            ).stdout
+        except Exception:
+            out = ""
+        for line in out.splitlines():
+            parts = line.strip().split(None, 1)
+            if len(parts) != 2 or "serve.py" not in parts[1]:
+                continue
+            if "--kill-existing" in parts[1]:
+                continue
+            # only consider instances serving the same port
+            if ("--port %d" % ns.port) not in parts[1] and ("--port=%d" % ns.port) not in parts[1]:
+                continue
+            try:
+                os.kill(int(parts[0]), 15)
+                print("  stopped existing server (pid %s)" % parts[0])
+            except OSError:
+                pass
+        time.sleep(0.3)
+
     lan = lan_ip() or socket.gethostname()
-    server = HTTPServer((ns.host, ns.port), functools.partial(Handler, directory=app_dir))
+    try:
+        server = HTTPServer((ns.host, ns.port), functools.partial(Handler, directory=app_dir))
+    except OSError as e:
+        if getattr(e, "errno", None) == 98 or "already in use" in str(e):
+            print("Port %d is already in use — another server (possibly an older" % ns.port)
+            print("serve.py launch) is still running on it.")
+            print("Fix: run with --kill-existing to stop it automatically, or")
+            print("     pkill -f 'serve.py --port %d'" % ns.port)
+            print("     …or pick another port:  --port 8643")
+            sys.exit(1)
+        raise
     server.lan_url = "http://%s:%d/" % (lan, ns.port)
     server.lan_host = lan
     server.port = ns.port
