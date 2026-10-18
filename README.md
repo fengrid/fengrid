@@ -9,7 +9,7 @@ icons (or your installed system themes) and get a filterable, searchable,
 size-adjustable grid of every icon, with one-click copy of each icon's name
 and an optional QR-code webshare for your phone.
 
-![Fengrid screenshot](docs/assets/screenshot.png)
+![fengrid screenshot — light and dark themes side by side](docs/assets/screenshot.png)
 
 ## Why
 

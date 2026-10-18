@@ -4,12 +4,17 @@ All notable changes to this project are documented in this file. Format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — Fengrid rebrand
+## [v0.3.1] — 2026-10-18
 
 The project formerly known as GTK4 Icon Browser / Icon Browser is now
 **fengrid** — *frontend grid*, with a hidden second reading: *fen* (window)
 + *grid*, a grid of windows onto your machine. New home:
 [github.com/fengrid/fengrid](https://github.com/fengrid/fengrid).
+
+### Added
+
+- New split-screen **light/dark brand screenshot** (thin pane-teal divider,
+  lit-pane mark in the corner strip) on the README and the landing page.
 
 ### Changed
 
