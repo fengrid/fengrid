@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# update.sh — check GitHub for a newer Icon Browser release and apply it.
+# update.sh — check GitHub for a newer Fengrid release and apply it.
 #
 # Designed to run unattended from cron (the installer can register a weekly
 # job with --automatic-updates); also safe to run by hand.
@@ -13,7 +13,7 @@
 #      the application files (index.html, fonts/, server/) in the install
 #      directory, and re-scans the configured icon paths to refresh
 #      list.txt/list.js/icons — user data (the icon list and its scan
-#      config) is preserved from ~/.local/state/icon-browser/update.conf
+#      config) is preserved from ~/.local/state/fengrid/update.conf
 #
 # Tracks release tags on `main` only — a dev build (version like
 # v0.1.0-dev) is never "updated" backwards to an older release.
@@ -23,7 +23,7 @@
 #   --check    report only, do not install
 #   --force    apply the latest release even if not newer
 #   --quiet    no stdout (cron default behaviour is silent; all output also
-#              goes to ~/.local/state/icon-browser/update.log)
+#              goes to ~/.local/state/fengrid/update.log)
 #   --update-metadata <mode>
 #              how icon metadata is refreshed after the update: enabled
 #              (default — re-identify only new/changed files), disabled
@@ -33,11 +33,14 @@
 
 set -u
 
-REPO_BASE="https://github.com/nativeit/gtk4-icon-browser"
-STATE_DIR="${ICON_BROWSER_STATE_DIR:-$HOME/.local/state/icon-browser}"
+REPO_BASE="https://github.com/fengrid/fengrid"
+STATE_DIR="${FENGRID_STATE_DIR:-${ICON_BROWSER_STATE_DIR:-$HOME/.local/state/fengrid}}"
 LOG="$STATE_DIR/update.log"
 CONF="$STATE_DIR/update.conf"
-INSTALL_DIR="${ICON_BROWSER_DIR:-$HOME/icon-browser}"
+# pre-rebrand installs kept their config under the old state dir
+LEGACY_CONF="$HOME/.local/state/icon-browser/update.conf"
+[ -f "$CONF" ] || [ ! -f "$LEGACY_CONF" ] || { CONF="$LEGACY_CONF"; log "using legacy config: $LEGACY_CONF"; }
+INSTALL_DIR="${FENGRID_DIR:-${ICON_BROWSER_DIR:-$HOME/fengrid}}"
 META_MODE=""
 PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "$PLATFORM" in linux*|darwin*) ;; *) PLATFORM=linux ;; esac
@@ -109,7 +112,7 @@ TMP=$(mktemp -d) || fail "mktemp failed"
 trap 'rm -rf "$TMP"' EXIT
 fetch "$REPO_BASE/archive/$latest.tar.gz" "$TMP/src.tar.gz" || fail "download failed"
 tar -xzf "$TMP/src.tar.gz" -C "$TMP" || fail "extract failed"
-SRC=$(find "$TMP" -maxdepth 1 -type d -name 'gtk4-icon-browser-*' | head -1)
+SRC=$(find "$TMP" -maxdepth 1 -type d \( -name 'fengrid-*' -o -name 'gtk4-icon-browser-*' \) | head -1)
 [ -n "$SRC" ] || fail "unexpected tarball layout"
 
 cp "$SRC/index.html" "$INSTALL_DIR/index.html" || fail "copy index.html failed"
@@ -174,7 +177,8 @@ if [ -f "$CONF" ]; then
         # keep icons the user dropped into icons/ (refresh-icons.sh merges
         # them in and regenerates list.js); fall back to a plain regeneration
         REFRESH=""
-        [ -x "$HOME/.local/bin/icon-browser-refresh" ] && REFRESH="$HOME/.local/bin/icon-browser-refresh"
+        [ -x "$HOME/.local/bin/fengrid-refresh" ] && REFRESH="$HOME/.local/bin/fengrid-refresh"
+        [ -n "$REFRESH" ] || [ ! -x "$HOME/.local/bin/icon-browser-refresh" ] || REFRESH="$HOME/.local/bin/icon-browser-refresh"
         if [ -n "$REFRESH" ]; then
             "$REFRESH" --merge-list "$LIST" --dir "$INSTALL_DIR" --quiet --update-metadata "$META_MODE" || true
             log "refreshed $N icons from configured paths (metadata mode: $META_MODE; manual icons/ additions merged)"

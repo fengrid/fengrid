@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-serve.py — optional local webshare for the Icon Browser.
+serve.py — optional local webshare for the Fengrid.
 
 Serves the install directory on the local network so phones and tablets
 can browse the showcase by scanning the QR code on the /_connect page.
@@ -299,7 +299,7 @@ class HTTPServer(socketserver.ThreadingTCPServer):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Serve the Icon Browser on the local network")
+    ap = argparse.ArgumentParser(description="Serve the Fengrid on the local network")
     ap.add_argument("--port", type=int, default=8642)
     ap.add_argument("--host", default="0.0.0.0", help="bind address (use 127.0.0.1 for local-only)")
     ap.add_argument("--dir", default=WEB_ROOT, help="directory to serve (default: the install dir above server/)")
@@ -374,7 +374,7 @@ def main():
     else:
         urls.append("http://%s:%d/" % (ns.host, ns.port))
 
-    print("Icon Browser webshare")
+    print("Fengrid webshare")
     print("  serving: %s" % app_dir)
     for u in urls:
         print("  open:    %s" % u)

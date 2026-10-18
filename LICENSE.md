@@ -73,10 +73,8 @@ their own licenses, which are included alongside each font:
 
 | Font | License | File |
 |------|---------|------|
-| Bebas Neue | SIL Open Font License 1.1 | [fonts/INTER-LICENSE.txt](fonts/INTER-LICENSE.txt) |
 | Inter | SIL Open Font License 1.1 | [fonts/INTER-LICENSE.txt](fonts/INTER-LICENSE.txt) |
 | Iosevka | MIT (Iosevka license) | [fonts/IOSEVKA-LICENSE.md](fonts/IOSEVKA-LICENSE.md) |
 
-Both Bebas Neue and Inter are released under the SIL Open Font License 1.1;
-the bundled `fonts/INTER-LICENSE.txt` contains the OFL 1.1 text that applies
-to either face.
+Inter is released under the SIL Open Font License 1.1; the bundled
+`fonts/INTER-LICENSE.txt` contains the OFL 1.1 text.

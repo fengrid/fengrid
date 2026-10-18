@@ -21,7 +21,7 @@
 #       and regenerates list.js; used by the weekly updater after it
 #       re-scans the configured icon roots (so manual additions survive).
 #
-# The install dir defaults to ~/icon-browser (override with --dir or
+# The install dir defaults to ~/fengrid (override with --dir or
 # $ICON_BROWSER_DIR). Reload the showcase page after refreshing.
 #
 # --update-metadata [enabled|disabled|force]
@@ -30,7 +30,7 @@
 
 set -u
 
-INSTALL_DIR="${ICON_BROWSER_DIR:-$HOME/icon-browser}"
+INSTALL_DIR="${FENGRID_DIR:-${ICON_BROWSER_DIR:-$HOME/fengrid}}"
 MERGE_LIST=""
 QUIET=false
 META_MODE="enabled"

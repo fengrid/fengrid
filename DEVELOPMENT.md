@@ -1,6 +1,6 @@
 # Development
 
-Everything you need to understand and work on the Icon Browser.
+Everything you need to understand and work on the Fengrid.
 
 > **Project status:** this is a casual side project. It exists to scratch an
 > itch — "what icons do I actually have, and what are they called?" — and
@@ -13,7 +13,7 @@ Everything you need to understand and work on the Icon Browser.
 ## Structure
 
 ```
-gtk4-icon-browser/            # repo name is historical; the tool is general
+fengrid/                 # repo name; originally gtk4-icon-browser
 ├── index.html                # the entire application (HTML + CSS + JS, inline)
 ├── install.sh                # installer / uninstaller / launcher (Linux + macOS)
 ├── install.ps1               # installer / uninstaller / launcher (Windows)
@@ -107,7 +107,7 @@ Design tokens are CSS custom properties under `[data-theme="dark"]` and
 `[data-theme="light"]`. Fonts are subset WOFF2 files loaded via
 `@font-face` from `fonts/` — no CDN, so the page works fully offline:
 
-- Bebas Neue — headings (all-caps)
+- Inter — headings and UI (geometric-grotesque per brand)
 - Iosevka (Mono) — all icon text, labels, buttons
 - Inter — body text
 
@@ -120,10 +120,10 @@ Both are deliberately conservative:
 
 - **Never privileged**; the only `sudo` use is the optional icon-theme
   package install on Linux, behind explicit consent
-- Installs to `~/icon-browser` by default (visible — sandboxed browsers
+- Installs to `~/fengrid` by default (visible — sandboxed browsers
   are kept away from hidden dirs); custom locations allowed,
   hidden/root-owned paths require a second confirmation
-- The launcher (`~/.local/bin/icon-browser` on Linux/macOS, `icon-browser.cmd`
+- The launcher (`~/.local/bin/fengrid` on Linux/macOS, `fengrid.cmd`
   on Windows) is a tiny **script** that opens the *real* install path —
   not a symlink to the HTML: browsers keep the symlink's own URL, which
   would resolve page-relative assets under the launcher folder and break
@@ -181,25 +181,25 @@ git push origin main --follow-tags
 
 Tags are always `v`-prefixed (`v0.0.1`). The version constant lives in
 `index.html` as `APP_VERSION` and is displayed in the header, linked to the
-[releases page](https://github.com/nativeit/gtk4-icon-browser/releases).
+[releases page](https://github.com/fengrid/fengrid/releases).
 While on `dev`, the constant carries a `-dev` suffix.
 
 ## Automatic updates
 
-`update.sh` (also installed as `~/.local/bin/icon-browser-update`) checks the
+`update.sh` (also installed as `~/.local/bin/fengrid-update`) checks the
 latest release tag on GitHub and applies it in place — it never needs
 credentials (uses `git ls-remote`, no API), never downgrades a dev build, and
 refreshes your icon list from the scan paths recorded at install time
-(`~/.local/state/icon-browser/update.conf`). Run it manually with `--check`
+(`~/.local/state/fengrid/update.conf`). Run it manually with `--check`
 to just report. The installer can register a **weekly cron job**
-(Mondays 04:17, logged to `~/.local/state/icon-browser/update.log`) via the
+(Mondays 04:17, logged to `~/.local/state/fengrid/update.log`) via the
 interactive prompt or `bash install.sh --automatic-updates`; `--uninstall`
 removes both.
 
 ## Manual icon additions
 
 `refresh-icons.sh` (installed both inside the install directory and as
-`~/.local/bin/icon-browser-refresh`) reconciles `list.txt`/`list.js` with the
+`~/.local/bin/fengrid-refresh`) reconciles `list.txt`/`list.js` with the
 install's `icons/` folder: it re-locates loose files into `icons/Manual/`,
 converts `.icns`/`.xpm` when `sips`/ImageMagick is available, appends files
 whose relative path is not already covered by a scanned entry (theme icons
@@ -260,7 +260,7 @@ saving the original file for other formats.
 (plain click sends `enabled`, Shift-click sends `force`). One refresh runs
 at a time (HTTP 409 when busy); the JSON reply carries a summary the page
 toasts before reloading. On `file://` pages there is no server: the CLI
-(`icon-browser-refresh`) is the way to refresh.
+(`fengrid-refresh`) is the way to refresh.
 
 ## Testing
 

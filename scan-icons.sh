@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # scan-icons.sh — discover icon folders in common system locations and let
-# the user select which ones to add to the Icon Browser scan list.
+# the user select which ones to add to the Fengrid scan list.
 #
 # Usage:
 #   scan-icons.sh --list       print candidates as "path<TAB>count" and exit
@@ -12,7 +12,7 @@
 #                              metadata ledger (meta.js): enabled (default)
 #                              identifies only new/changed files, disabled
 #                              skips metadata, force re-identifies every icon.
-#                              The install dir defaults to ~/icon-browser
+#                              The install dir defaults to ~/fengrid
 #                              ($ICON_BROWSER_DIR or --dir override).
 #
 # Candidates cover common locations per platform:
@@ -27,7 +27,7 @@ set -u
 
 MODE="list"
 META_MODE=""
-META_DIR="${ICON_BROWSER_DIR:-$HOME/icon-browser}"
+META_DIR="${FENGRID_DIR:-${ICON_BROWSER_DIR:-$HOME/fengrid}}"
 while [ $# -gt 0 ]; do
     case "$1" in
         --list) MODE="list" ;;
@@ -173,7 +173,7 @@ if [ -n "$META_MODE" ]; then
     elif [ -f "$(dirname "$0")/icon-meta.sh" ]; then
         bash "$(dirname "$0")/icon-meta.sh" "$META_DIR" --mode "$META_MODE"
     else
-        echo "icon-meta.sh not found — install Icon Browser first" >&2
+        echo "icon-meta.sh not found — install Fengrid first" >&2
         exit 1
     fi
 fi
