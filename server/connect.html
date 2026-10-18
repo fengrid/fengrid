@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Open on your device — Icon Browser</title>
+<title>Open on your device — Fengrid</title>
 <script src="vendor/qrcode.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #101317; --surface: #171b21; --border: #2a313b;
-    --ink: #e8ecf1; --ink-muted: #9aa6b2; --ink-faint: #5c6774;
-    --accent: #e8925a; --accent-ink: #14100c;
-    --font-head: 'Bebas Neue', 'Arial Narrow', sans-serif;
+    --bg: #101418; --surface: #161B21; --border: #2A333B;
+    --ink: #E7EDF2; --ink-muted: #93A3B0; --ink-faint: #5F6C78;
+    --accent: #39B8C4; --accent-ink: #101418; --hl: #F5C25C;
+    --font-head: 'Inter', 'Helvetica', 'Arial', sans-serif;
     --font-mono: 'Iosevka', 'Roboto Mono', 'Courier New', monospace;
   }
   * { box-sizing: border-box; }
@@ -25,8 +25,9 @@
     background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
     padding: 32px; text-align: center; max-width: 420px; width: 100%;
   }
-  h1 { font-family: var(--font-head); text-transform: uppercase; letter-spacing: 0.04em;
-       font-size: 30px; margin: 0 0 6px; font-weight: 400; }
+  h1 { font-family: var(--font-head); text-transform: none; letter-spacing: 0.06em;
+       font-size: 26px; margin: 0 0 6px; font-weight: 600; }
+  h1 .wm-grid { font-family: var(--font-mono); font-weight: 500; color: var(--accent); letter-spacing: 0.02em; }
   p.sub { color: var(--ink-muted); font-size: 12.5px; margin: 0 0 24px; line-height: 1.6; }
   .qr { display: inline-flex; padding: 12px; background: #fff; border-radius: 10px; }
   .qr svg, .qr canvas, .qr img { display: block; }
@@ -39,9 +40,9 @@
 </head>
 <body data-lan-url="__LAN_URL__">
 <div class="card">
-  <h1>Open on your device</h1>
-  <p class="sub">Scan this code with your phone or tablet — it opens the icon
-  browser over your local network. Both devices must be on the same network.</p>
+  <h1><span class="wm-grid">fengrid</span> — open on your device</h1>
+  <p class="sub">Scan this code with your phone or tablet — it opens the fengrid
+  asset grid over your local network. Both devices must be on the same network.</p>
   <div class="qr" id="qr"><noscript>JavaScript is required to render the QR code.</noscript></div>
   <div class="url" id="url"></div>
   <div class="alt" id="byserver"></div>

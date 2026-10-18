@@ -1,7 +1,7 @@
-# install.ps1 — install & launch the Icon Browser (Windows)
+# install.ps1 — install & launch the Fengrid (Windows)
 #
-# Installs to ~\icon-browser\ (or a custom location) and places a launcher
-# (icon-browser.cmd) in a folder that is added to the user's PATH.
+# Installs to ~\fengrid\ (or a custom location) and places a launcher
+# (fengrid.cmd) in a folder that is added to the user's PATH.
 #
 # Compatible with Windows PowerShell 5.1 and PowerShell 7+.
 # Run with:  powershell -ExecutionPolicy Bypass -File install.ps1
@@ -26,18 +26,19 @@ function Write-Warn2 { param($m) Write-Host ':: ' -ForegroundColor Yellow -NoNew
 function Write-Die   { param($m) Write-Host ':: ' -ForegroundColor Red -NoNewline; Write-Host $m; exit 1 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DefaultInstallDir = Join-Path $HOME 'icon-browser'
+$DefaultInstallDir = Join-Path $HOME 'fengrid'
 $InstallDir = $DefaultInstallDir
-$LauncherName = 'icon-browser.cmd'
+$LauncherName = 'fengrid.cmd'
 $ListFile = 'list.txt'
 
 # ---------------------------------------------------------------------------
 # Uninstaller
 # ---------------------------------------------------------------------------
 function Invoke-Uninstall {
-    Write-Info 'Icon Browser uninstaller'
+    Write-Info 'Fengrid uninstaller'
     $candidates = @()
     foreach ($d in @(
+        (Join-Path $HOME 'fengrid'),
         (Join-Path $HOME 'icon-browser'),
         (Join-Path $HOME 'gtk4-icon-browser'),
         (Join-Path $HOME '.local\share\gtk4-icon-browser'))) {
@@ -57,7 +58,7 @@ function Invoke-Uninstall {
             continue
         }
         if (-not (Test-Path (Join-Path $c 'index.html')) -or -not (Test-Path (Join-Path $c $ListFile))) {
-            Write-Warn2 "$c does not look like an Icon Browser install - skipped for safety."
+            Write-Warn2 "$c does not look like an Fengrid install - skipped for safety."
             continue
         }
         $size = '{0:N1} MB' -f ((Get-ChildItem $c -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
@@ -74,14 +75,14 @@ function Invoke-Uninstall {
     # the .cmd launcher dir entry from the user PATH.
     foreach ($rc in @((Join-Path $HOME '.bashrc'), (Join-Path $HOME '.zshrc'))) {
         if (Test-Path $rc) {
-            $hit = Select-String -Path $rc -Pattern '^# (Icon Browser|GTK4 icon browser)$' -Quiet
+            $hit = Select-String -Path $rc -Pattern '^# (Fengrid|Icon Browser|GTK4 icon browser)$' -Quiet
             if ($hit) {
                 $answer = Read-Host "Remove the PATH entry install.sh-style marker in $rc? [y/N]"
                 if ($answer -match '^[yY]') {
                     $lines = Get-Content $rc
                     $out = @(); $skip = $false
                     foreach ($l in $lines) {
-                        if ($l -match '^# (Icon Browser|GTK4 icon browser)$') { $skip = $true; continue }
+                        if ($l -match '^# (Fengrid|Icon Browser|GTK4 icon browser)$') { $skip = $true; continue }
                         if ($skip) { $skip = $false; continue }
                         $out += $l
                     }
@@ -95,9 +96,9 @@ function Invoke-Uninstall {
     # user PATH cleanup (directories named like ours)
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ($userPath) {
-        $parts = $userPath -split ';' | Where-Object { $_ -and $_ -notmatch 'icon-browser' }
+        $parts = $userPath -split ';' | Where-Object { $_ -and $_ -notmatch 'fengrid|icon-browser' }
         [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
-        Write-Ok 'User PATH cleaned of icon-browser entries (takes effect in new shells).'
+        Write-Ok 'User PATH cleaned of fengrid / legacy icon-browser entries (takes effect in new shells).'
     }
 
     Write-Ok 'Uninstall complete.'
@@ -247,6 +248,6 @@ if (($userPath -split ';') -notcontains $binDir) {
 # ---------------------------------------------------------------------------
 # 5. Launch
 # ---------------------------------------------------------------------------
-Write-Info 'Launching icon-browser...'
+Write-Info 'Launching fengrid...'
 Start-Process (Join-Path $InstallDir 'index.html')
-Write-Ok 'Done. Quick launch any time:  icon-browser'
+Write-Ok 'Done. Quick launch any time:  fengrid'

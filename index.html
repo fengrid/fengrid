@@ -3,14 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Icon Browser</title>
+<title>fengrid — the UI asset explorer</title>
+<meta name="description" content="fengrid lays out the icons, fonts, and styles on your machine as one searchable, inspectable grid. Local-first, no account, works offline.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='12' height='12' rx='3' fill='none' stroke='%2339B8C4' stroke-width='2.5'/%3E%3Crect x='17' y='3' width='12' height='12' rx='3' fill='none' stroke='%2339B8C4' stroke-width='2.5'/%3E%3Crect x='3' y='17' width='12' height='12' rx='3' fill='none' stroke='%2339B8C4' stroke-width='2.5'/%3E%3Crect x='17' y='17' width='12' height='12' rx='3.5' fill='%23F5C25C'/%3E%3C/svg%3E">
 <style>
   /* Self-hosted fonts (subset to Latin, WOFF2) — no CDN required */
-  @font-face {
-    font-family: 'Bebas Neue';
-    src: url('fonts/BebasNeue-Regular.woff2') format('woff2');
-    font-weight: 400; font-style: normal; font-display: swap;
-  }
   @font-face {
     font-family: 'Inter';
     src: url('fonts/Inter-Variable.woff2') format('woff2-variations');
@@ -28,44 +25,44 @@
   }
 
   :root {
-    --font-head: 'Bebas Neue', 'Arial Narrow', sans-serif;
+    --font-head: 'Inter', 'Helvetica', 'Arial', sans-serif;
     --font-mono: 'Iosevka', 'Roboto Mono', 'Courier New', monospace;
     --font-body: 'Inter', 'Helvetica', 'Arial', sans-serif;
     --sizes: 16px;
   }
   [data-theme="dark"] {
-    --bg: #101317;
-    --surface: #171b21;
-    --surface-2: #1e232b;
-    --border: #2a313b;
-    --border-strong: #3a434f;
-    --ink: #e8ecf1;
-    --ink-muted: #9aa6b2;
-    --ink-faint: #5c6774;
-    --accent: #e8925a;
-    --accent-ink: #14100c;
-    --accent-soft: rgba(232, 146, 90, 0.14);
-    --hl: #56c9bb;                       /* complementary highlight: details, tags, export */
-    --hl-soft: rgba(86, 201, 187, 0.15);
+    --bg: #101418;                        /* night glass */
+    --surface: #161B21;
+    --surface-2: #1D242B;
+    --border: #2A333B;
+    --border-strong: #3B454F;
+    --ink: #E7EDF2;
+    --ink-muted: #93A3B0;
+    --ink-faint: #5F6C78;
+    --accent: #39B8C4;                    /* pane teal */
+    --accent-ink: #101418;
+    --accent-soft: rgba(57, 184, 196, 0.14);
+    --hl: #F5C25C;                        /* lit pane — the one warm light */
+    --hl-soft: rgba(245, 194, 92, 0.15);
     --checker: rgba(255, 255, 255, 0.02);
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
   [data-theme="light"] {
-    --bg: #f4f2ee;
-    --surface: #fdfcfa;
-    --surface-2: #eeece6;
-    --border: #dcd8d0;
-    --border-strong: #c2bcb0;
-    --ink: #22262b;
-    --ink-muted: #5d646d;
-    --ink-faint: #9aa0a8;
-    --accent: #c96a2e;
-    --accent-ink: #fff;
-    --accent-soft: rgba(201, 106, 46, 0.12);
-    --hl: #0e8d82;
-    --hl-soft: rgba(14, 141, 130, 0.13);
+    --bg: #F7F8F9;                        /* daylight white */
+    --surface: #FFFFFF;
+    --surface-2: #ECEEF1;
+    --border: #DFE3E7;
+    --border-strong: #C3CAD1;
+    --ink: #16202B;
+    --ink-muted: #6B7A88;
+    --ink-faint: #9AA6B0;
+    --accent: #0E7C86;                    /* pane teal */
+    --accent-ink: #FFFFFF;
+    --accent-soft: rgba(14, 124, 134, 0.12);
+    --hl: #F5B841;                        /* warm light through glass */
+    --hl-soft: rgba(245, 184, 65, 0.15);
     --checker: rgba(0, 0, 0, 0.018);
-    --shadow: 0 12px 32px rgba(30, 25, 18, 0.12);
+    --shadow: 0 12px 32px rgba(22, 32, 43, 0.12);
   }
 
   * { box-sizing: border-box; }
@@ -80,6 +77,10 @@
   }
 
   h1, h2, h3 { font-family: var(--font-head); font-weight: 400; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+  /* wordmark: lowercase fengrid — the "grid" half set in mono + pane teal,
+     tracking per the brand's implied-grid signature */
+  .wordmark { text-transform: none; font-weight: 600; letter-spacing: 0.06em; }
+  .wordmark .wm-grid { font-family: var(--font-mono); font-weight: 500; color: var(--accent); letter-spacing: 0.02em; }
 
   /* ---------- header / controls ---------- */
   header {
@@ -90,7 +91,7 @@
     padding: 14px 24px 12px;
   }
   .title-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-  .title-row h1 { font-size: 34px; line-height: 1; }
+  .title-row h1 { font-size: 30px; line-height: 1.1; }
   .title-row .count { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); letter-spacing: 0.08em; }
   .spacer { flex: 1; }
 
@@ -416,7 +417,7 @@
   @media (max-width: 720px) {
     header { padding: 12px 14px 10px; }
     main { padding: 14px 14px 40px; }
-    .title-row h1 { font-size: 26px; }
+    .title-row h1 { font-size: 24px; }
     .ver-badge { padding: 4px 10px; }
     .controls { gap: 8px; }
     .field { flex: 1 1 100%; height: 44px; min-height: 44px; }
@@ -451,16 +452,16 @@
 <div id="gate">
   <div class="box">
     <div class="spinner" id="gate-spinner"></div>
-    <h1>Loading icons</h1>
+    <h1 class="wordmark">fen<span class="wm-grid">grid</span></h1>
     <p id="gate-msg">Reading <code>list.txt</code>…</p>
   </div>
 </div>
 
 <header>
   <div class="title-row">
-    <h1>Icon Browser</h1>
+    <h1 class="wordmark">fen<span class="wm-grid">grid</span></h1>
     <span class="count" id="count-line"></span>
-    <a class="ver-badge" id="ver-badge" href="https://github.com/nativeit/gtk4-icon-browser/releases" target="_blank" rel="noopener" title="Releases"></a>
+    <a class="ver-badge" id="ver-badge" href="https://github.com/fengrid/fengrid/releases" target="_blank" rel="noopener" title="Releases"></a>
     <span class="spacer"></span>
     <button class="icon-btn" id="panel-btn" title="Show / hide search and filters" aria-label="Show or hide search and filters" aria-expanded="true">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
@@ -625,7 +626,7 @@
       <h3>Share on your network (QR)</h3>
       <p>The <b>QR button</b> shows a scannable code for opening this showcase
       on a phone or tablet. It needs the local web server running:</p>
-      <p><code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code></p>
+      <p><code>cd ~/fengrid/server &amp;&amp; python3 serve.py</code></p>
       <p>If the server was started after you opened this page, tap the QR
       button again — it re-reads the server state each time.</p>
 
@@ -653,18 +654,18 @@
         folder scanner to add more icon locations.</li>
         <li><b>Adding your own icons</b> — drop files into the
         <code>icons/</code> folder of your install (use a subfolder as the
-        theme name), then run <code>icon-browser-refresh</code> (or
+        theme name), then run <code>fengrid-refresh</code> (or
         <code>refresh-icons.sh</code> inside the install folder) and reload.
         Files dropped loose in <code>icons/</code> are filed under the
         <code>Manual</code> theme; <code>.icns</code>/<code>.xpm</code> files
         are converted to PNG when a converter is available.</li>
-        <li><b>Updates</b> — <code>icon-browser-update --check</code> checks
+        <li><b>Updates</b> — <code>fengrid-update --check</code> checks
         for a newer release; the weekly cron job (if enabled) does this
         automatically.</li>
         <li><b>Refreshing</b> — the circular-arrows button in the title row
         re-scans the <code>icons/</code> folder and updates the metadata
         through the web server (Shift-click re-identifies <i>every</i> icon).
-        From the shell the same thing is <code>icon-browser-refresh</code>;
+        From the shell the same thing is <code>fengrid-refresh</code>;
         all scripts accept <code>--update-metadata enabled|disabled|force</code>.</li>
       </ul>
     </div>
@@ -1229,7 +1230,7 @@
      On file:// pages there is no server to run scripts — point at the CLI. */
   els.refreshBtn.addEventListener('click', function (e) {
     if (!overHttp()) {
-      toast('Start the web server to refresh from here — or run: icon-browser-refresh');
+      toast('Start the web server to refresh from here — or run: fengrid-refresh');
       return;
     }
     if (els.refreshBtn.dataset.busy) return;
@@ -1350,7 +1351,7 @@
 
     function startServerHint() {
       return 'The local web server is not running.<br><br>Start it with:<br><br>' +
-        '<code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code><br><br>' +
+        '<code>cd ~/fengrid/server &amp;&amp; python3 serve.py</code><br><br>' +
         '…then tap this button again.';
     }
 
@@ -1396,7 +1397,7 @@
             note.innerHTML = 'Note: the URL could not be probed from this browser ' +
               '(sandboxed for external requests, or the server has stopped). ' +
               'If your phone cannot connect, restart the server:<br><br>' +
-              '<code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code>';
+              '<code>cd ~/fengrid/server &amp;&amp; python3 serve.py</code>';
             qrHint.innerHTML = note.innerHTML;
           }
         }
@@ -1568,7 +1569,7 @@
     note.innerHTML = 'This page was opened as a file, so sizes and PNG/JPEG/WebP are ' +
       'rebuilt in the browser (canvas). For ICO, PDF, TIFF and ImageMagick-quality ' +
       'conversions, start the local server:<br><br>' +
-      '<code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code><br><br>' +
+      '<code>cd ~/fengrid/server &amp;&amp; python3 serve.py</code><br><br>' +
       '…then open the page through its <code>http://</code> address.';
   }
 
@@ -1990,7 +1991,7 @@
 
   function fail(msg) {
     els.gateSpinner.style.display = 'none';
-    els.gate.querySelector('h1').textContent = 'No icon list found';
+    els.gate.querySelector('h1').textContent = 'No asset list found';
     els.gateMsg.innerHTML = msg;
   }
 
