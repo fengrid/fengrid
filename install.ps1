@@ -1,7 +1,10 @@
 # install.ps1 — install & launch the Fengrid (Windows)
 #
 # Installs to ~\fengrid\ (or a custom location) and places a launcher
-# (fengrid.cmd) in a folder that is added to the user's PATH.
+# (fengrid.cmd) in a folder that is added to the user's PATH. The launcher
+# starts a local-only web server (loopback bind) and opens the page over
+# http:// so refresh and format conversion always work; `fengrid --file`
+# opens the plain file instead.
 #
 # Compatible with Windows PowerShell 5.1 and PowerShell 7+.
 # Run with:  powershell -ExecutionPolicy Bypass -File install.ps1
@@ -229,8 +232,23 @@ $jsPaths = ($paths | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -jo
 $binDir = Join-Path $HOME '.local\bin'
 New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 $launcher = Join-Path $binDir $LauncherName
-"@echo off`r`nstart `"`" `"$InstallDir\index.html`"" | Set-Content -Path $launcher -Encoding ASCII
-Write-Ok "Created $launcher -> opens $InstallDir\index.html"
+$cmdLines = @(
+    '@echo off',
+    'set "APP_DIR=' + $InstallDir + '"',
+    'if /i "%~1"=="--file" goto file',
+    'set "PYEXE="',
+    'where pythonw >nul 2>nul && set "PYEXE=pythonw"',
+    'where python >nul 2>nul && if not defined PYEXE set "PYEXE=python"',
+    'if not defined PYEXE goto file',
+    'start "" %PYEXE% "%APP_DIR%\server\serve.py" --dir "%APP_DIR%" --port 8642 --host 127.0.0.1 --kill-existing',
+    'timeout /t 2 /nobreak >nul',
+    'start "" "http://127.0.0.1:8642/"',
+    'goto :eof',
+    ':file',
+    'start "" "%APP_DIR%\index.html"'
+)
+($cmdLines -join "`r`n") | Set-Content -Path $launcher -Encoding ASCII
+Write-Ok "Created $launcher -> starts the local server and opens http://127.0.0.1:8642/ (fengrid --file opens the plain file)"
 
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if (-not $userPath) { $userPath = '' }
@@ -249,5 +267,5 @@ if (($userPath -split ';') -notcontains $binDir) {
 # 5. Launch
 # ---------------------------------------------------------------------------
 Write-Info 'Launching fengrid...'
-Start-Process (Join-Path $InstallDir 'index.html')
+& $launcher
 Write-Ok 'Done. Quick launch any time:  fengrid'

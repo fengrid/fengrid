@@ -260,7 +260,13 @@ saving the original file for other formats.
 (plain click sends `enabled`, Shift-click sends `force`). One refresh runs
 at a time (HTTP 409 when busy); the JSON reply carries a summary the page
 toasts before reloading. On `file://` pages there is no server: the CLI
-(`fengrid-refresh`) is the way to refresh.
+(`fengrid-refresh`) is the way to refresh. The `fengrid` launcher makes
+this rare — it starts `serve.py --host 127.0.0.1 --kill-existing` in the
+background (log: `~/.local/state/fengrid/server.log`) and opens the page
+over `http://127.0.0.1:8642/`; `fengrid --file` opts out. The loopback
+bind keeps the launcher's server invisible to the LAN (unlike the QR
+webshare, which binds `0.0.0.0` on request). CORS stays refused by
+design, so a `file://`-opened page still cannot drive the server.
 
 ## Testing
 

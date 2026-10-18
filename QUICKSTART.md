@@ -42,8 +42,12 @@ browser.
 
 ## 3. Use it
 
-- Launch any time with `fengrid` (or open
-  `~/fengrid/index.html` directly).
+- Launch any time with `fengrid`. The launcher starts a **local-only**
+  web server (loopback bind — not visible to other machines) and opens
+  `http://127.0.0.1:8642/`, so the **refresh button** and **all export
+  formats** always work. Prefer the plain file? `fengrid --file` opens
+  `~/fengrid/index.html` directly (export is then browser-only for
+  sizes/PNG/JPEG/WebP, and refresh needs the CLI).
 - Type `/` to search; hover or tap any icon for its details; use the corner
   button on a card to copy the icon's name.
 - The **SIZE** slider snaps to standard icon sizes. Chips filter by source

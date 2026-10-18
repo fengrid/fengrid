@@ -13,7 +13,8 @@ CORS / security notes
   Access-Control-Allow-Origin headers to a LAN share.
 - Directory listings are disabled; only real files are served.
 - The listener binds to 0.0.0.0 by default (needed for other devices to
-  reach it). Use --host 127.0.0.1 to keep it local-only.
+  reach it). Use --host 127.0.0.1 to keep it local-only — which is what
+  the `fengrid` launcher does when it auto-starts the server.
 - The /_connect page renders a QR code of the URL reachable from other
   devices; it is served with no-store caching.
 """
@@ -292,9 +293,12 @@ class HTTPServer(socketserver.ThreadingTCPServer):
     app_dir = ""
 
     def state_js(self):
-        ips = ", ".join('"%s"' % i for i in all_ips())
+        # loopback-only servers advertise no LAN alternates
+        ips = [i for i in all_ips()] if not self.lan_host.startswith("127.") \
+            else ["127.0.0.1"]
+        ips_js = ", ".join('"%s"' % i for i in ips)
         return ('window.LAN_WEBSHARE={url:"%s",port:%d,ips:[%s],started:"%s"};\n'
-                % (self.lan_url, self.port, ips,
+                % (self.lan_url, self.port, ips_js,
                    time.strftime("%Y-%m-%d %H:%M:%S"))).encode("utf-8")
 
 
@@ -349,6 +353,10 @@ def main():
             print("     …or pick another port:  --port 8643")
             sys.exit(1)
         raise
+    if ns.host in ("127.0.0.1", "::1", "localhost"):
+        # loopback bind (the launcher's local-only mode): the LAN URL would
+        # be unreachable, so advertise the loopback address instead
+        lan = "127.0.0.1"
     server.lan_url = "http://%s:%d/" % (lan, ns.port)
     server.lan_host = lan
     server.port = ns.port
