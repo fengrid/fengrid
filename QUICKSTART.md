@@ -1,6 +1,6 @@
 # Quickstart
 
-Get the icon browser running in about two minutes — on Linux, macOS or
+Get fengrid running in about two minutes — on Linux, macOS or
 Windows.
 
 ## 1. Get it

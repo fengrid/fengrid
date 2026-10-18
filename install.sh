@@ -110,10 +110,10 @@ run_uninstall() {
     [ -n "$answer" ] && [ "${answer:0:1}" != "/" ] && answer="$PWD/$answer"
     [ -n "$answer" ] && CANDIDATES+=("${answer%/}")
 
+    # No install dirs? Still sweep launchers/helpers/PATH/cron — a broken or
+    # partially-removed install can leave those behind.
     if [ "${#CANDIDATES[@]}" -eq 0 ]; then
-        ok "Nothing found to remove."
-        ok "Uninstall completed successfully — no changes were made."
-        return 0
+        ok "No install directories found — sweeping leftover launchers, helpers, and PATH entries."
     fi
 
     for c in "${CANDIDATES[@]}"; do
@@ -140,7 +140,7 @@ run_uninstall() {
     # launcher name and the pre-rebrand `icon-browser` name so older installs
     # are cleaned up too.
     local LNAME L
-    for LNAME in fengrid icon-browser; do
+    for LNAME in fengrid icon-browser gtk4-icon-browser; do
         L="$BIN_DIR/$LNAME"
         if [ -L "$L" ]; then
             T="$(readlink "$L")"
