@@ -196,6 +196,69 @@ to just report. The installer can register a **weekly cron job**
 interactive prompt or `bash install.sh --automatic-updates`; `--uninstall`
 removes both.
 
+## Manual icon additions
+
+`refresh-icons.sh` (installed both inside the install directory and as
+`~/.local/bin/icon-browser-refresh`) reconciles `list.txt`/`list.js` with the
+install's `icons/` folder: it re-locates loose files into `icons/Manual/`,
+converts `.icns`/`.xpm` when `sips`/ImageMagick is available, appends files
+whose relative path is not already covered by a scanned entry (theme icons
+are listed via their system paths and rendered from the local copy, so
+re-listing the copies would duplicate them), prunes entries for deleted
+files, regenerates `list.js`, and rebuilds `meta.js`. `update.sh` calls it
+with `--merge-list` after its own re-scan so manual additions survive
+updates.
+
+## Image metadata (meta.js)
+
+`icon-meta.sh` runs ImageMagick `identify` across the install's raster icons
+and writes `meta.js` (`window.ICON_META`) — true pixel dimensions, file size,
+colorspace, unique-color count and a monochrome flag per file. The page uses
+it for the hover-details specs (dims/file/space/colors), the color/mono
+**TONE** filter, and the richer variant display.
+
+The scan is **incremental and fingerprint-tracked**: every file's size and
+mtime (a cheap stand-in for a content hash) is kept in
+`<install>/meta-state.tsv` along with the JSON fragment it produced, so
+unchanged files are never re-identified. Each run compares fingerprints,
+identifies only new/changed files, reuses stored fragments for the rest,
+drops entries for deleted files, and rewrites `meta.js` and the ledger
+atomically (temp files, swapped in at the end — Ctrl-C leaves the previous
+state intact). SVG files are skipped by design (identify rasterizes them
+through slow delegates; the page already knows a vector source from the
+filename).
+
+All entry-point scripts accept `--update-metadata enabled|disabled|force`:
+
+- `enabled` (default) — compare fingerprints, identify only new/changed files
+- `disabled` — skip metadata work entirely; `meta.js` left untouched
+- `force` — ignore fingerprints, re-identify every icon
+
+`install.sh` runs metadata enabled by default and records the chosen mode as
+`UPDATE_META_MODE` in `update.conf` (the weekly updater and `update.sh
+--update-metadata` override it). `scan-icons.sh` takes the option with
+`--dir`. Large runs print a warning before starting. Without ImageMagick the
+page falls back to filename-derived specs and the tone filter shows nothing
+additional.
+
+## Export endpoint (server/serve.py)
+
+When the showcase is served over http, the details bar's EXPORT button
+converts icons through `GET /convert?src=&fmt=&size=` — a strictly validated
+whitelisted endpoint that shells out to ImageMagick (PNG/JPEG/WebP/ICO/PDF/
+GIF/TIFF/BMP; `ico` bundles 16–64 px frames; `size` resizes, `orig` passes
+the file through). On `file://` pages the browser rebuilds PNG/JPEG/WebP via
+canvas and falls back to saving the original file for other formats.
+
+## Refresh endpoint (server/serve.py)
+
+`GET /refresh?mode=enabled|force` runs the install's `refresh-icons.sh` and
+`icon-meta.sh` — the server-side engine behind the UI's refresh button
+(plain click sends `enabled`, Shift-click sends `force`). One refresh runs
+at a time (HTTP 409 when busy); the JSON reply carries a summary the page
+toasts before reloading. On `file://` pages there is no server: the CLI
+(`icon-browser-refresh`) is the way to refresh.
+
 ## Testing
 
 No test framework — verification is manual, and the minimum bar is:

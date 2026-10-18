@@ -68,15 +68,41 @@
   .btn.primary:hover { filter: brightness(1.08); text-decoration: none; }
   .btn:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
 
-  /* install command */
+  /* install command — platform tabs */
   .cmd {
-    margin-top: 34px; display: flex; align-items: center; gap: 12px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 14px 18px; max-width: 620px;
+    margin-top: 34px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; max-width: 620px;
   }
-  .cmd code { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
-  .cmd code b { color: var(--accent); font-weight: 500; }
-  .cmd .hint { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-faint); margin-left: auto; }
+  .cmd .tabs {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 10px 0; border-bottom: 1px solid var(--border);
+  }
+  .cmd .tab {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--ink-faint);
+    background: none; border: 1px solid transparent; border-bottom: none;
+    border-radius: 8px 8px 0 0; padding: 7px 14px 9px; cursor: pointer;
+  }
+  .cmd .tab:hover { color: var(--ink); }
+  .cmd .tab.active {
+    color: var(--accent); border-color: var(--border);
+    background: var(--bg); position: relative; top: 1px;
+  }
+  .cmd .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cmd .detect {
+    font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: 0.14em; color: var(--ink-faint); margin-left: auto;
+    padding-bottom: 9px; display: none;
+  }
+  .cmd .pane { display: none; padding: 14px 18px 16px; }
+  .cmd .pane.active { display: block; }
+  .cmd .pane code {
+    font-family: var(--font-mono); font-size: 13px; color: var(--ink);
+    display: block; word-break: break-word;
+  }
+  .cmd .pane code b { color: var(--accent); font-weight: 500; }
+  .cmd .pane .note { font-size: 12.5px; color: var(--ink-muted); margin: 9px 0 0; }
+  .cmd .pane .note code { display: inline; font-size: 12px; }
 
   /* screenshot */
   .shot { margin: 56px 0 0; }
@@ -113,7 +139,7 @@
 <div class="top">
   <div class="wrap">
     <h1>Icon Browser</h1>
-    <a class="ver" href="https://github.com/nativeit/gtk4-icon-browser/releases">v0.1.2</a>
+    <a class="ver" href="https://github.com/nativeit/gtk4-icon-browser/releases">v0.2.1</a>
     <span class="spacer"></span>
     <a class="mono-link" href="https://github.com/nativeit/gtk4-icon-browser">github.com/nativeit/gtk4-icon-browser</a>
   </div>
@@ -131,9 +157,25 @@
       <a class="btn" href="https://github.com/nativeit/gtk4-icon-browser#readme">README</a>
       <a class="btn" href="https://github.com/nativeit/gtk4-icon-browser/blob/main/QUICKSTART.md">Quickstart</a>
     </div>
-    <div class="cmd">
-      <code>git clone <b>https://github.com/nativeit/gtk4-icon-browser.git</b> &amp;&amp; bash install.sh</code>
-      <span class="hint">linux · macos · windows · no sudo</span>
+    <div class="cmd" id="install">
+      <div class="tabs" role="tablist" aria-label="Installation platform">
+        <button class="tab active" role="tab" id="tab-linux" aria-selected="true" aria-controls="pane-linux" data-plat="linux">Linux</button>
+        <button class="tab" role="tab" id="tab-macos" aria-selected="false" aria-controls="pane-macos" data-plat="macos">macOS</button>
+        <button class="tab" role="tab" id="tab-windows" aria-selected="false" aria-controls="pane-windows" data-plat="windows">Windows</button>
+        <span class="detect" id="cmd-detect">detected automatically</span>
+      </div>
+      <div class="pane active" role="tabpanel" id="pane-linux" aria-labelledby="tab-linux">
+        <code>git clone <b>https://github.com/nativeit/gtk4-icon-browser.git</b> &amp;&amp; cd gtk4-icon-browser &amp;&amp; bash install.sh</code>
+        <p class="note">Scans your installed theme folders (e.g. <code>/usr/share/icons</code>) and offers to add more; asks before anything it changes, needs no sudo.</p>
+      </div>
+      <div class="pane" role="tabpanel" id="pane-macos" aria-labelledby="tab-macos">
+        <code>git clone <b>https://github.com/nativeit/gtk4-icon-browser.git</b> &amp;&amp; cd gtk4-icon-browser &amp;&amp; bash install.sh</code>
+        <p class="note">Same installer as Linux. macOS <code>.icns</code> system icons are converted with the built-in <code>sips</code> tool; CoreTypes icons are picked up automatically. No sudo.</p>
+      </div>
+      <div class="pane" role="tabpanel" id="pane-windows" aria-labelledby="tab-windows">
+        <code>git clone <b>https://github.com/nativeit/gtk4-icon-browser.git</b> ; cd gtk4-icon-browser ; powershell -ExecutionPolicy Bypass -File install.ps1</code>
+        <p class="note">The execution-policy bypass applies to the installer process only. You pick which folders of <code>.png</code> / <code>.svg</code> / <code>.ico</code> files to browse; nothing is installed system-wide.</p>
+      </div>
     </div>
 
     <figure class="shot">
@@ -147,11 +189,13 @@
     <ul>
       <li><span class="k">Any icon source</span><span class="d">System theme folders or any folder of icons you keep — png, svg, ico, plus icns/xpm via built-in converters.</span></li>
       <li><span class="k">Size slider</span><span class="d">Snaps to standard icon sizes — 16 through 256.</span></li>
-      <li><span class="k">Search &amp; filter</span><span class="d">By name, source folder (with counts), and context: actions, devices, status, …</span></li>
-      <li><span class="k">Hover / tap inspector</span><span class="d">Name, theme, context, every size variant, formats, full path — tap works on phones.</span></li>
+      <li><span class="k">Search &amp; filter</span><span class="d">By name and your own tags, source folder (with counts), context, file type, and color vs. monochrome.</span></li>
+      <li><span class="k">Tags &amp; collections</span><span class="d">Define your own tags and collections, then filter and search by them. Saved per-browser.</span></li>
+      <li><span class="k">Hover / tap inspector</span><span class="d">Name, theme, context, true pixel dimensions, every size variant, file size, colorspace, color count, full path — tap works on phones.</span></li>
+      <li><span class="k">Export</span><span class="d">Download any icon as PNG, JPEG, WebP, ICO, PDF and more, at any size — ImageMagick does the conversion when served over the LAN.</span></li>
       <li><span class="k">One-click copy</span><span class="d">Corner button on every card copies the icon's name.</span></li>
       <li><span class="k">QR webshare</span><span class="d">Optional local webserver; scan a QR code to browse the showcase on your phone over the LAN.</span></li>
-      <li><span class="k">Mobile layout</span><span class="d">Responsive controls, swipeable filter chips, big touch targets.</span></li>
+      <li><span class="k">Mobile layout</span><span class="d">Responsive controls, swipeable filter chips, big touch targets, one-tap control collapse for a full-page grid.</span></li>
       <li><span class="k">Fully local</span><span class="d">Self-hosted fonts, no CDN, no framework. Works offline over file://.</span></li>
     </ul>
   </section>
@@ -167,6 +211,71 @@
     <span style="margin-left:auto">a casual side project — contributions welcome</span>
   </div>
 </footer>
+
+<script>
+/* platform tabs: non-invasive auto-detection, manual override, no-JS falls
+   back to the Linux pane (active in the markup) */
+(function () {
+  var cmd = document.querySelector('.cmd');
+  if (!cmd) return;
+  var tabs = [].slice.call(cmd.querySelectorAll('.tab'));
+  var panes = [].slice.call(cmd.querySelectorAll('.pane'));
+  var detectBadge = document.getElementById('cmd-detect');
+
+  function select(plat, byDetection) {
+    var hit = false;
+    tabs.forEach(function (t) {
+      var on = t.dataset.plat === plat;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      if (on) hit = true;
+    });
+    panes.forEach(function (p) {
+      p.classList.toggle('active', p.id === 'pane-' + plat);
+    });
+    if (detectBadge) {
+      detectBadge.style.display = (byDetection && hit) ? 'inline' : 'none';
+    }
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { select(t.dataset.plat, false); });
+  });
+  // left/right arrow keys move between tabs (WAI-ARIA tab pattern)
+  cmd.querySelector('.tabs').addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    var cur = tabs.indexOf(document.activeElement);
+    if (cur === -1) return;
+    var next = e.key === 'ArrowRight' ? (cur + 1) % tabs.length : (cur + tabs.length - 1) % tabs.length;
+    tabs[next].focus();
+    tabs[next].click();
+    e.preventDefault();
+  });
+
+  // best-effort detection: userAgentData (Chromium) then navigator.platform
+  // then the UA string. Touch-only devices never auto-switch (they browse,
+  // not install) — the default Linux pane stays put.
+  var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  if (mobile) return;
+  var raw = '';
+  if (navigator.userAgentData && navigator.userAgentData.platform) {
+    raw = navigator.userAgentData.platform;
+  } else {
+    raw = navigator.platform || '';
+  }
+  var plat = '';
+  if (/win/i.test(raw)) plat = 'windows';
+  else if (/mac/i.test(raw)) plat = 'macos';
+  else if (/linux|cros/i.test(raw)) plat = 'linux';
+  if (!plat) {
+    var ua = navigator.userAgent || '';
+    if (/Windows/.test(ua)) plat = 'windows';
+    else if (/Macintosh|Mac OS X/.test(ua)) plat = 'macos';
+    else if (/Linux|CrOS|X11/.test(ua)) plat = 'linux';
+  }
+  if (plat) select(plat, true);
+})();
+</script>
 
 </body>
 </html>

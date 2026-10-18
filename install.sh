@@ -17,6 +17,7 @@
 # install (Linux), which runs only after you explicitly agree.
 #
 # Usage: bash install.sh [--no-shell] [--uninstall] [--automatic-updates]
+#                        [--update-metadata enabled|disabled|force]
 #   --no-shell            skip handing off to an interactive shell at the end
 #   --uninstall, --remove remove installs, launcher, and (on request) the
 #                         PATH entry; asks before deleting anything
@@ -24,6 +25,13 @@
 #                         (installs ~/.local/bin/icon-browser-update and a
 #                         marked crontab entry; the interactive install also
 #                         offers this as a step)
+#   --update-metadata <mode>
+#                         icon metadata handling (meta.js): enabled (default —
+#                         on install every icon is new, so all are identified;
+#                         later runs only identify changed files), disabled
+#                         (skip metadata entirely), force (re-identify
+#                         everything, e.g. after an ImageMagick upgrade).
+#                         The chosen mode is recorded for the weekly updater.
 
 set -u
 
@@ -58,23 +66,36 @@ die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 NO_SHELL=false
 UNINSTALL=false
 AUTO_UPDATES=false
-for arg in "$@"; do
-    case "$arg" in
+META_MODE="enabled"   # --update-metadata default: scan for changes on install
+while [ $# -gt 0 ]; do
+    case "$1" in
         --no-shell)           NO_SHELL=true ;;
         --uninstall|--remove) UNINSTALL=true ;;
         --automatic-updates)  AUTO_UPDATES=true ;;
-        *) die "Unknown option: $arg (supported: --uninstall/--remove, --automatic-updates, --no-shell)" ;;
+        --update-metadata)
+            case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac ;;
+        --update-metadata=*)  META_MODE="${1#--update-metadata=}" ;;
+        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --update-metadata [enabled|disabled|force])" ;;
     esac
+    shift
 done
+case "$META_MODE" in enabled|disabled|force) ;; *) META_MODE="enabled" ;; esac
 
 # ----------------------------------------------------------------------------
 # Uninstaller (--uninstall / --remove)
 # ----------------------------------------------------------------------------
 # Removes each recognized install location after per-directory confirmation,
 # the launcher if it is ours, and optionally the PATH entry it added.
+# Every action is recorded and echoed back in a final summary, so the
+# script's last word is always a clear completion report — not the shell's
+# "Terminated" job notification for a stopped web server.
 run_uninstall() {
     info "Icon Browser uninstaller"
     local CANDIDATES=() c answer T
+    local R_DIRS=() K_DIRS=() S_DIRS=() R_PATH=() K_PATH=()
+    local R_MISC=() K_MISC=() SERVERS_STOPPED=0 SERVERS_LEFT=0
+    local LAUNCHER="none found" CRON="none configured"
+
     [ -d "$DEFAULT_INSTALL_DIR" ] && CANDIDATES+=("$DEFAULT_INSTALL_DIR")
     # retired locations from earlier releases
     [ -d "$HOME/gtk4-icon-browser" ] && CANDIDATES+=("$HOME/gtk4-icon-browser")
@@ -90,23 +111,27 @@ run_uninstall() {
 
     if [ "${#CANDIDATES[@]}" -eq 0 ]; then
         ok "Nothing found to remove."
+        ok "Uninstall completed successfully — no changes were made."
         return 0
     fi
 
     for c in "${CANDIDATES[@]}"; do
         if [ "$c" = "$SCRIPT_DIR" ]; then
             warn "$c is the repository this script runs from — skipped (remove it manually if you really want it gone)."
+            S_DIRS+=("$c (repository — skipped)")
             continue
         fi
         if [ ! -f "$c/index.html" ] || [ ! -f "$c/$LIST_FILE" ]; then
             warn "$c does not look like an Icon Browser install (missing index.html/list.txt) — skipped for safety."
+            S_DIRS+=("$c (not an install — skipped)")
             continue
         fi
         printf "Remove %s (%s)? [y/N]: " "$c" "$(du -sh "$c" 2>/dev/null | cut -f1)"
         read -r answer
         case "$answer" in
-            [yY]|[yY][eE][sS]) rm -rf "$c" && ok "Removed $c" ;;
-            *) info "Kept $c" ;;
+            [yY]|[yY][eE][sS])
+                rm -rf "$c" && { ok "Removed $c"; R_DIRS+=("$c"); } ;;
+            *) info "Kept $c"; K_DIRS+=("$c") ;;
         esac
     done
 
@@ -115,13 +140,14 @@ run_uninstall() {
         T="$(readlink "$BIN_LINK")"
         case "$T" in
             */icon-browser/index.html|*/gtk4-icon-browser/index.html)
-                rm -f "$BIN_LINK" && ok "Removed launcher symlink $BIN_LINK (pointed at $T)" ;;
-            *) warn "$BIN_LINK is a symlink to $T — not ours, left in place." ;;
+                rm -f "$BIN_LINK" && { ok "Removed launcher symlink $BIN_LINK (pointed at $T)"; LAUNCHER="removed symlink ($BIN_LINK)"; } ;;
+            *) warn "$BIN_LINK is a symlink to $T — not ours, left in place."; LAUNCHER="left in place (not ours)" ;;
         esac
     elif [ -f "$BIN_LINK" ] && grep -q 'generated by install.sh' "$BIN_LINK" 2>/dev/null; then
-        rm -f "$BIN_LINK" && ok "Removed launcher $BIN_LINK"
+        rm -f "$BIN_LINK" && { ok "Removed launcher $BIN_LINK"; LAUNCHER="removed ($BIN_LINK)"; }
     elif [ -e "$BIN_LINK" ]; then
         warn "$BIN_LINK exists and is not our launcher — left in place."
+        LAUNCHER="left in place (not ours)"
     fi
 
     # PATH cleanup — recognizes both current and legacy marker comments.
@@ -134,8 +160,9 @@ run_uninstall() {
         case "$answer" in
             [yY]|[yY][eE][sS])
                 sed -i '/^# Icon Browser$/,+1d; /^# GTK4 icon browser$/,+1d' "$RC"
-                ok "Removed PATH entry from $RC (takes effect in new shells)" ;;
-            *) info "Kept PATH entry in $RC" ;;
+                ok "Removed PATH entry from $RC (takes effect in new shells)"
+                R_PATH+=("$RC") ;;
+            *) info "Kept PATH entry in $RC"; K_PATH+=("$RC") ;;
         esac
     done
 
@@ -148,11 +175,19 @@ run_uninstall() {
             [yY]|[yY][eE][sS])
                 crontab -l 2>/dev/null | grep -v '^# icon-browser weekly update$' \
                     | grep -vF 'icon-browser-update' | crontab -
-                ok "Removed weekly auto-update job from crontab" ;;
-            *) info "Kept auto-update cron job" ;;
+                ok "Removed weekly auto-update job from crontab"
+                CRON="removed" ;;
+            *) info "Kept auto-update cron job"; CRON="kept" ;;
         esac
     fi
-    [ -e "$BIN_DIR/icon-browser-update" ] && rm -f "$BIN_DIR/icon-browser-update"
+    if [ -e "$BIN_DIR/icon-browser-update" ]; then
+        rm -f "$BIN_DIR/icon-browser-update"
+        ok "Removed updater $BIN_DIR/icon-browser-update"
+        R_MISC+=("updater ($BIN_DIR/icon-browser-update)")
+    fi
+    if [ -f "$BIN_DIR/icon-browser-refresh" ] && grep -q 'refresh-icons.sh' "$BIN_DIR/icon-browser-refresh" 2>/dev/null; then
+        rm -f "$BIN_DIR/icon-browser-refresh" && { ok "Removed $BIN_DIR/icon-browser-refresh"; R_MISC+=("refresh helper ($BIN_DIR/icon-browser-refresh)"); }
+    fi
 
     # stop any running web server (serve.py) belonging to an install being
     # removed — it may be a backgrounded launch from install.sh's webshare
@@ -165,6 +200,15 @@ run_uninstall() {
             CMD=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)
             case "$CMD" in
                 *serve.py*) ;;
+                *) continue ;;
+            esac
+            # only real server processes: their command line STARTS with a
+            # python interpreter. A shell whose command text merely mentions
+            # serve.py (e.g. this very terminal's compound command) must not
+            # be matched and killed.
+            EXE="${CMD%% *}"
+            case "$EXE" in
+                *python*) ;;
                 *) continue ;;
             esac
             CWD=$(readlink "/proc/$pid/cwd" 2>/dev/null || true)
@@ -180,18 +224,69 @@ run_uninstall() {
                 esac
             done
             if [ -n "$MATCHED" ]; then
-                kill "$pid" 2>/dev/null \
-                    && ok "Stopped web server for $MATCHED (pid $pid)" \
-                    || warn "Could not stop web server (pid $pid)"
+                if kill "$pid" 2>/dev/null; then
+                    # poll briefly so the death is confirmed before the
+                    # summary prints (and the shell's "Terminated" job
+                    # notification, if any, lands before our last word)
+                    local n=0 alive=1
+                    while [ "$n" -lt 10 ]; do
+                        kill -0 "$pid" 2>/dev/null || { alive=0; break; }
+                        sleep 0.2; n=$((n + 1))
+                    done
+                    if [ "$alive" -eq 0 ]; then
+                        ok "Stopped web server for $MATCHED (pid $pid)"
+                    else
+                        warn "Web server (pid $pid) did not exit within 2s — it may still be running"
+                    fi
+                    SERVERS_STOPPED=$((SERVERS_STOPPED + 1))
+                else
+                    warn "Could not stop web server (pid $pid)"
+                fi
             else
                 info "Web server pid $pid is not from an install being removed — left running"
+                SERVERS_LEFT=$((SERVERS_LEFT + 1))
             fi
         done
     else
         info "No running web server instances found (or pgrep unavailable)"
     fi
 
-    ok "Uninstall complete."
+    # --- final summary: the definitive last word of the uninstall --------
+    printf '\n'
+    ok "──────────────── Uninstall summary ────────────────"
+    if [ "${#R_DIRS[@]}" -gt 0 ]; then
+        for c in "${R_DIRS[@]}"; do info "  removed install:      $c"; done
+    fi
+    if [ "${#K_DIRS[@]}" -gt 0 ]; then
+        for c in "${K_DIRS[@]}"; do info "  kept install:         $c (declined)"; done
+    fi
+    if [ "${#S_DIRS[@]}" -gt 0 ]; then
+        for c in "${S_DIRS[@]}"; do info "  skipped:              $c"; done
+    fi
+    info "  launcher:             $LAUNCHER"
+    if [ "${#R_PATH[@]}" -gt 0 ]; then
+        for c in "${R_PATH[@]}"; do info "  removed PATH entry:   $c"; done
+    fi
+    if [ "${#K_PATH[@]}" -gt 0 ]; then
+        for c in "${K_PATH[@]}"; do info "  kept PATH entry:      $c (declined)"; done
+    fi
+    info "  auto-update cron job: $CRON"
+    if [ "${#R_MISC[@]}" -gt 0 ]; then
+        for c in "${R_MISC[@]}"; do info "  removed helper:       $c"; done
+    fi
+    if [ "$SERVERS_STOPPED" -gt 0 ]; then
+        info "  web servers stopped:  $SERVERS_STOPPED"
+    fi
+    if [ "$SERVERS_LEFT" -gt 0 ]; then
+        info "  unrelated web servers left running: $SERVERS_LEFT"
+    fi
+    ok "───────────────────────────────────────────────────"
+    ok "Uninstall completed successfully."
+    if [ "$SERVERS_STOPPED" -gt 0 ]; then
+        printf "${YELLOW}::${OFF} Note: if your shell printed \"Terminated\", that was its\n"
+        printf "${YELLOW}::${OFF} notification for the stopped web server above — not\n"
+        printf "${YELLOW}::${OFF} this script exiting early.\n"
+    fi
 }
 
 if [ "$UNINSTALL" = true ]; then
@@ -409,11 +504,17 @@ ok "$LIST_FILE written ($N icon files)"
 # ----------------------------------------------------------------------------
 info "Installing to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR" || die "Cannot create $INSTALL_DIR (permission denied?)"
+# NOTE: copy the directory CONTENTS (trailing /.), not the directory itself —
+# `cp -r server dest/server` nests a fresh copy under an existing dest/server
+# instead of updating the files in place.
+mkdir -p "$INSTALL_DIR/fonts" "$INSTALL_DIR/server"
 cp "$SCRIPT_DIR/index.html" "$INSTALL_DIR/index.html" || die "Failed to copy index.html."
-cp -r "$SCRIPT_DIR/fonts" "$INSTALL_DIR/fonts" || die "Failed to copy fonts/."
-cp -r "$SCRIPT_DIR/server" "$INSTALL_DIR/server" || die "Failed to copy server/."
+cp -r "$SCRIPT_DIR/fonts/." "$INSTALL_DIR/fonts/" || die "Failed to copy fonts/."
+cp -r "$SCRIPT_DIR/server/." "$INSTALL_DIR/server/" || die "Failed to copy server/."
+cp "$SCRIPT_DIR/refresh-icons.sh" "$INSTALL_DIR/refresh-icons.sh" || die "Failed to copy refresh-icons.sh."
+cp "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR/icon-meta.sh" || die "Failed to copy icon-meta.sh."
 cp "$LIST_FILE" "$INSTALL_DIR/$LIST_FILE" || die "Failed to copy list.txt."
-ok "Installed index.html + list.txt + fonts/ + server/"
+ok "Installed index.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon-meta.sh"
 
 # ----------------------------------------------------------------------------
 # 3b. Local icon tree (self-contained previews)
@@ -487,6 +588,21 @@ ok "$COPIED icon files prepared in icons/ ($SIZE)"
     sed 's/^[[:space:]]*//; s/["\\]/\\&/g; s/^/"/; s/$/",/' "$INSTALL_DIR/$LIST_FILE" | tr -d '\n' | sed 's/,$//'
     printf '];\n'
 } > "$INSTALL_DIR/list.js"
+
+# image metadata (real dimensions, file size, colorspace, mono flag) for the
+# inspector's specs, tone filter and color view — best effort, never fatal.
+# --update-metadata controls it: enabled (default) identifies only new and
+# changed files, disabled skips metadata entirely, force re-identifies all.
+if command -v identify >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
+    if [ "$META_MODE" = disabled ]; then
+        info "Skipping image metadata (--update-metadata disabled)."
+    else
+        info "Inspecting image files for metadata (meta.js, mode: $META_MODE) ..."
+        bash "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR" --mode "$META_MODE"
+    fi
+else
+    info "ImageMagick not found — skipping metadata (the page falls back to filename-derived specs). Install imagemagick and re-run install.sh or icon-browser-refresh to add richer specs."
+fi
 
 # ----------------------------------------------------------------------------
 # 4. Ensure ~/.local/bin exists, is on PATH, and holds the launcher
@@ -564,6 +680,15 @@ else
     write_launcher && ok "Created $BIN_LINK -> opens $INSTALL_DIR/index.html"
 fi
 
+# refresh helper — updates list.txt/list.js after manual icon drops into
+# icons/ (see refresh-icons.sh); the weekly updater also uses it to keep
+# manual additions across re-scans
+if [ -f "$SCRIPT_DIR/refresh-icons.sh" ]; then
+    cp "$SCRIPT_DIR/refresh-icons.sh" "$BIN_DIR/icon-browser-refresh" \
+        && chmod +x "$BIN_DIR/icon-browser-refresh" \
+        && ok "Refresh helper installed: $BIN_DIR/icon-browser-refresh"
+fi
+
 # ----------------------------------------------------------------------------
 # 5. Optional: share on the local network (QR code for phones)
 # ----------------------------------------------------------------------------
@@ -601,7 +726,8 @@ setup_automatic_updates() {
         || { warn "Could not install the updater"; return 1; }
     SP="$DEFAULT_SCAN_PATH"
     for p in "${CUSTOM_PATHS[@]:-}"; do [ -n "$p" ] && SP="$SP $p"; done
-    printf 'INSTALL_DIR="%s"\nSCAN_PATHS="%s"\n' "$INSTALL_DIR" "$SP" > "$CONF_DIR/update.conf"
+    printf 'INSTALL_DIR="%s"\nSCAN_PATHS="%s"\nUPDATE_META_MODE="%s"\n' \
+        "$INSTALL_DIR" "$SP" "$META_MODE" > "$CONF_DIR/update.conf"
     ok "Updater installed: $BIN_DIR/icon-browser-update (config: $CONF_DIR/update.conf)"
     if ! command -v crontab >/dev/null 2>&1; then
         warn "crontab not available — run the updater manually:  icon-browser-update"

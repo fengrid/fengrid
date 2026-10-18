@@ -28,14 +28,23 @@ page — no build step, no runtime, no server required.
   `.xpm` files convert via ImageMagick when available
 - **Size slider** — snaps to standard icon sizes (16 / 22 / 24 / 32 / 48 /
   64 / 96 / 128 / 256)
-- **Search, filter, sort** — by name, source folder/theme (chips with
-  counts), and context (`actions`, `devices`, `status`, …)
+- **Search, filter, sort** — by name (and your tags), source folder/theme
+  (chips with counts), and context (`actions`, `devices`, `status`, …),
+  file type, color vs. monochrome, tags and custom collections
 - **Hover/tap inspector** — name, theme, context, all available size
-  variants, formats, and the full file path
+  variants, true pixel dimensions, file size, colorspace, color count, and
+  the full file path — plus per-icon tagging and export
+- **Export** — download any icon as PNG/JPEG/WebP/ICO/PDF/GIF/TIFF/BMP at
+  any size; over the webshare the conversion runs through ImageMagick
+- **Incremental metadata** — `icon-meta.sh` fingerprints every icon
+  (size + mtime) so re-scans only re-identify new or changed files; all
+  scripts accept `--update-metadata enabled|disabled|force`, and a refresh
+  button in the UI triggers a re-scan (Shift-click forces a full pass)
 - **Copy button on every card** — copies the icon's name (filename minus
   extension); `/` jumps to search
 - **Mobile-friendly layout** — responsive controls, swipeable filter chips,
-  44px touch targets, tap-to-select on phones
+  44px touch targets, tap-to-select on phones, and a one-tap control
+  collapse for a full-page grid
 - **QR webshare (optional)** — a tiny local webserver publishes the showcase
   to your local network; open the connect page on any desktop and scan the
   QR with a phone. Same-origin serving means no CORS issues, and directory

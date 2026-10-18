@@ -45,6 +45,8 @@
     --accent: #e8925a;
     --accent-ink: #14100c;
     --accent-soft: rgba(232, 146, 90, 0.14);
+    --hl: #56c9bb;                       /* complementary highlight: details, tags, export */
+    --hl-soft: rgba(86, 201, 187, 0.15);
     --checker: rgba(255, 255, 255, 0.02);
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
@@ -60,6 +62,8 @@
     --accent: #c96a2e;
     --accent-ink: #fff;
     --accent-soft: rgba(201, 106, 46, 0.12);
+    --hl: #0e8d82;
+    --hl-soft: rgba(14, 141, 130, 0.13);
     --checker: rgba(0, 0, 0, 0.018);
     --shadow: 0 12px 32px rgba(30, 25, 18, 0.12);
   }
@@ -72,7 +76,7 @@
     font-family: var(--font-body);
     font-size: 14px;
     line-height: 1.5;
-    padding-bottom: 76px; /* room for inspector */
+    padding-bottom: 104px; /* room for the two-row inspector */
   }
 
   h1, h2, h3 { font-family: var(--font-head); font-weight: 400; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
@@ -133,6 +137,8 @@
     background: var(--surface); border: 1px solid var(--border); color: var(--ink-muted);
   }
   .icon-btn:hover { color: var(--ink); border-color: var(--border-strong); }
+  .icon-btn.spinning svg { animation: spin 0.9s linear infinite; }
+  .icon-btn:disabled { opacity: 0.6; cursor: progress; }
   [data-theme="dark"] .sun { display: block; } [data-theme="dark"] .moon { display: none; }
   [data-theme="light"] .sun { display: none; } [data-theme="light"] .moon { display: block; }
 
@@ -254,15 +260,100 @@
   #inspector {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
     background: var(--surface); border-top: 1px solid var(--border);
-    padding: 12px 24px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+    padding: 11px 24px 12px; display: flex; flex-direction: column; gap: 2px;
     font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);
     min-height: 52px;
   }
-  #inspector .name { color: var(--accent); font-weight: 500; font-size: 13px; }
+  /* the DETAILS section lights up with the complementary highlight while an
+     icon is hovered/selected — same accent underlines the icon's name */
+  #inspector.active { border-top: 2px solid var(--hl); }
+  #inspector .details-tag {
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--hl); border: 1px solid var(--hl);
+    background: var(--hl-soft); padding: 2px 8px; border-radius: 4px;
+    font-weight: 500; flex: none;
+  }
+  #inspector .name {
+    color: var(--hl); font-weight: 500; font-size: 13.5px;
+    text-decoration: underline; text-decoration-color: var(--hl);
+    text-decoration-thickness: 2px; text-underline-offset: 4px;
+  }
+  #inspector .insp-row {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    width: 100%; min-width: 0;
+  }
+  #inspector .insp-row + .insp-row { margin-top: 4px; }
+  #inspector .spec { white-space: nowrap; }
+  #inspector .spec b { color: var(--ink); font-weight: 500; }
+  #inspector .mono-chip {
+    color: var(--hl); border: 1px solid var(--hl); background: var(--hl-soft);
+    border-radius: 4px; padding: 1px 7px; font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #inspector .tagrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   #inspector .path { color: var(--ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 200px; direction: rtl; text-align: left; }
   #inspector kbd {
     font-family: var(--font-mono); font-size: 10px; border: 1px solid var(--border-strong);
     border-radius: 4px; padding: 1px 5px; color: var(--ink-faint);
+  }
+  .insp-btn {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; cursor: pointer;
+    background: var(--surface-2); color: var(--ink-muted);
+    border: 1px solid var(--border-strong); border-radius: 6px; padding: 5px 11px;
+  }
+  .insp-btn:hover { color: var(--hl); border-color: var(--hl); }
+
+  /* tag pills (inspector + tag manager) */
+  .tag-pill {
+    font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em;
+    background: var(--hl-soft); color: var(--hl);
+    border: 1px solid var(--hl); border-radius: 99px;
+    padding: 2px 10px; cursor: pointer; white-space: nowrap;
+  }
+  .tag-pill:hover { background: var(--hl); color: var(--bg); }
+
+  /* tags & collections manager + export modal (wide modal-cards) */
+  .tag-input-row { display: flex; gap: 8px; margin: 8px 0; }
+  .tag-input-row input {
+    flex: 1; height: 34px; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 7px; color: var(--ink);
+    font-family: var(--font-mono); font-size: 12.5px; padding: 0 10px; outline: none;
+  }
+  .tag-input-row input:focus { border-color: var(--hl); box-shadow: 0 0 0 3px var(--hl-soft); }
+  .tag-list { display: flex; flex-direction: column; gap: 5px; margin: 6px 0 2px; }
+  .tag-row {
+    display: flex; align-items: center; gap: 9px;
+    font-family: var(--font-mono); font-size: 12.5px; color: var(--ink);
+  }
+  .tag-row .cnt { color: var(--ink-faint); font-size: 10.5px; }
+  .tag-row .grow { flex: 1; }
+  .tag-x {
+    font-family: var(--font-mono); cursor: pointer; line-height: 1;
+    background: none; border: 1px solid var(--border); border-radius: 5px;
+    color: var(--ink-faint); font-size: 11px; padding: 3px 7px;
+  }
+  .tag-x:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* export modal */
+  .exp-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+  .exp-btn {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.05em;
+    background: var(--surface-2); color: var(--ink-muted);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: 7px 14px; cursor: pointer;
+  }
+  .exp-btn:hover { color: var(--hl); border-color: var(--hl); }
+  .exp-btn.active { background: var(--hl); border-color: var(--hl); color: var(--bg); font-weight: 500; }
+  .exp-note { font-size: 12.5px; color: var(--ink-muted); margin-top: 10px; line-height: 1.5; }
+  .exp-note code { font-family: var(--font-mono); color: var(--hl); }
+
+  /* mobile collapse: hide the whole search/filter section for a full-page
+     grid (the button is rendered inside the title row, phone widths only) */
+  #panel-btn { display: none; }
+  @media (max-width: 720px) {
+    #panel-btn { display: inline-flex; }
+    body.controls-hidden .controls, body.controls-hidden .chips { display: none; }
   }
 
   /* toast */
@@ -310,9 +401,11 @@
     .chip { flex: 0 0 auto; padding: 8px 16px; }
     #grid { gap: 8px; }
     .card { padding: 10px 6px 8px; border-radius: 8px; }
-    body { padding-bottom: 92px; }
-    #inspector { padding: 10px 14px; min-height: 64px; gap: 14px; }
+    body { padding-bottom: 128px; }
+    #inspector { padding: 9px 14px 10px; min-height: 64px; gap: 2px; }
+    #inspector .insp-row { gap: 10px; }
     #inspector .path { display: none; }
+    #inspector .details-tag { display: none; }
   }
   /* touch devices (no hover): copy button stays visible; tapping a card
      selects it and populates the inspector */
@@ -341,9 +434,18 @@
     <span class="count" id="count-line"></span>
     <a class="ver-badge" id="ver-badge" href="https://github.com/nativeit/gtk4-icon-browser/releases" target="_blank" rel="noopener" title="Releases"></a>
     <span class="spacer"></span>
+    <button class="icon-btn" id="panel-btn" title="Show / hide search and filters" aria-label="Show or hide search and filters" aria-expanded="true">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+    </button>
+    <button class="icon-btn" id="refresh-btn" title="Refresh icon list &amp; metadata — Shift-click to re-scan everything" aria-label="Refresh icons and metadata">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
     <button class="icon-btn" id="mode-btn" title="Toggle light / dark" aria-label="Toggle light or dark mode">
       <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="icon-btn" id="tags-btn" title="Tags &amp; collections" aria-label="Tags and collections">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.83z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
     </button>
     <button class="icon-btn" id="help-btn" title="Help &amp; guide" aria-label="Help and guide">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
@@ -381,6 +483,36 @@
         <option value="">All</option>
       </select>
     </div>
+
+    <div class="field">
+      <span class="label">Type</span>
+      <select id="ext" aria-label="Filter by file type">
+        <option value="">All</option>
+      </select>
+    </div>
+
+    <div class="field" title="Monochrome detection uses generated metadata (install with ImageMagick present)">
+      <span class="label">Tone</span>
+      <select id="tone" aria-label="Filter by color or monochrome">
+        <option value="">All</option>
+        <option value="color">Color</option>
+        <option value="mono">Mono</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <span class="label">Tags</span>
+      <select id="tagf" aria-label="Filter by tag">
+        <option value="">All</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <span class="label">Coll</span>
+      <select id="collf" aria-label="Filter by collection">
+        <option value="">All</option>
+      </select>
+    </div>
   </div>
 
   <div class="chips" id="theme-chips"></div>
@@ -392,9 +524,11 @@
 </main>
 
 <div id="inspector">
-  <span class="label" style="letter-spacing:0.14em;">Hover an icon for details</span>
-  <span class="spacer"></span>
-  <span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>
+  <div class="insp-row">
+    <span class="label" style="letter-spacing:0.14em;">Hover an icon for details</span>
+    <span class="spacer"></span>
+    <span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>
+  </div>
 </div>
 
 <div id="qr-modal" class="modal-overlay" hidden>
@@ -427,10 +561,28 @@
       variant for each size.</p>
 
       <h3>Search &amp; filter</h3>
-      <p>Press <kbd>/</kbd> to jump to search, <kbd>Esc</kbd> to clear it.
-      The <b>chips</b> filter by source folder/theme (with counts); the
-      <b>CONTEXT</b> dropdown narrows by icon category (actions, devices,
-      status, …). <b>SORT</b> reorders the grid.</p>
+      <p>Press <kbd>/</kbd> to jump to search, <kbd>Esc</kbd> to clear it — search
+      matches icon names <i>and</i> your tags. The <b>chips</b> filter by
+      source folder/theme (with counts); dropdowns narrow by
+      <b>CONTEXT</b>, file <b>TYPE</b>, <b>TONE</b> (color/mono, from the
+      generated metadata), <b>TAGS</b> and <b>COLL</b> (collections).
+      <b>SORT</b> reorders the grid. On phones the sliders button in the
+      title row collapses the whole filter panel for a full-page grid.</p>
+
+      <h3>Tags &amp; collections</h3>
+      <p>Hover or click an icon and press <b>TAG</b> in the details bar to add
+      your own tags or drop the icon into a collection. Tags and filters match
+      instantly, and everything is stored in this browser — it survives
+      reloads and updates. Delete tags or collections from the
+      <b>tag button</b> in the title row.</p>
+
+      <h3>Export</h3>
+      <p>The <b>EXPORT</b> button in the details bar downloads the icon in the
+      format and size you choose. Served over the local web server, the
+      conversions run through <b>ImageMagick</b> (PNG, JPEG, WebP, ICO, PDF,
+      GIF, TIFF, BMP — ICO bundles 16–64 px frames). Opened as a plain file,
+      PNG/JPEG/WebP exports are rebuilt in the browser and other formats fall
+      back to saving the original file.</p>
 
       <h3>Details &amp; copy</h3>
       <p>Hover an icon (or tap/click it on touch devices) to see its name,
@@ -467,10 +619,75 @@
         <code>install.sh</code> if you moved the install folder.</li>
         <li><b>Missing icons</b> — re-run <code>install.sh</code> and use the
         folder scanner to add more icon locations.</li>
+        <li><b>Adding your own icons</b> — drop files into the
+        <code>icons/</code> folder of your install (use a subfolder as the
+        theme name), then run <code>icon-browser-refresh</code> (or
+        <code>refresh-icons.sh</code> inside the install folder) and reload.
+        Files dropped loose in <code>icons/</code> are filed under the
+        <code>Manual</code> theme; <code>.icns</code>/<code>.xpm</code> files
+        are converted to PNG when a converter is available.</li>
         <li><b>Updates</b> — <code>icon-browser-update --check</code> checks
         for a newer release; the weekly cron job (if enabled) does this
         automatically.</li>
+        <li><b>Refreshing</b> — the circular-arrows button in the title row
+        re-scans the <code>icons/</code> folder and updates the metadata
+        through the web server (Shift-click re-identifies <i>every</i> icon).
+        From the shell the same thing is <code>icon-browser-refresh</code>;
+        all scripts accept <code>--update-metadata enabled|disabled|force</code>.</li>
       </ul>
+    </div>
+  </div>
+</div>
+
+<div id="export-modal" class="modal-overlay" hidden>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Export icon">
+    <div class="modal-head">
+      <span class="label" style="color:var(--hl)">Export</span>
+      <button class="icon-btn" id="export-close" title="Close" aria-label="Close export dialog">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="help-scroll">
+      <p id="export-what" style="font-family:var(--font-mono); color:var(--ink); margin-top:0;"></p>
+      <h3>Format</h3>
+      <div class="exp-grid" id="export-formats"></div>
+      <h3>Size (px)</h3>
+      <div class="exp-grid" id="export-sizes"></div>
+      <div class="exp-note" id="export-note"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tag-modal" class="modal-overlay" hidden>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Tags and collections">
+    <div class="modal-head">
+      <span class="label" style="color:var(--hl)">Tags &amp; collections</span>
+      <button class="icon-btn" id="tag-close" title="Close" aria-label="Close tags dialog">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="help-scroll">
+      <p id="tag-target" style="margin-top:0;"></p>
+
+      <h3>Tag the selected icon</h3>
+      <div class="tag-input-row">
+        <input id="tag-input" placeholder="new tag — press Enter" aria-label="New tag name">
+        <button class="insp-btn" id="tag-add">Add</button>
+      </div>
+      <div class="tag-list" id="tag-cur"></div>
+      <div class="tag-list" id="tag-sugg"></div>
+      <p id="tag-noicon">Hover or click an icon first, then press <b>TAG</b> in the
+      details bar to tag it.</p>
+
+      <h3>Your tags</h3>
+      <div class="tag-list" id="tag-all"></div>
+
+      <h3>Collections</h3>
+      <div class="tag-input-row">
+        <input id="coll-input" placeholder="new collection — press Enter" aria-label="New collection name">
+        <button class="insp-btn" id="coll-add">Create</button>
+      </div>
+      <div class="tag-list" id="coll-list"></div>
     </div>
   </div>
 </div>
@@ -480,13 +697,14 @@
 <!-- file:// fallback data (generated by install.sh alongside list.txt) -->
 <script src="server/vendor/qrcode.min.js"></script>
 <script src="list.js"></script>
+<script src="meta.js"></script>
 <script>
 (function () {
   'use strict';
 
   var SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 256];
   var PAGE = 240; // chunked render size
-  var APP_VERSION = 'v0.1.2'; // keep in sync with the latest git tag
+  var APP_VERSION = 'v0.2.1'; // keep in sync with the latest git tag
 
   document.getElementById('ver-badge').textContent = APP_VERSION;
 
@@ -501,6 +719,13 @@
     sizeReadout: document.getElementById('size-readout'),
     sort: document.getElementById('sort'),
     context: document.getElementById('context'),
+    ext: document.getElementById('ext'),
+    tone: document.getElementById('tone'),
+    tagf: document.getElementById('tagf'),
+    collf: document.getElementById('collf'),
+    panelBtn: document.getElementById('panel-btn'),
+    tagsBtn: document.getElementById('tags-btn'),
+    refreshBtn: document.getElementById('refresh-btn'),
     chips: document.getElementById('theme-chips'),
     count: document.getElementById('count-line'),
     inspector: document.getElementById('inspector'),
@@ -516,8 +741,21 @@
   var filtered = [];
   var rendered = 0;
   var state = {
-    size: 48, search: '', theme: '', context: '', sort: 'name-asc'
+    size: 48, search: '', theme: '', context: '', sort: 'name-asc',
+    ext: '', tone: '', tag: '', coll: ''
   };
+
+  /* ---------- tags & collections (localStorage, per browser) ---------- */
+
+  function loadJSON(k, dflt) {
+    try {
+      var raw = localStorage.getItem(k);
+      return raw ? JSON.parse(raw) : dflt;
+    } catch (e) { return dflt; }
+  }
+  function saveJSON(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
+  var tagStore = loadJSON('gib-tags-v1', {});   // card key -> [tag, ...]
+  var collStore = loadJSON('gib-colls-v1', {}); // collection name -> [key, ...]
 
   /* ---------- data parsing ---------- */
 
@@ -577,6 +815,9 @@
     list.forEach(function (g) {
       g.variants.sort(function (a, b) { return a.px - b.px; });
       g.exts = Array.from(new Set(g.variants.map(function (v) { return v.ext; }))).join('+');
+      g.hasExt = function (e) {
+        return this.variants.some(function (v) { return v.ext === e; });
+      };
     });
     return list;
   }
@@ -595,12 +836,35 @@
 
   /* ---------- filtering / sorting ---------- */
 
+  // tone classification from generated metadata: mono when every inspected
+  // variant reports monochrome; unknown (no metadata, e.g. SVG on hosts
+  // without an ImageMagick SVG delegate) counts with the color side
+  function groupTone(g) {
+    var inspected = 0, allMono = true;
+    g.variants.forEach(function (v) {
+      if (v.me) { inspected++; if (!v.me.m) allMono = false; }
+    });
+    if (!inspected) return 'unknown';
+    return allMono ? 'mono' : 'color';
+  }
+  function groupTags(g) { return tagStore[g.key] || null; }
+
   function applyFilters() {
     var q = state.search.toLowerCase();
     filtered = icons.filter(function (g) {
       if (state.theme && g.theme !== state.theme) return false;
       if (state.context && g.context !== state.context) return false;
-      if (q && g.name.toLowerCase().indexOf(q) === -1) return false;
+      if (state.ext && !g.hasExt(state.ext)) return false;
+      if (state.tone === 'mono' && groupTone(g) !== 'mono') return false;
+      if (state.tone === 'color' && groupTone(g) === 'mono') return false;
+      var gTags = groupTags(g);
+      if (state.tag && (!gTags || gTags.indexOf(state.tag) === -1)) return false;
+      if (state.coll) {
+        var members = collStore[state.coll];
+        if (!members || members.indexOf(g.key) === -1) return false;
+      }
+      if (q && g.name.toLowerCase().indexOf(q) === -1 &&
+          !(gTags && gTags.join(' ').toLowerCase().indexOf(q) !== -1)) return false;
       return true;
     });
     var cmp = {
@@ -725,20 +989,90 @@
 
   /* All innerHTML assignments below interpolate only esc()-escaped values or static
      markup — no raw untrusted data reaches the parser. */
+
+  var inspectedKey = null; // card shown in the inspector (for tag/export)
+
+  function fmtBytes(n) {
+    if (n === undefined || n === null) return null;
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function isVector(ext) { return ext === 'svg' || ext === 'svgz'; }
+
   function showInspector(g, v) {
-    var sizes = g.variants.map(function (x) { return x.size || 'flat'; }).join(' ');
+    inspectedKey = g.key;
+    var m = v.me || {};
+
+    // available sizes; vector sources are marked
+    var sizesStr = g.variants.map(function (x) {
+      if (isVector(x.ext)) return 'scalable (' + x.ext.toUpperCase() + ' vector)';
+      return x.size || (x.px ? x.px + 'px' : 'native');
+    }).join(' · ');
+
+    // source dimensions: true pixel size from metadata, else the folder hint
+    var dims;
+    if (m.w && m.h) dims = m.w + '×' + m.h + ' px';
+    else if (isVector(v.ext)) dims = 'vector (scales freely)';
+    else if (v.px) dims = v.px + ' px';
+    else dims = '—';
+
+    var fs = m.b !== undefined ? fmtBytes(m.b) : null;
+    var cs = isVector(v.ext) ? 'none (vector)' : (m.cs || '—');
+    var colors = m.k !== undefined ? m.k + (m.m ? ' · mono' : '') : null;
+
+    var gTags = tagStore[g.key] || [];
+    var tagPills = gTags.length
+      ? '<div class="insp-row tagrow"><span class="label">Tags</span>' +
+        gTags.map(function (t) {
+          var tv = esc(t);
+          return '<button class="tag-pill" data-tag="' + tv + '" title="Filter by this tag">' + tv + '</button>';
+        }).join('') + '</div>'
+      : '';
+
     els.inspector.innerHTML =
-      '<span class="name">' + esc(g.name) + '</span>' +
-      '<span>' + esc(g.theme) + ' / ' + esc(g.context) + '</span>' +
-      '<span>' + esc(sizes) + ' &nbsp;[' + esc(g.exts) + ']</span>' +
-      '<span>' + (v.px ? esc(v.ext.toUpperCase()) + ' · ' + v.px + 'px source' : 'vector source (' + esc(v.ext.toUpperCase()) + ')') + '</span>' +
-      '<span class="path" title="' + esc(v.path) + '"><span dir="ltr">' + esc(v.path) + '</span></span>';
+      '<div class="insp-row">' +
+        '<span class="details-tag">Details</span>' +
+        '<span class="name">' + esc(g.name) + '</span>' +
+        '<span>' + esc(g.theme) + ' / ' + esc(g.context) + '</span>' +
+        '<span class="spacer"></span>' +
+        '<button class="insp-btn" id="insp-tag">Tag</button>' +
+        '<button class="insp-btn" id="insp-export">Export</button>' +
+      '</div>' +
+      '<div class="insp-row">' +
+        '<span class="spec"><b>' + esc(g.exts.toUpperCase()) + '</b></span>' +
+        '<span class="spec">dims <b>' + esc(dims) + '</b></span>' +
+        '<span class="spec">sizes <b>' + esc(sizesStr) + '</b></span>' +
+        '<span class="spec">file <b>' + esc(fs || '—') + '</b></span>' +
+        '<span class="spec">space <b>' + esc(cs) + '</b></span>' +
+        (colors !== null ? '<span class="spec">colors <b>' + esc(colors) + '</b></span>' : '') +
+        (m.m ? '<span class="mono-chip">mono</span>' : '') +
+        '<span class="path" title="' + esc(v.path) + '"><span dir="ltr">' + esc(v.path) + '</span></span>' +
+      '</div>' +
+      tagPills;
+
+    els.inspector.classList.add('active');
+    var tagBtn = document.getElementById('insp-tag');
+    var expBtn = document.getElementById('insp-export');
+    if (tagBtn) tagBtn.addEventListener('click', function (e) { e.stopPropagation(); openTagModal(g.key); });
+    if (expBtn) expBtn.addEventListener('click', function (e) { e.stopPropagation(); openExport(g, v); });
+    var pillWrap = els.inspector.querySelector('.tagrow');
+    if (pillWrap) pillWrap.addEventListener('click', function (e) {
+      var pill = e.target.closest('.tag-pill');
+      if (!pill) return;
+      state.tag = state.tag === pill.dataset.tag ? '' : pill.dataset.tag;
+      els.tagf.value = state.tag;
+      applyFilters();
+    });
   }
   function hideInspector() {
+    inspectedKey = null;
+    els.inspector.classList.remove('active');
     var hint = matchMedia('(hover: none)').matches ? 'Tap an icon for details' : 'Hover an icon for details';
     els.inspector.innerHTML =
-      '<span class="label" style="letter-spacing:0.14em;">' + hint + '</span>' +
-      '<span class="spacer"></span><span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>';
+      '<div class="insp-row"><span class="label" style="letter-spacing:0.14em;">' + hint + '</span>' +
+      '<span class="spacer"></span><span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span></div>';
   }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
@@ -797,6 +1131,69 @@
     state.context = els.context.value;
     localStorage.setItem('gib-context', state.context);
     applyFilters();
+  });
+  els.ext.addEventListener('change', function () {
+    state.ext = els.ext.value;
+    localStorage.setItem('gib-ext', state.ext);
+    applyFilters();
+  });
+  els.tone.addEventListener('change', function () {
+    state.tone = els.tone.value;
+    localStorage.setItem('gib-tone', state.tone);
+    applyFilters();
+  });
+  els.tagf.addEventListener('change', function () {
+    state.tag = els.tagf.value;
+    localStorage.setItem('gib-tag', state.tag);
+    applyFilters();
+  });
+  els.collf.addEventListener('change', function () {
+    state.coll = els.collf.value;
+    localStorage.setItem('gib-coll', state.coll);
+    applyFilters();
+  });
+
+  /* mobile: collapse the whole search/filter section for a full-page grid */
+  function setPanel(collapsed) {
+    document.body.classList.toggle('controls-hidden', collapsed);
+    els.panelBtn.setAttribute('aria-expanded', String(!collapsed));
+    localStorage.setItem('gib-panel', collapsed ? 'hidden' : 'shown');
+  }
+  els.panelBtn.addEventListener('click', function () {
+    setPanel(!document.body.classList.contains('controls-hidden'));
+  });
+  if (localStorage.getItem('gib-panel') === 'hidden') setPanel(true);
+
+  /* refresh: re-scan icons/ + refresh the metadata ledger via the web
+     server; Shift-click requests a full (--update-metadata force) re-scan.
+     On file:// pages there is no server to run scripts — point at the CLI. */
+  els.refreshBtn.addEventListener('click', function (e) {
+    if (!overHttp()) {
+      toast('Start the web server to refresh from here — or run: icon-browser-refresh');
+      return;
+    }
+    if (els.refreshBtn.dataset.busy) return;
+    var mode = e.shiftKey ? 'force' : 'enabled';
+    els.refreshBtn.dataset.busy = '1';
+    els.refreshBtn.classList.add('spinning');
+    els.refreshBtn.disabled = true;
+    toast('Refreshing icons' + (mode === 'force' ? ' (full re-scan)' : '') + ' & metadata …');
+    fetch('/refresh?mode=' + mode, { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        els.refreshBtn.classList.remove('spinning');
+        delete els.refreshBtn.dataset.busy;
+        els.refreshBtn.disabled = false;
+        if (!j.ok) { toast('Refresh failed' + (j.error ? ': ' + j.error : '')); return; }
+        toast('Icons refreshed — reloading …');
+        setTimeout(function () { location.reload(); }, 800);
+      })
+      .catch(function () {
+        els.refreshBtn.classList.remove('spinning');
+        delete els.refreshBtn.dataset.busy;
+        els.refreshBtn.disabled = false;
+        toast('Refresh failed — is the web server running?');
+      });
   });
   els.size.addEventListener('input', function () {
     var s = SIZES[+els.size.value];
@@ -990,6 +1387,338 @@
     });
   })();
 
+  /* export modal — ImageMagick conversions via serve.py over http; canvas
+     fallback for plain file:// installs */
+  var EX_FORMATS = [
+    { id: 'original', label: 'Original file' },
+    { id: 'png', label: 'PNG' }, { id: 'jpeg', label: 'JPEG' },
+    { id: 'webp', label: 'WebP' }, { id: 'ico', label: 'ICO' },
+    { id: 'pdf', label: 'PDF' }, { id: 'gif', label: 'GIF' },
+    { id: 'tiff', label: 'TIFF' }, { id: 'bmp', label: 'BMP' }
+  ];
+  var EX_SIZES = [16, 24, 32, 48, 64, 128, 256, 512, 'orig'];
+  var exportCtx = { g: null, v: null, size: localStorage.getItem('gib-exp-size') || 256 };
+
+  function overHttp() { return location.protocol === 'http:' || location.protocol === 'https:'; }
+
+  function dl(url, name) {
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function exportNote() {
+    var note = document.getElementById('export-note');
+    if (overHttp()) {
+      note.innerHTML = 'Conversions are produced by <b>ImageMagick</b> on the local web server ' +
+        '(ico exports bundle 16/24/32/48/64 px frames).';
+      return;
+    }
+    note.innerHTML = 'This page was opened as a file, so sizes and PNG/JPEG/WebP are ' +
+      'rebuilt in the browser (canvas). For ICO, PDF, TIFF and ImageMagick-quality ' +
+      'conversions, start the local server:<br><br>' +
+      '<code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code><br><br>' +
+      '…then open the page through its <code>http://</code> address.';
+  }
+
+  function renderExportModal() {
+    var g = exportCtx.g, v = exportCtx.v;
+    document.getElementById('export-what').textContent = g.name + ' — ' + v.rel;
+    function mkBtn(wrap, label, onclick, active) {
+      var b = document.createElement('button');
+      b.className = 'exp-btn' + (active ? ' active' : '');
+      b.textContent = label;
+      b.addEventListener('click', onclick);
+      wrap.appendChild(b);
+    }
+    var sizeWrap = document.getElementById('export-sizes');
+    sizeWrap.innerHTML = '';
+    EX_SIZES.forEach(function (s) {
+      mkBtn(sizeWrap, s === 'orig' ? 'Original' : s + 'px', function () {
+        exportCtx.size = s;
+        localStorage.setItem('gib-exp-size', s);
+        renderExportModal();
+      }, String(s) === String(exportCtx.size));
+    });
+    var fmtWrap = document.getElementById('export-formats');
+    fmtWrap.innerHTML = '';
+    EX_FORMATS.forEach(function (f) {
+      /* format buttons have no persistent active state — clicking downloads */
+      mkBtn(fmtWrap, f.label, function () { runExport(f.id); }, false);
+    });
+    exportNote();
+  }
+
+  function runExport(fmt) {
+    var g = exportCtx.g, v = exportCtx.v;
+    if (!g || !v) return;
+    var size = exportCtx.size;
+    var suffix = (size !== 'orig' ? '-' + size : '');
+    var extFor = { original: v.ext, png: 'png', jpeg: 'jpg', webp: 'webp', ico: 'ico', pdf: 'pdf', gif: 'gif', tiff: 'tiff', bmp: 'bmp' };
+    var name = g.name + suffix + '.' + extFor[fmt];
+
+    if (fmt === 'original') { dl(iconSrc(v), name); toast('Saving ' + name); return; }
+
+    if (overHttp()) {
+      dl('/convert?src=' + encodeURIComponent(v.rel) + '&fmt=' + fmt + '&size=' + size, name);
+      toast('Exporting ' + name + ' (ImageMagick)');
+      return;
+    }
+
+    // canvas fallback for file:// pages
+    var px = size === 'orig' ? Math.max(v.px || 256, 256) : size;
+    var img = new Image();
+    img.onload = function () {
+      try {
+        var c = document.createElement('canvas');
+        c.width = px; c.height = px;
+        c.getContext('2d').drawImage(img, 0, 0, px, px);
+        var mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/' + fmt;
+        c.toBlob(function (blob) {
+          if (!blob) { originalFallback('In-browser ' + fmt.toUpperCase() + ' encoding failed'); return; }
+          var url = URL.createObjectURL(blob);
+          dl(url, name);
+          setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+          toast('Exported ' + name);
+        }, mime, 0.92);
+      } catch (err) { originalFallback('Browser blocked canvas export on file:// pages'); }
+    };
+    img.onerror = function () { originalFallback('Could not load the icon for export'); };
+    img.src = iconSrc(v);
+
+    function originalFallback(why) {
+      dl(iconSrc(v), g.name + '.' + v.ext);
+      toast(why + ' — saved the original instead');
+    }
+  }
+
+  function openExport(g, v) {
+    exportCtx.g = g; exportCtx.v = v;
+    renderExportModal();
+    document.getElementById('export-modal').hidden = false;
+  }
+
+  function openTagModal(key) {
+    if (key) inspectedKey = key;
+    tagModal.hidden = false;
+    renderTagModal();
+  }
+
+  /* export + tags modal close wiring */
+  (function () {
+    var exportModal = document.getElementById('export-modal');
+    function closeExport() { exportModal.hidden = true; exportCtx.g = null; }
+    document.getElementById('export-close').addEventListener('click', closeExport);
+    exportModal.addEventListener('click', function (e) { if (e.target === exportModal) closeExport(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !exportModal.hidden) { e.stopPropagation(); closeExport(); }
+    });
+  })();
+
+  /* ---------- tags & collections modal ---------- */
+
+  function allTagsSorted() {
+    var counts = new Map();
+    Object.keys(tagStore).forEach(function (k) {
+      (tagStore[k] || []).forEach(function (t) { counts.set(t, (counts.get(t) || 0) + 1); });
+    });
+    return Array.from(counts, function (e) { return { name: e[0], count: e[1] }; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+  }
+
+  function refreshTagUI() {
+    // filter selects
+    var tagSel = els.tagf, collSel = els.collf;
+    var keepTag = state.tag, keepColl = state.coll;
+    tagSel.innerHTML = ''; collSel.innerHTML = '';
+    var o = document.createElement('option'); o.value = ''; o.textContent = 'All';
+    tagSel.appendChild(o);
+    allTagsSorted().forEach(function (t) {
+      var e = document.createElement('option'); e.value = t.name;
+      e.textContent = t.name + ' (' + t.count + ')';
+      tagSel.appendChild(e);
+    });
+    var o2 = document.createElement('option'); o2.value = ''; o2.textContent = 'All';
+    collSel.appendChild(o2);
+    Object.keys(collStore).sort().forEach(function (name) {
+      var e = document.createElement('option'); e.value = name;
+      e.textContent = name + ' (' + (collStore[name] || []).length + ')';
+      collSel.appendChild(e);
+    });
+    tagSel.value = keepTag; collSel.value = keepColl;
+    if (tagSel.selectedIndex === -1) { state.tag = ''; tagSel.value = ''; }
+    if (collSel.selectedIndex === -1) { state.coll = ''; collSel.value = ''; }
+    saveJSON('gib-tags-v1', tagStore);
+    saveJSON('gib-colls-v1', collStore);
+    localStorage.setItem('gib-tag', state.tag);
+    localStorage.setItem('gib-coll', state.coll);
+    // modal contents + grid reflect changes immediately
+    if (!document.getElementById('tag-modal').hidden) renderTagModal();
+    applyFilters();
+  }
+
+  function renderTagModal() {
+    var g = inspectedKey ? iconMap.get(inspectedKey) : null;
+    var noicon = document.getElementById('tag-noicon');
+    var inputRow = document.getElementById('tag-input').parentNode;
+    var cur = document.getElementById('tag-cur');
+    var sugg = document.getElementById('tag-sugg');
+    document.getElementById('tag-target').innerHTML = g
+      ? 'Tagging: <span style="font-family:var(--font-mono); color:var(--hl);">' + esc(g.name) + '</span> <span style="color:var(--ink-faint); font-size:11px;">(' + esc(g.theme) + ' / ' + esc(g.context) + ')</span>'
+      : '';
+    inputRow.style.display = g ? 'flex' : 'none';
+    noicon.style.display = g ? 'none' : 'block';
+    cur.innerHTML = ''; sugg.innerHTML = '';
+
+    var mine = g ? (tagStore[g.key] || []) : [];
+    mine.forEach(function (t) {
+      var row = document.createElement('div'); row.className = 'tag-row';
+      var pill = document.createElement('button'); pill.className = 'tag-pill';
+      pill.textContent = t; pill.title = 'Filter grid by this tag';
+      pill.addEventListener('click', function () {
+        state.tag = state.tag === t ? '' : t; els.tagf.value = state.tag; refreshTagUI();
+      });
+      var grow = document.createElement('span'); grow.className = 'grow';
+      var x = document.createElement('button'); x.className = 'tag-x'; x.textContent = '✕ remove';
+      x.addEventListener('click', function () {
+        tagStore[g.key] = (tagStore[g.key] || []).filter(function (z) { return z !== t; });
+        if (!tagStore[g.key].length) delete tagStore[g.key];
+        refreshTagUI();
+      });
+      row.appendChild(pill); row.appendChild(grow); row.appendChild(x);
+      cur.appendChild(row);
+    });
+    var gTagsSet = new Set(mine);
+    allTagsSorted().forEach(function (t) {
+      if (gTagsSet.has(t.name) || !g) return;
+      var row = document.createElement('div'); row.className = 'tag-row';
+      var pill = document.createElement('button'); pill.className = 'tag-pill';
+      pill.textContent = '+ ' + t.name;
+      pill.addEventListener('click', function () {
+        tagStore[g.key] = tagStore[g.key] || [];
+        tagStore[g.key].push(t.name);
+        refreshTagUI();
+      });
+      row.appendChild(pill);
+      sugg.appendChild(row);
+    });
+
+    // all tags overview
+    var all = document.getElementById('tag-all');
+    all.innerHTML = '';
+    var tags = allTagsSorted();
+    if (!tags.length) {
+      var p = document.createElement('p'); p.textContent = 'No tags yet.';
+      all.appendChild(p);
+    }
+    tags.forEach(function (t) {
+      var row = document.createElement('div'); row.className = 'tag-row';
+      var name = document.createElement('button'); name.className = 'tag-pill';
+      name.textContent = t.name;
+      name.addEventListener('click', function () {
+        state.tag = state.tag === t.name ? '' : t.name;
+        els.tagf.value = state.tag; refreshTagUI();
+      });
+      var cnt = document.createElement('span'); cnt.className = 'cnt';
+      cnt.textContent = t.count + ' icon' + (t.count === 1 ? '' : 's');
+      var grow = document.createElement('span'); grow.className = 'grow';
+      var x = document.createElement('button'); x.className = 'tag-x'; x.textContent = '✕ delete';
+      x.addEventListener('click', function () {
+        Object.keys(tagStore).forEach(function (k) {
+          tagStore[k] = tagStore[k].filter(function (z) { return z !== t.name; });
+          if (!tagStore[k].length) delete tagStore[k];
+        });
+        if (state.tag === t.name) state.tag = '';
+        refreshTagUI();
+      });
+      row.appendChild(name); row.appendChild(cnt); row.appendChild(grow); row.appendChild(x);
+      all.appendChild(row);
+    });
+
+    // collections overview
+    var colWrap = document.getElementById('coll-list');
+    colWrap.innerHTML = '';
+    var names = Object.keys(collStore).sort();
+    if (!names.length) {
+      var p2 = document.createElement('p'); p2.textContent = 'No collections yet — create one above, then add the current icon to it.';
+      colWrap.appendChild(p2);
+    }
+    names.forEach(function (n) {
+      var row = document.createElement('div'); row.className = 'tag-row';
+      var name = document.createElement('button'); name.className = 'tag-pill';
+      name.textContent = n;
+      name.addEventListener('click', function () {
+        state.coll = state.coll === n ? '' : n;
+        els.collf.value = state.coll; refreshTagUI();
+      });
+      var cnt = document.createElement('span'); cnt.className = 'cnt';
+      cnt.textContent = (collStore[n] || []).length + ' icon' + ((collStore[n] || []).length === 1 ? '' : 's');
+      var grow = document.createElement('span'); grow.className = 'grow';
+      var add = document.createElement('button'); add.className = 'tag-x';
+      add.textContent = '+ add icon'; add.title = 'Add the icon shown in the details bar';
+      add.disabled = !g;
+      add.addEventListener('click', function () {
+        if (!g) return;
+        collStore[n] = collStore[n] || [];
+        if (collStore[n].indexOf(g.key) === -1) collStore[n].push(g.key);
+        refreshTagUI();
+        toast(g.name + ' added to ' + n);
+      });
+      var x = document.createElement('button'); x.className = 'tag-x'; x.textContent = '✕ delete';
+      x.addEventListener('click', function () {
+        delete collStore[n];
+        if (state.coll === n) state.coll = '';
+        refreshTagUI();
+      });
+      row.appendChild(name); row.appendChild(cnt); row.appendChild(grow);
+      row.appendChild(add); row.appendChild(x);
+      colWrap.appendChild(row);
+    });
+  }
+
+  function cleanName(s) {
+    s = String(s || '').trim();
+    return s.length ? s.slice(0, 32) : null;
+  }
+
+  var tagModal = document.getElementById('tag-modal');
+  function closeTagModal() { tagModal.hidden = true; }
+  els.tagsBtn.addEventListener('click', function () {
+    tagModal.hidden = false;
+    renderTagModal();
+  });
+  document.getElementById('tag-close').addEventListener('click', closeTagModal);
+  tagModal.addEventListener('click', function (e) { if (e.target === tagModal) closeTagModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !tagModal.hidden) { e.stopPropagation(); closeTagModal(); }
+  });
+  document.getElementById('tag-add').addEventListener('click', addTagFromInput);
+  document.getElementById('tag-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addTagFromInput();
+  });
+  function addTagFromInput() {
+    var g = inspectedKey ? iconMap.get(inspectedKey) : null;
+    var t = cleanName(document.getElementById('tag-input').value);
+    if (!g || !t) return;
+    tagStore[g.key] = tagStore[g.key] || [];
+    if (tagStore[g.key].indexOf(t) === -1) tagStore[g.key].push(t);
+    document.getElementById('tag-input').value = '';
+    refreshTagUI();
+  }
+  document.getElementById('coll-add').addEventListener('click', addCollFromInput);
+  document.getElementById('coll-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') addCollFromInput();
+  });
+  function addCollFromInput() {
+    var n = cleanName(document.getElementById('coll-input').value);
+    if (!n || collStore[n]) { if (collStore[n]) toast('Collection exists'); return; }
+    collStore[n] = [];
+    document.getElementById('coll-input').value = '';
+    refreshTagUI();
+  }
+
   /* light / dark */
   function setMode(mode) {
     document.documentElement.dataset.theme = mode;
@@ -998,8 +1727,8 @@
   // touch devices have no hover — phrase the idle inspector hint accordingly
   if (matchMedia('(hover: none)').matches) {
     els.inspector.innerHTML =
-      '<span class="label" style="letter-spacing:0.14em;">Tap an icon for details</span>' +
-      '<span class="spacer"></span><span><kbd>/</kbd> search</span>';
+      '<div class="insp-row"><span class="label" style="letter-spacing:0.14em;">Tap an icon for details</span>' +
+      '<span class="spacer"></span><span><kbd>/</kbd> search</span></div>';
   }
   els.modeBtn.addEventListener('click', function () {
     setMode(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
@@ -1050,11 +1779,18 @@
     iconMap = new Map();
     icons.forEach(function (g) { iconMap.set(g.key, g); });
 
+    // merge generated per-file metadata (meta.js, optional) onto variants
+    var META = window.ICON_META || {};
+    icons.forEach(function (g) {
+      g.variants.forEach(function (v) { v.me = META[v.rel]; });
+    });
+
     // facets
-    var tMap = new Map(), cSet = new Set();
+    var tMap = new Map(), cSet = new Set(), extSet = new Set();
     icons.forEach(function (g) {
       tMap.set(g.theme, (tMap.get(g.theme) || 0) + 1);
       cSet.add(g.context);
+      g.variants.forEach(function (v) { extSet.add(v.ext); });
     });
     themes = Array.from(tMap, function (e) { return { name: e[0], count: e[1] }; })
       .sort(function (a, b) { return b.count - a.count; });
@@ -1069,12 +1805,28 @@
       els.context.appendChild(o);
     });
 
+    // file-type filter options
+    Array.from(extSet).sort().forEach(function (e) {
+      var o = document.createElement('option');
+      o.value = e; o.textContent = e.toUpperCase();
+      els.ext.appendChild(o);
+    });
+
     // restore state
     var sv = localStorage.getItem('gib-size'); if (sv !== null) els.size.value = sv;
     var ss = localStorage.getItem('gib-sort'); if (ss) els.sort.value = ss;
     var st = localStorage.getItem('gib-theme'); if (st && tMap.has(st)) state.theme = st;
     var sc = localStorage.getItem('gib-context');
     if (sc && contexts.indexOf(sc) !== -1) { state.context = sc; els.context.value = sc; }
+    var se = localStorage.getItem('gib-ext');
+    if (se && extSet.has(se)) { state.ext = se; els.ext.value = se; }
+    var sto = localStorage.getItem('gib-tone');
+    if (sto === 'color' || sto === 'mono') { state.tone = sto; els.tone.value = sto; }
+    var stag = localStorage.getItem('gib-tag');
+    if (stag) state.tag = stag;
+    var scoll = localStorage.getItem('gib-coll');
+    if (scoll) state.coll = scoll;
+    refreshTagUI(); // fills the tag/collection selects (keeps restored filter), applies filters
 
     state.size = SIZES[+els.size.value];
     els.sizeReadout.textContent = state.size + 'px';

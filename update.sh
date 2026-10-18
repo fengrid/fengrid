@@ -19,10 +19,16 @@
 # v0.1.0-dev) is never "updated" backwards to an older release.
 #
 # Usage: update.sh [--check] [--force] [--quiet] [--dir <install dir>]
+#                  [--update-metadata enabled|disabled|force]
 #   --check    report only, do not install
 #   --force    apply the latest release even if not newer
 #   --quiet    no stdout (cron default behaviour is silent; all output also
 #              goes to ~/.local/state/icon-browser/update.log)
+#   --update-metadata <mode>
+#              how icon metadata is refreshed after the update: enabled
+#              (default — re-identify only new/changed files), disabled
+#              (skip metadata), force (re-identify every icon). Falls back
+#              to the META_MODE recorded in update.conf, then enabled.
 #   Exit codes: 0 = ok/current, 1 = failure, 2 = update applied
 
 set -u
@@ -32,6 +38,7 @@ STATE_DIR="${ICON_BROWSER_STATE_DIR:-$HOME/.local/state/icon-browser}"
 LOG="$STATE_DIR/update.log"
 CONF="$STATE_DIR/update.conf"
 INSTALL_DIR="${ICON_BROWSER_DIR:-$HOME/icon-browser}"
+META_MODE=""
 PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "$PLATFORM" in linux*|darwin*) ;; *) PLATFORM=linux ;; esac
 
@@ -42,6 +49,9 @@ while [ $# -gt 0 ]; do
         --force) FORCE=true ;;
         --quiet) QUIET=true ;;
         --dir)   INSTALL_DIR="$2"; shift ;;
+        --update-metadata)
+            case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac ;;
+        --update-metadata=*) META_MODE="${1#--update-metadata=}" ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
     shift
@@ -111,6 +121,11 @@ if [ -f "$CONF" ]; then
     # shellcheck disable=SC1090
     . "$CONF"
     [ -n "${SCAN_PATHS:-}" ] || SCAN_PATHS="/usr/share/icons /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources"
+    # metadata mode: CLI --update-metadata wins, else update.conf, else enabled
+    if [ -z "$META_MODE" ]; then
+        META_MODE="${UPDATE_META_MODE:-enabled}"
+    fi
+    case "$META_MODE" in enabled|disabled|force) ;; *) META_MODE="enabled" ;; esac
     LIST="$INSTALL_DIR/list.txt"
     : > "$LIST"
     for p in $SCAN_PATHS; do
@@ -156,12 +171,21 @@ if [ -f "$CONF" ]; then
             esac
         done < "$LIST" > "$LIST.new"
         mv "$LIST.new" "$LIST"
-        {
-            printf 'window.ICON_LIST=['
-            sed 's/^[[:space:]]*//; s/["\\]/\\&/g; s/^/"/; s/$/",/' "$LIST" | tr -d '\n' | sed 's/,$//'
-            printf '];\n'
-        } > "$INSTALL_DIR/list.js"
-        log "refreshed $N icons from configured paths"
+        # keep icons the user dropped into icons/ (refresh-icons.sh merges
+        # them in and regenerates list.js); fall back to a plain regeneration
+        REFRESH=""
+        [ -x "$HOME/.local/bin/icon-browser-refresh" ] && REFRESH="$HOME/.local/bin/icon-browser-refresh"
+        if [ -n "$REFRESH" ]; then
+            "$REFRESH" --merge-list "$LIST" --dir "$INSTALL_DIR" --quiet --update-metadata "$META_MODE" || true
+            log "refreshed $N icons from configured paths (metadata mode: $META_MODE; manual icons/ additions merged)"
+        else
+            {
+                printf 'window.ICON_LIST=['
+                sed 's/^[[:space:]]*//; s/["\\]/\\&/g; s/^/"/; s/$/",/' "$LIST" | tr -d '\n' | sed 's/,$//'
+                printf '];\n'
+            } > "$INSTALL_DIR/list.js"
+            log "refreshed $N icons from configured paths"
+        fi
     fi
 else
     log "no update.conf — kept existing list.txt/list.js/icons"

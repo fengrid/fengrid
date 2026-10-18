@@ -47,9 +47,19 @@ browser.
 - Type `/` to search; hover or tap any icon for its details; use the corner
   button on a card to copy the icon's name.
 - The **SIZE** slider snaps to standard icon sizes. Chips filter by source
-  folder/theme; **CONTEXT** narrows by icon category (actions, status, …).
-- On a phone the layout is fully responsive: chips swipe horizontally and
-  tapping a card shows its details.
+  folder/theme; dropdowns narrow by **CONTEXT**, file **TYPE** (svg/png/…),
+  **TONE** (color/monochrome, from generated metadata), **TAGS** and
+  **COLL** (collections).
+- Hover details show the icon's dimensions, every available size variant,
+  file size, colorspace and color count — plus **TAG** (add your own tags)
+  and **EXPORT** (download the file in PNG/JPEG/WebP/ICO/PDF/… at any size;
+  served over the local web server the conversions run through ImageMagick).
+- Create your own tags and collections from the **tag button** in the title
+  row or the **TAG** button in the details bar; they're saved in your browser
+  and the search box matches them too.
+- On a phone the layout is fully responsive: chips swipe horizontally,
+  tapping a card shows its details, and the sliders button in the title row
+  collapses the search/filter panel for a full-page grid.
 
 ## Share it on your network (phones & tablets)
 
@@ -63,6 +73,39 @@ Then open `http://<your-ip>:8642/_connect` on a desktop browser and scan the
 QR with your phone. The showcase makes no cross-origin requests (everything
 is served same-origin), so it renders correctly on mobile without any CORS
 setup.
+
+## Add your own icons
+
+Drop icon files into the `icons/` folder of your install — a subfolder
+becomes the theme name (e.g. `icons/MySet/logo.png`). Then refresh the list:
+
+```bash
+icon-browser-refresh          # or: bash ~/icon-browser/refresh-icons.sh
+```
+
+Loose files in `icons/` itself are filed under a `Manual` theme, and
+`.icns`/`.xpm` files are converted to PNG when a converter is available.
+Re-running the command also prunes entries for files you've since deleted.
+The weekly updater runs the same merge, so manual additions survive updates.
+
+## Refresh & metadata
+
+Metadata (dimensions, file size, colorspace, mono flag) is fingerprinted —
+re-scans only re-inspect files that are new or changed. The **refresh
+button** in the title row re-scans your `icons/` folder and refreshes
+metadata through the web server; **Shift-click** forces a full re-identify.
+From the shell, every script takes the same switch:
+
+```bash
+icon-browser-refresh --update-metadata enabled   # only changed files (default)
+icon-browser-refresh --update-metadata disabled  # skip metadata entirely
+icon-browser-refresh --update-metadata force     # re-identify every icon
+```
+
+`install.sh` and `scan-icons.sh` accept the same option; installs run it
+enabled by default and record the choice for the weekly updater. On large
+icon sets the scripts warn before a long run, and Ctrl-C cancels safely —
+`meta.js` is only replaced after a complete pass.
 
 ## Preferences are remembered
 
@@ -90,4 +133,7 @@ powershell -File install.ps1 -Uninstall    # Windows
 
 Asks per location before deleting; removes the launcher only if it created
 it; optionally strips the PATH entry it added. Directories that don't look
-like an install are refused.
+like an install are refused. It ends with a summary of everything it
+removed, kept, or skipped, and confirms completion — if a running web
+server is stopped during uninstall, your shell may print a `Terminated`
+line for it; that refers to the server, not the script.
