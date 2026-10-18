@@ -384,6 +384,8 @@
   };
 
   var icons = [];        // grouped: {key, name, theme, context, variants: [{path,size,px,ext}]}
+  var iconMap = new Map(); // key -> grouped icon (for inspector delegation)
+  var hoverCard = null;  // currently hovered/selected card element
   var themes = [];       // [{name, count}]
   var contexts = [];
   var filtered = [];
@@ -560,17 +562,31 @@
       copyText(g.name, copy);
     });
 
-    card.addEventListener('mouseenter', function () { showInspector(g, v); });
-    card.addEventListener('mouseleave', hideInspector);
+    /* hover inspector via delegation on the grid: single listeners survive
+       re-renders and cover every card, including chunks added later */
+    els.grid.addEventListener('mouseover', function (e) {
+      var card = e.target.closest('.card');
+      if (!card || card === hoverCard) return;
+      hoverCard = card;
+      var g = iconMap.get(card.dataset.key);
+      if (g) showInspector(g, pickVariant(g, state.size));
+    });
+    els.grid.addEventListener('mouseout', function (e) {
+      var to = e.relatedTarget;
+      if (hoverCard && (!to || !to.closest || !to.closest('.card'))) {
+        hoverCard = null;
+        hideInspector();
+      }
+    });
 
-    // touch devices: tap-to-select shows the inspector (no hover possible)
+    // click/tap selects the card and pins the inspector on every device
     card.addEventListener('click', function () {
-      if (!matchMedia('(hover: none)').matches || card.classList.contains('selected')) return;
       [].forEach.call(document.querySelectorAll('.card.selected'), function (c) {
         c.classList.remove('selected');
       });
       card.classList.add('selected');
-      showInspector(g, v);
+      hoverCard = card;
+      showInspector(g, pickVariant(g, state.size));
     });
 
     card.appendChild(copy);
@@ -590,11 +606,13 @@
       '<span class="name">' + esc(g.name) + '</span>' +
       '<span>' + esc(g.theme) + ' / ' + esc(g.context) + '</span>' +
       '<span>' + esc(sizes) + ' &nbsp;[' + esc(g.exts) + ']</span>' +
+      '<span>' + (v.px ? esc(v.ext.toUpperCase()) + ' · ' + v.px + 'px source' : 'vector source (' + esc(v.ext.toUpperCase()) + ')') + '</span>' +
       '<span class="path" title="' + esc(v.path) + '"><span dir="ltr">' + esc(v.path) + '</span></span>';
   }
   function hideInspector() {
+    var hint = matchMedia('(hover: none)').matches ? 'Tap an icon for details' : 'Hover an icon for details';
     els.inspector.innerHTML =
-      '<span class="label" style="letter-spacing:0.14em;">Hover an icon for details</span>' +
+      '<span class="label" style="letter-spacing:0.14em;">' + hint + '</span>' +
       '<span class="spacer"></span><span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>';
   }
   function esc(s) {
@@ -741,6 +759,8 @@
   //  - window.ICON_LIST (list.js) — works on file://, where fetch() is blocked
   function finish(rows) {
     icons = buildIcons(rows);
+    iconMap = new Map();
+    icons.forEach(function (g) { iconMap.set(g.key, g); });
 
     // facets
     var tMap = new Map(), cSet = new Set();
