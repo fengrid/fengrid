@@ -294,17 +294,53 @@ have_icons() {
 
 if have_icons; then
     ok "Icon source found at $DEFAULT_SCAN_PATH"
-    while true; do
-        printf "Add an additional icon path to scan? (path, or Enter to skip): "
-        read -r answer
-        [ -z "$answer" ] && break
-        if [ -d "$answer" ]; then
-            CUSTOM_PATHS+=("$answer")
-            ok "Will scan: $answer"
-        else
-            warn "Not a directory: $answer — skipped"
-        fi
-    done
+    printf "Add more icon folders to scan?\n"
+    printf "  [1] Scan common system locations and pick (recommended)\n"
+    printf "  [2] Enter paths manually\n"
+    printf "  [Enter] Skip — the default source is enough\n"
+    printf "Choice: "
+    read -r choice
+    case "$choice" in
+        1)
+            if [ -f "$SCRIPT_DIR/scan-icons.sh" ]; then
+                # scanner: menu on stderr, selected paths on stdout; the
+                # default scan root is excluded (already scanned)
+                while IFS= read -r p; do
+                    [ -n "$p" ] || continue
+                    CUSTOM_PATHS+=("$p")
+                    ok "Will scan: $p"
+                done < <(bash "$SCRIPT_DIR/scan-icons.sh" --pick --exclude "$DEFAULT_SCAN_PATH")
+                [ "${#CUSTOM_PATHS[@]}" -gt 0 ] || info "No additional folders selected"
+            else
+                warn "scan-icons.sh not found — enter paths manually instead"
+                while true; do
+                    printf "Add an additional icon path to scan? (path, or Enter to skip): "
+                    read -r answer
+                    [ -z "$answer" ] && break
+                    if [ -d "$answer" ]; then
+                        CUSTOM_PATHS+=("$answer")
+                        ok "Will scan: $answer"
+                    else
+                        warn "Not a directory: $answer — skipped"
+                    fi
+                done
+            fi
+            ;;
+        2)
+            while true; do
+                printf "Add an additional icon path to scan? (path, or Enter to skip): "
+                read -r answer
+                [ -z "$answer" ] && break
+                if [ -d "$answer" ]; then
+                    CUSTOM_PATHS+=("$answer")
+                    ok "Will scan: $answer"
+                else
+                    warn "Not a directory: $answer — skipped"
+                fi
+            done
+            ;;
+        *) info "Skipping additional icon folders" ;;
+    esac
 else
     warn "No icons found under $DEFAULT_SCAN_PATH"
     printf "Install an icon theme collection with your package manager, or point me at a custom path.\n"
@@ -356,6 +392,8 @@ ICON_FIND "$DEFAULT_SCAN_PATH" > "$LIST_FILE"
 for p in "${CUSTOM_PATHS[@]:-}"; do
     [ -n "$p" ] && ICON_FIND "$p" >> "$LIST_FILE"
 done
+# overlapping scan roots can list the same file twice — dedupe in order
+awk '!seen[$0]++' "$LIST_FILE" > "$LIST_FILE.tmp" && mv "$LIST_FILE.tmp" "$LIST_FILE"
 # Without an image converter, .xpm files cannot be previewed — drop them.
 if [ "$PLATFORM" = linux ] && [ -z "$CONVERT_CMD" ] && grep -q '\.xpm$' "$LIST_FILE"; then
     XMPC=$(grep -c '\.xpm$' "$LIST_FILE")
