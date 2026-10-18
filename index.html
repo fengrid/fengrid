@@ -156,6 +156,26 @@
   .qr-hint { font-size: 13px; line-height: 1.55; color: var(--ink-muted); margin-top: 8px; }
   .qr-hint code { font-family: var(--font-mono); color: var(--accent); }
 
+  /* help modal (reuses modal-overlay/modal-card) */
+  .modal-card.wide { max-width: 620px; text-align: left; }
+  .help-scroll { max-height: 72vh; overflow-y: auto; padding-right: 6px; }
+  .help-scroll h3 {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent);
+    margin: 16px 0 4px; font-weight: 500;
+  }
+  .help-scroll h3:first-child { margin-top: 0; }
+  .help-scroll p, .help-scroll li {
+    font-size: 13px; color: var(--ink-muted); margin: 4px 0; line-height: 1.55;
+  }
+  .help-scroll ul { margin: 4px 0 10px 18px; padding: 0; }
+  .help-scroll kbd {
+    font-family: var(--font-mono); font-size: 10px;
+    border: 1px solid var(--border-strong); border-radius: 4px;
+    padding: 1px 5px; color: var(--ink-muted);
+  }
+  .help-scroll code { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+
   /* theme chips */
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .chip {
@@ -325,6 +345,9 @@
       <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
+    <button class="icon-btn" id="help-btn" title="Help &amp; guide" aria-label="Help and guide">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+    </button>
     <button class="icon-btn" id="qr-btn" title="Show QR code for the local web server" aria-label="Show QR code for local web server">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h.01M17.5 14h.01M21 14h.01M14 17.5h.01M14 21h.01M17.5 21h.01M21 17.5h.01"/></svg>
     </button>
@@ -388,6 +411,70 @@
   </div>
 </div>
 
+<div id="help-modal" class="modal-overlay" hidden>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Help and guide">
+    <div class="modal-head">
+      <span class="label">Guide</span>
+      <button class="icon-btn" id="help-close" title="Close" aria-label="Close help">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="help-scroll">
+      <h3>Browsing</h3>
+      <p>Every icon from your configured scan folders appears as a card. Use the
+      <b>SIZE</b> slider to scale previews — it snaps to standard icon sizes
+      (16, 22, 24, 32, 48, 64, 96, 128, 256) and picks the sharpest available
+      variant for each size.</p>
+
+      <h3>Search &amp; filter</h3>
+      <p>Press <kbd>/</kbd> to jump to search, <kbd>Esc</kbd> to clear it.
+      The <b>chips</b> filter by source folder/theme (with counts); the
+      <b>CONTEXT</b> dropdown narrows by icon category (actions, devices,
+      status, …). <b>SORT</b> reorders the grid.</p>
+
+      <h3>Details &amp; copy</h3>
+      <p>Hover an icon (or tap/click it on touch devices) to see its name,
+      theme, context, every available size variant, format, and file path.
+      Clicking a card pins the details. The <b>corner button</b> on each card
+      copies the icon's name (filename without extension) to your clipboard.</p>
+
+      <h3>Share on your network (QR)</h3>
+      <p>The <b>QR button</b> shows a scannable code for opening this showcase
+      on a phone or tablet. It needs the local web server running:</p>
+      <p><code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code></p>
+      <p>If the server was started after you opened this page, tap the QR
+      button again — it re-reads the server state each time.</p>
+
+      <h3>Themes</h3>
+      <p>The moon/sun button switches between dark and light modes. Your
+      choice, preview size, sort order and filters are remembered between
+      visits.</p>
+
+      <h3>Keyboard shortcuts</h3>
+      <ul>
+        <li><kbd>/</kbd> — focus search</li>
+        <li><kbd>Esc</kbd> — clear search / close dialogs</li>
+      </ul>
+
+      <h3>Troubleshooting</h3>
+      <ul>
+        <li><b>"Address already in use"</b> when starting the server — an
+        older instance is still running. Restart with
+        <code>serve.py --kill-existing</code>, or
+        <code>pkill -f 'serve.py --port 8642'</code>.</li>
+        <li><b>Icons not loading in Firefox</b> — the installer copies icons
+        next to the page for exactly this reason; re-run
+        <code>install.sh</code> if you moved the install folder.</li>
+        <li><b>Missing icons</b> — re-run <code>install.sh</code> and use the
+        folder scanner to add more icon locations.</li>
+        <li><b>Updates</b> — <code>icon-browser-update --check</code> checks
+        for a newer release; the weekly cron job (if enabled) does this
+        automatically.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
 <div id="toast" role="status"></div>
 
 <!-- file:// fallback data (generated by install.sh alongside list.txt) -->
@@ -399,7 +486,7 @@
 
   var SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 256];
   var PAGE = 240; // chunked render size
-  var APP_VERSION = 'v0.1.1'; // keep in sync with the latest git tag
+  var APP_VERSION = 'v0.1.2'; // keep in sync with the latest git tag
 
   document.getElementById('ver-badge').textContent = APP_VERSION;
 
@@ -724,6 +811,9 @@
   });
 
   document.addEventListener('keydown', function (e) {
+    // an open modal (help / QR) takes priority over grid shortcuts
+    var openModal = document.querySelector('.modal-overlay:not([hidden])');
+    if (openModal && (e.key === 'Escape' || e.key === '/')) return;
     if (e.key === '/' && document.activeElement !== els.search) {
       e.preventDefault(); els.search.focus();
     } else if (e.key === 'Escape' && document.activeElement === els.search) {
@@ -877,6 +967,25 @@
       if (e.key === 'Escape' && !qrModal.hidden) {
         e.stopPropagation();
         closeQr();
+      }
+    });
+  })();
+
+  /* help modal */
+  (function () {
+    var helpModal = document.getElementById('help-modal');
+    function closeHelp() { helpModal.hidden = true; }
+    document.getElementById('help-btn').addEventListener('click', function () {
+      helpModal.hidden = false;
+    });
+    document.getElementById('help-close').addEventListener('click', closeHelp);
+    helpModal.addEventListener('click', function (e) {
+      if (e.target === helpModal) closeHelp();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !helpModal.hidden) {
+        e.stopPropagation();
+        closeHelp();
       }
     });
   })();
