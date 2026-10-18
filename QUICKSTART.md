@@ -51,9 +51,11 @@ browser.
   **TONE** (color/monochrome, from generated metadata), **TAGS** and
   **COLL** (collections).
 - Hover details show the icon's dimensions, every available size variant,
-  file size, colorspace and color count — plus **TAG** (add your own tags)
-  and **EXPORT** (download the file in PNG/JPEG/WebP/ICO/PDF/… at any size;
-  served over the local web server the conversions run through ImageMagick).
+  file size, colorspace and color count — plus **TAG** (add your own tags).
+  The **download button** on each icon preview (top-left, opposite the copy
+  button) opens a format/size menu for **EXPORT** (PNG/JPEG/WebP/ICO directly;
+  PDF/GIF/TIFF/BMP and the original via "more…" — served over the local web
+  server the conversions run through ImageMagick).
 - Create your own tags and collections from the **tag button** in the title
   row or the **TAG** button in the details bar; they're saved in your browser
   and the search box matches them too.

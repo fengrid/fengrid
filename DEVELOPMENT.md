@@ -243,12 +243,15 @@ additional.
 
 ## Export endpoint (server/serve.py)
 
-When the showcase is served over http, the details bar's EXPORT button
-converts icons through `GET /convert?src=&fmt=&size=` — a strictly validated
-whitelisted endpoint that shells out to ImageMagick (PNG/JPEG/WebP/ICO/PDF/
-GIF/TIFF/BMP; `ico` bundles 16–64 px frames; `size` resizes, `orig` passes
-the file through). On `file://` pages the browser rebuilds PNG/JPEG/WebP via
-canvas and falls back to saving the original file for other formats.
+Every icon preview carries an export button (top-left, opposite the copy
+button) that opens a compact format/size sub-menu; "more formats &
+options…" opens the full export dialog. Over http, exports convert icons
+through `GET /convert?src=&fmt=&size=` — a strictly validated whitelisted
+endpoint that shells out to ImageMagick (PNG/JPEG/WebP/ICO/PDF/GIF/TIFF/BMP;
+`ico` bundles 16–64 px frames; `size` resizes, `orig` passes the file
+through; `src` must be the `icons/`-prefixed relative path). On `file://`
+pages the browser rebuilds PNG/JPEG/WebP via canvas and falls back to
+saving the original file for other formats.
 
 ## Refresh endpoint (server/serve.py)
 

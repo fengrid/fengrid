@@ -34,8 +34,9 @@ page — no build step, no runtime, no server required.
 - **Hover/tap inspector** — name, theme, context, all available size
   variants, true pixel dimensions, file size, colorspace, color count, and
   the full file path — plus per-icon tagging and export
-- **Export** — download any icon as PNG/JPEG/WebP/ICO/PDF/GIF/TIFF/BMP at
-  any size; over the webshare the conversion runs through ImageMagick
+- **Export** — a download button on every icon preview opens a format/size
+  menu (PNG/JPEG/WebP/ICO directly; PDF, GIF, TIFF, BMP and the original
+  via "more…"); over the webshare the conversion runs through ImageMagick
 - **Incremental metadata** — `icon-meta.sh` fingerprints every icon
   (size + mtime) so re-scans only re-identify new or changed files; all
   scripts accept `--update-metadata enabled|disabled|force`, and a refresh

@@ -4,6 +4,37 @@ All notable changes to this project are documented in this file. Format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.2] — 2026-10-18
+
+### Added
+
+- **Export button on every icon preview** — a download button at each
+  card's top-left corner (opposite the copy-name button) opens a compact
+  sub-menu: pick a format (PNG, JPEG, WebP, ICO) and a size (16–256 px or
+  original) and the export starts immediately. The size choice is shared
+  with and remembered alongside the full export dialog. Because the button
+  lives on the card itself, exporting no longer requires catching the
+  hover-details bar before it disappears.
+- **"More formats & options…"** in the same sub-menu opens the full export
+  dialog pre-targeted at that icon, keeping PDF, GIF, TIFF, BMP and the
+  original file reachable.
+
+### Changed
+
+- **Hover details trimmed** — the EXPORT button was removed from the
+  details bar (it vanished whenever the mouse left the icon); TAG remains
+  there. All exports now start from the per-card button.
+- **In-app help & QUICKSTART updated** to walk through the new corner
+  button, the sub-menu, and where the remaining formats live.
+
+### Fixed
+
+- **HTTP export was broken (400)** — the export request sent the bare
+  relative path (`src=Adwaita/…`) while the `/convert` endpoint requires
+  the `icons/`-prefixed path, so every http export failed regardless of
+  entry point. The request now sends `src=icons/…`; verified end-to-end
+  (menu export → `/convert` → 200).
+
 ## [v0.2.1] — 2026-10-18
 
 ### Added
