@@ -16,10 +16,14 @@
 # may touch the system with sudo/pkexec is the OPTIONAL icon-theme package
 # install (Linux), which runs only after you explicitly agree.
 #
-# Usage: bash install.sh [--no-shell] [--uninstall]
+# Usage: bash install.sh [--no-shell] [--uninstall] [--automatic-updates]
 #   --no-shell            skip handing off to an interactive shell at the end
 #   --uninstall, --remove remove installs, launcher, and (on request) the
 #                         PATH entry; asks before deleting anything
+#   --automatic-updates   enable the weekly update check without prompting
+#                         (installs ~/.local/bin/icon-browser-update and a
+#                         marked crontab entry; the interactive install also
+#                         offers this as a step)
 
 set -u
 
@@ -53,11 +57,13 @@ die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 
 NO_SHELL=false
 UNINSTALL=false
+AUTO_UPDATES=false
 for arg in "$@"; do
     case "$arg" in
         --no-shell)           NO_SHELL=true ;;
         --uninstall|--remove) UNINSTALL=true ;;
-        *) die "Unknown option: $arg (supported: --uninstall/--remove, --no-shell)" ;;
+        --automatic-updates)  AUTO_UPDATES=true ;;
+        *) die "Unknown option: $arg (supported: --uninstall/--remove, --automatic-updates, --no-shell)" ;;
     esac
 done
 
@@ -132,6 +138,21 @@ run_uninstall() {
             *) info "Kept PATH entry in $RC" ;;
         esac
     done
+
+    # automatic-update cron job — remove the marked entry and the updater
+    if command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q '^# icon-browser weekly update$'; then
+        printf "Remove the weekly auto-update cron job? [y/N]: "
+        read -r answer
+        case "$answer" in
+            [yY]|[yY][eE][sS])
+                crontab -l 2>/dev/null | grep -v '^# icon-browser weekly update$' \
+                    | grep -vF 'icon-browser-update' | crontab -
+                rm -f "$BIN_DIR/icon-browser-update"
+                ok "Removed weekly auto-update job and updater" ;;
+            *) info "Kept auto-update cron job" ;;
+        esac
+    fi
+    [ -e "$BIN_DIR/icon-browser-update" ] && rm -f "$BIN_DIR/icon-browser-update"
 
     ok "Uninstall complete."
 }
@@ -487,6 +508,48 @@ case "$answer" in
         ;;
     *) info "Skipping webshare (start later: cd $INSTALL_DIR/server && python3 serve.py)" ;;
 esac
+
+# ----------------------------------------------------------------------------
+# 5b. Automatic weekly updates (also available via --automatic-updates)
+# ----------------------------------------------------------------------------
+# Installs update.sh as ~/.local/bin/icon-browser-update, records the install
+# dir + icon roots in ~/.local/state/icon-browser/update.conf, and registers
+# a marked cron entry (weekly). --uninstall removes both.
+setup_automatic_updates() {
+    if [ ! -f "$SCRIPT_DIR/update.sh" ]; then
+        warn "update.sh missing from the repository — skipping automatic updates"
+        return 1
+    fi
+    local CONF_DIR="$HOME/.local/state/icon-browser"
+    mkdir -p "$CONF_DIR" "$BIN_DIR"
+    cp "$SCRIPT_DIR/update.sh" "$BIN_DIR/icon-browser-update" && chmod +x "$BIN_DIR/icon-browser-update" \
+        || { warn "Could not install the updater"; return 1; }
+    SP="$DEFAULT_SCAN_PATH"
+    for p in "${CUSTOM_PATHS[@]:-}"; do [ -n "$p" ] && SP="$SP $p"; done
+    printf 'INSTALL_DIR="%s"\nSCAN_PATHS="%s"\n' "$INSTALL_DIR" "$SP" > "$CONF_DIR/update.conf"
+    ok "Updater installed: $BIN_DIR/icon-browser-update (config: $CONF_DIR/update.conf)"
+    if ! command -v crontab >/dev/null 2>&1; then
+        warn "crontab not available — run the updater manually:  icon-browser-update"
+        return 1
+    fi
+    if crontab -l 2>/dev/null | grep -q '^# icon-browser weekly update$'; then
+        ok "Weekly auto-update cron job already present"
+        return 0
+    fi
+    ( crontab -l 2>/dev/null; \
+      printf '# icon-browser weekly update\n17 4 * * 1 %s/icon-browser-update --quiet >> "%s/.local/state/icon-browser/update.log" 2>&1\n' "$BIN_DIR" "$HOME" ) | crontab -
+    ok "Weekly auto-update enabled (cron: Mondays 04:17 — checks GitHub releases, applies newer ones)"
+}
+if [ "$AUTO_UPDATES" = true ]; then
+    setup_automatic_updates
+else
+    printf "Enable automatic weekly updates (weekly release check via cron)? [y/N]: "
+    read -r answer
+    case "$answer" in
+        [yY]|[yY][eE][sS]) setup_automatic_updates ;;
+        *) info "Skipping automatic updates (enable later: bash install.sh --automatic-updates, or run icon-browser-update)" ;;
+    esac
+fi
 
 # ----------------------------------------------------------------------------
 # 6. Launch and verify
