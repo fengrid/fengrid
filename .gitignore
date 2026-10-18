@@ -1,0 +1,8 @@
+server-state.js
+__pycache__/
+*.pyc
+list.txt
+list.js
+meta.js
+meta-state.tsv
+icons/
