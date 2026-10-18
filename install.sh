@@ -140,15 +140,15 @@ run_uninstall() {
     done
 
     # automatic-update cron job — remove the marked entry and the updater
-    if command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q '^# icon-browser weekly update$'; then
+    # whenever either the marker or the updater appears in crontab
+    if command -v crontab >/dev/null 2>&1 && crontab -l 2>/dev/null | grep -q 'icon-browser-update'; then
         printf "Remove the weekly auto-update cron job? [y/N]: "
         read -r answer
         case "$answer" in
             [yY]|[yY][eE][sS])
                 crontab -l 2>/dev/null | grep -v '^# icon-browser weekly update$' \
                     | grep -vF 'icon-browser-update' | crontab -
-                rm -f "$BIN_DIR/icon-browser-update"
-                ok "Removed weekly auto-update job and updater" ;;
+                ok "Removed weekly auto-update job from crontab" ;;
             *) info "Kept auto-update cron job" ;;
         esac
     fi

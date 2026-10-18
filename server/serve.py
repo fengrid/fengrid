@@ -19,15 +19,20 @@ CORS / security notes
 """
 
 import argparse
+import atexit
 import functools
 import http.server
 import os
 import socket
 import socketserver
 import sys
+import time
 from urllib.parse import urlparse
 
-APP_DIR = os.path.dirname(os.path.abspath(__file__))
+SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
+# The served web root is the parent of server/ — the install dir holding
+# index.html, list.txt, fonts/ and icons/ (see install.sh layout).
+WEB_ROOT = os.path.dirname(SERVER_DIR)
 
 
 def lan_ip():
@@ -72,10 +77,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        # fresh server state for already-open pages (no-store)
+        if path == "/server-state.js":
+            body = self.server.state_js()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         # /_connect is a virtual path, so its relative asset refs resolve to
         # /vendor/... — serve those from the server/ dir explicitly
         if path.startswith("/vendor/") and "/" not in path[len("/vendor/"):]:
-            f = os.path.join(APP_DIR, "vendor", os.path.basename(path))
+            f = os.path.join(SERVER_DIR, "vendor", os.path.basename(path))
             if os.path.isfile(f):
                 ctype = "application/javascript" if f.endswith(".js") else "application/octet-stream"
                 with open(f, "rb") as fh:
@@ -98,7 +113,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def render_connect(self):
         """Inject the LAN URL the connect page will QR-encode."""
-        tpl = os.path.join(APP_DIR, "connect.html")
+        tpl = os.path.join(SERVER_DIR, "connect.html")
         with open(tpl, "rb") as f:
             html = f.read().decode("utf-8")
         alts = [ip for ip in all_ips() if ip != self.server.lan_host]
@@ -118,13 +133,20 @@ class HTTPServer(socketserver.ThreadingTCPServer):
     lan_url = ""
     lan_host = ""
     port = 0
+    app_dir = ""
+
+    def state_js(self):
+        ips = ", ".join('"%s"' % i for i in all_ips())
+        return ('window.LAN_WEBSHARE={url:"%s",port:%d,ips:[%s],started:"%s"};\n'
+                % (self.lan_url, self.port, ips,
+                   time.strftime("%Y-%m-%d %H:%M:%S"))).encode("utf-8")
 
 
 def main():
     ap = argparse.ArgumentParser(description="Serve the Icon Browser on the local network")
     ap.add_argument("--port", type=int, default=8642)
     ap.add_argument("--host", default="0.0.0.0", help="bind address (use 127.0.0.1 for local-only)")
-    ap.add_argument("--dir", default=APP_DIR, help="directory to serve (default: this script's dir)")
+    ap.add_argument("--dir", default=WEB_ROOT, help="directory to serve (default: the install dir above server/)")
     ns = ap.parse_args()
 
     app_dir = os.path.abspath(ns.dir)
@@ -135,6 +157,20 @@ def main():
     server.lan_url = "http://%s:%d/" % (lan, ns.port)
     server.lan_host = lan
     server.port = ns.port
+    server.app_dir = app_dir
+
+    # persist state so file:// pages can discover the LAN URL; removed on
+    # clean shutdown (a stale file after SIGKILL is probed for reachability)
+    state_file = os.path.join(app_dir, "server-state.js")
+    with open(state_file, "w") as f:
+        f.write(server.state_js().decode("utf-8"))
+
+    def _cleanup():
+        try:
+            os.remove(state_file)
+        except OSError:
+            pass
+    atexit.register(_cleanup)
 
     urls = []
     if ns.host == "0.0.0.0":
@@ -144,7 +180,7 @@ def main():
         urls.append("http://%s:%d/" % (ns.host, ns.port))
 
     print("Icon Browser webshare")
-    print("  serving: %s" % APP_DIR)
+    print("  serving: %s" % app_dir)
     for u in urls:
         print("  open:    %s" % u)
     print("  connect: %s_connect   <- open this on a desktop; scan the QR with a phone" % server.lan_url)
@@ -157,6 +193,7 @@ def main():
         print("\nstopped")
     finally:
         server.server_close()
+        _cleanup()
 
 
 if __name__ == "__main__":
