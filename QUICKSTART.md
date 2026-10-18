@@ -64,6 +64,20 @@ QR with your phone. The showcase makes no cross-origin requests (everything
 is served same-origin), so it renders correctly on mobile without any CORS
 setup.
 
+## Add your own icons
+
+Drop icon files into the `icons/` folder of your install — a subfolder
+becomes the theme name (e.g. `icons/MySet/logo.png`). Then refresh the list:
+
+```bash
+icon-browser-refresh          # or: bash ~/icon-browser/refresh-icons.sh
+```
+
+Loose files in `icons/` itself are filed under a `Manual` theme, and
+`.icns`/`.xpm` files are converted to PNG when a converter is available.
+Re-running the command also prunes entries for files you've since deleted.
+The weekly updater runs the same merge, so manual additions survive updates.
+
 ## Preferences are remembered
 
 Theme (light/dark), preview size, sort order, and the selected theme chip

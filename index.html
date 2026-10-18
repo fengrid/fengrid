@@ -467,6 +467,13 @@
         <code>install.sh</code> if you moved the install folder.</li>
         <li><b>Missing icons</b> — re-run <code>install.sh</code> and use the
         folder scanner to add more icon locations.</li>
+        <li><b>Adding your own icons</b> — drop files into the
+        <code>icons/</code> folder of your install (use a subfolder as the
+        theme name), then run <code>icon-browser-refresh</code> (or
+        <code>refresh-icons.sh</code> inside the install folder) and reload.
+        Files dropped loose in <code>icons/</code> are filed under the
+        <code>Manual</code> theme; <code>.icns</code>/<code>.xpm</code> files
+        are converted to PNG when a converter is available.</li>
         <li><b>Updates</b> — <code>icon-browser-update --check</code> checks
         for a newer release; the weekly cron job (if enabled) does this
         automatically.</li>

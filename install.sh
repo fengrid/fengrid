@@ -153,6 +153,9 @@ run_uninstall() {
         esac
     fi
     [ -e "$BIN_DIR/icon-browser-update" ] && rm -f "$BIN_DIR/icon-browser-update"
+    if [ -f "$BIN_DIR/icon-browser-refresh" ] && grep -q 'refresh-icons.sh' "$BIN_DIR/icon-browser-refresh" 2>/dev/null; then
+        rm -f "$BIN_DIR/icon-browser-refresh" && ok "Removed $BIN_DIR/icon-browser-refresh"
+    fi
 
     # stop any running web server (serve.py) belonging to an install being
     # removed — it may be a backgrounded launch from install.sh's webshare
@@ -412,8 +415,9 @@ mkdir -p "$INSTALL_DIR" || die "Cannot create $INSTALL_DIR (permission denied?)"
 cp "$SCRIPT_DIR/index.html" "$INSTALL_DIR/index.html" || die "Failed to copy index.html."
 cp -r "$SCRIPT_DIR/fonts" "$INSTALL_DIR/fonts" || die "Failed to copy fonts/."
 cp -r "$SCRIPT_DIR/server" "$INSTALL_DIR/server" || die "Failed to copy server/."
+cp "$SCRIPT_DIR/refresh-icons.sh" "$INSTALL_DIR/refresh-icons.sh" || die "Failed to copy refresh-icons.sh."
 cp "$LIST_FILE" "$INSTALL_DIR/$LIST_FILE" || die "Failed to copy list.txt."
-ok "Installed index.html + list.txt + fonts/ + server/"
+ok "Installed index.html + list.txt + fonts/ + server/ + refresh-icons.sh"
 
 # ----------------------------------------------------------------------------
 # 3b. Local icon tree (self-contained previews)
@@ -562,6 +566,15 @@ elif [ -e "$BIN_LINK" ]; then
     warn "Open $INSTALL_DIR/index.html directly, or remove $BIN_LINK and re-run."
 else
     write_launcher && ok "Created $BIN_LINK -> opens $INSTALL_DIR/index.html"
+fi
+
+# refresh helper — updates list.txt/list.js after manual icon drops into
+# icons/ (see refresh-icons.sh); the weekly updater also uses it to keep
+# manual additions across re-scans
+if [ -f "$SCRIPT_DIR/refresh-icons.sh" ]; then
+    cp "$SCRIPT_DIR/refresh-icons.sh" "$BIN_DIR/icon-browser-refresh" \
+        && chmod +x "$BIN_DIR/icon-browser-refresh" \
+        && ok "Refresh helper installed: $BIN_DIR/icon-browser-refresh"
 fi
 
 # ----------------------------------------------------------------------------

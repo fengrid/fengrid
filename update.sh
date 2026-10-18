@@ -156,12 +156,21 @@ if [ -f "$CONF" ]; then
             esac
         done < "$LIST" > "$LIST.new"
         mv "$LIST.new" "$LIST"
-        {
-            printf 'window.ICON_LIST=['
-            sed 's/^[[:space:]]*//; s/["\\]/\\&/g; s/^/"/; s/$/",/' "$LIST" | tr -d '\n' | sed 's/,$//'
-            printf '];\n'
-        } > "$INSTALL_DIR/list.js"
-        log "refreshed $N icons from configured paths"
+        # keep icons the user dropped into icons/ (refresh-icons.sh merges
+        # them in and regenerates list.js); fall back to a plain regeneration
+        REFRESH=""
+        [ -x "$HOME/.local/bin/icon-browser-refresh" ] && REFRESH="$HOME/.local/bin/icon-browser-refresh"
+        if [ -n "$REFRESH" ]; then
+            "$REFRESH" --merge-list "$LIST" --dir "$INSTALL_DIR" --quiet || true
+            log "refreshed $N icons from configured paths (manual icons/ additions merged)"
+        else
+            {
+                printf 'window.ICON_LIST=['
+                sed 's/^[[:space:]]*//; s/["\\]/\\&/g; s/^/"/; s/$/",/' "$LIST" | tr -d '\n' | sed 's/,$//'
+                printf '];\n'
+            } > "$INSTALL_DIR/list.js"
+            log "refreshed $N icons from configured paths"
+        fi
     fi
 else
     log "no update.conf — kept existing list.txt/list.js/icons"

@@ -196,6 +196,18 @@ to just report. The installer can register a **weekly cron job**
 interactive prompt or `bash install.sh --automatic-updates`; `--uninstall`
 removes both.
 
+## Manual icon additions
+
+`refresh-icons.sh` (installed both inside the install directory and as
+`~/.local/bin/icon-browser-refresh`) reconciles `list.txt`/`list.js` with the
+install's `icons/` folder: it re-locates loose files into `icons/Manual/`,
+converts `.icns`/`.xpm` when `sips`/ImageMagick is available, appends files
+whose relative path is not already covered by a scanned entry (theme icons
+are listed via their system paths and rendered from the local copy, so
+re-listing the copies would duplicate them), prunes entries for deleted
+files, and regenerates `list.js`. `update.sh` calls it with
+`--merge-list` after its own re-scan so manual additions survive updates.
+
 ## Testing
 
 No test framework — verification is manual, and the minimum bar is:
