@@ -412,12 +412,17 @@ ok "$LIST_FILE written ($N icon files)"
 # ----------------------------------------------------------------------------
 info "Installing to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR" || die "Cannot create $INSTALL_DIR (permission denied?)"
+# NOTE: copy the directory CONTENTS (trailing /.), not the directory itself —
+# `cp -r server dest/server` nests a fresh copy under an existing dest/server
+# instead of updating the files in place.
+mkdir -p "$INSTALL_DIR/fonts" "$INSTALL_DIR/server"
 cp "$SCRIPT_DIR/index.html" "$INSTALL_DIR/index.html" || die "Failed to copy index.html."
-cp -r "$SCRIPT_DIR/fonts" "$INSTALL_DIR/fonts" || die "Failed to copy fonts/."
-cp -r "$SCRIPT_DIR/server" "$INSTALL_DIR/server" || die "Failed to copy server/."
+cp -r "$SCRIPT_DIR/fonts/." "$INSTALL_DIR/fonts/" || die "Failed to copy fonts/."
+cp -r "$SCRIPT_DIR/server/." "$INSTALL_DIR/server/" || die "Failed to copy server/."
 cp "$SCRIPT_DIR/refresh-icons.sh" "$INSTALL_DIR/refresh-icons.sh" || die "Failed to copy refresh-icons.sh."
+cp "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR/icon-meta.sh" || die "Failed to copy icon-meta.sh."
 cp "$LIST_FILE" "$INSTALL_DIR/$LIST_FILE" || die "Failed to copy list.txt."
-ok "Installed index.html + list.txt + fonts/ + server/ + refresh-icons.sh"
+ok "Installed index.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon-meta.sh"
 
 # ----------------------------------------------------------------------------
 # 3b. Local icon tree (self-contained previews)
@@ -491,6 +496,15 @@ ok "$COPIED icon files prepared in icons/ ($SIZE)"
     sed 's/^[[:space:]]*//; s/["\\]/\\&/g; s/^/"/; s/$/",/' "$INSTALL_DIR/$LIST_FILE" | tr -d '\n' | sed 's/,$//'
     printf '];\n'
 } > "$INSTALL_DIR/list.js"
+
+# image metadata (real dimensions, file size, colorspace, mono flag) for the
+# inspector's specs, tone filter and color view — best effort, never fatal
+if command -v identify >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; then
+    info "Inspecting image files for metadata (meta.js) ..."
+    bash "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR"
+else
+    info "ImageMagick not found — skipping metadata (the page falls back to filename-derived specs). Install imagemagick and re-run install.sh or icon-browser-refresh to add richer specs."
+fi
 
 # ----------------------------------------------------------------------------
 # 4. Ensure ~/.local/bin exists, is on PATH, and holds the launcher

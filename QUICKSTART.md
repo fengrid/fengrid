@@ -47,9 +47,19 @@ browser.
 - Type `/` to search; hover or tap any icon for its details; use the corner
   button on a card to copy the icon's name.
 - The **SIZE** slider snaps to standard icon sizes. Chips filter by source
-  folder/theme; **CONTEXT** narrows by icon category (actions, status, …).
-- On a phone the layout is fully responsive: chips swipe horizontally and
-  tapping a card shows its details.
+  folder/theme; dropdowns narrow by **CONTEXT**, file **TYPE** (svg/png/…),
+  **TONE** (color/monochrome, from generated metadata), **TAGS** and
+  **COLL** (collections).
+- Hover details show the icon's dimensions, every available size variant,
+  file size, colorspace and color count — plus **TAG** (add your own tags)
+  and **EXPORT** (download the file in PNG/JPEG/WebP/ICO/PDF/… at any size;
+  served over the local web server the conversions run through ImageMagick).
+- Create your own tags and collections from the **tag button** in the title
+  row or the **TAG** button in the details bar; they're saved in your browser
+  and the search box matches them too.
+- On a phone the layout is fully responsive: chips swipe horizontally,
+  tapping a card shows its details, and the sliders button in the title row
+  collapses the search/filter panel for a full-page grid.
 
 ## Share it on your network (phones & tablets)
 

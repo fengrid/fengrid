@@ -205,8 +205,32 @@ converts `.icns`/`.xpm` when `sips`/ImageMagick is available, appends files
 whose relative path is not already covered by a scanned entry (theme icons
 are listed via their system paths and rendered from the local copy, so
 re-listing the copies would duplicate them), prunes entries for deleted
-files, and regenerates `list.js`. `update.sh` calls it with
-`--merge-list` after its own re-scan so manual additions survive updates.
+files, regenerates `list.js`, and rebuilds `meta.js`. `update.sh` calls it
+with `--merge-list` after its own re-scan so manual additions survive
+updates.
+
+## Image metadata (meta.js)
+
+`icon-meta.sh` runs ImageMagick `identify` across the install's raster icons
+and writes `meta.js` (`window.ICON_META`) — true pixel dimensions, file size,
+colorspace, unique-color count and a monochrome flag per file. The page uses
+it for the hover-details specs (dims/file/space/colors), the color/mono
+**TONE** filter, and the richer variant display. SVG files are skipped by
+design (identify rasterizes them through slow delegates; the page already
+knows a vector source from the filename), so hosts without a working
+ImageMagick SVG delegate still get full raster metadata. When ImageMagick is
+absent the page falls back to filename-derived specs and the tone filter
+shows nothing additional. The install runs it automatically; refresh and the
+weekly updater rebuild it.
+
+## Export endpoint (server/serve.py)
+
+When the showcase is served over http, the details bar's EXPORT button
+converts icons through `GET /convert?src=&fmt=&size=` — a strictly validated
+whitelisted endpoint that shells out to ImageMagick (PNG/JPEG/WebP/ICO/PDF/
+GIF/TIFF/BMP; `ico` bundles 16–64 px frames; `size` resizes, `orig` passes
+the file through). On `file://` pages the browser rebuilds PNG/JPEG/WebP via
+canvas and falls back to saving the original file for other formats.
 
 ## Testing
 

@@ -1,6 +1,7 @@
 # Generated at install time — regenerate with install.sh
 list.txt
 list.js
+meta.js
 
 # Dev-only symlink to system icons
 icons

@@ -152,4 +152,12 @@ say "icon list refreshed: $TOTAL entries total, $NEW_COUNT new from icons/"
 [ "$MANUAL_CONVERSIONS" -gt 0 ] && say "  ($MANUAL_CONVERSIONS converted to png)"
 [ "$SKIP_UNRENDERABLE" -gt 0 ] && say "  ($SKIP_UNRENDERABLE files skipped — format not browser-renderable and no converter available)"
 say "reload the showcase page to see the updated grid."
+
+# rebuild meta.js so the new files get real specs in the details bar
+for META in "$INSTALL_DIR/icon-meta.sh" "$(dirname "$0")/icon-meta.sh"; do
+    if [ -f "$META" ]; then
+        bash "$META" "$INSTALL_DIR" --quiet
+        break
+    fi
+done
 exit 0
