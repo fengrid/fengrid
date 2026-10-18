@@ -4,6 +4,45 @@ All notable changes to this project are documented in this file. Format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.3.1] — 2026-10-18
+
+The project formerly known as GTK4 Icon Browser / Icon Browser is now
+**fengrid** — *frontend grid*, with a hidden second reading: *fen* (window)
++ *grid*, a grid of windows onto your machine. New home:
+[github.com/fengrid/fengrid](https://github.com/fengrid/fengrid).
+
+### Added
+
+- New split-screen **light/dark brand screenshot** (thin pane-teal divider,
+  lit-pane mark in the corner strip) on the README and the landing page.
+
+### Changed
+
+- **New brand identity** — glass-and-daylight palette (pane teal accent,
+  single warm "lit pane" highlight), Inter replaces Bebas Neue for the
+  wordmark and headings, lowercase `fengrid` wordmark with `grid` set in
+  mono, and a lit-pane favicon. The lit-pane accent now drives
+  selection/hover/inspector-open states, so brand and interaction share one
+  device.
+- **New names for everything users touch** — install directory `~/fengrid`,
+  commands `fengrid`, `fengrid-update`, `fengrid-refresh`, state directory
+  `~/.local/state/fengrid`, PATH marker `# Fengrid`, cron marker
+  `# fengrid weekly update`, and `FENGRID_DIR` as the environment override.
+- **Repo moved** to `github.com/fengrid/fengrid`; the weekly updater now
+  checks releases there.
+
+### Compatibility
+
+- **Pre-rebrand installs keep working.** The uninstaller recognizes and
+  removes both generations (install dirs, launchers, PATH markers, cron
+  entries, and helpers named `icon-browser*` and `fengrid*`). The updater
+  prefers `fengrid-refresh` but falls back to `icon-browser-refresh`, and
+  reads the legacy `~/.local/state/icon-browser/update.conf` when the new
+  one is absent. `ICON_BROWSER_DIR` remains honored as a fallback for
+  `FENGRID_DIR`.
+- **Bebas Neue retired** — the font file was removed from `fonts/` (Inter,
+  already bundled, takes over per the brand's typographic direction).
+
 ## [v0.2.3] — 2026-10-18
 
 ### Added

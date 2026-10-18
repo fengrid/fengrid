@@ -1,6 +1,6 @@
-# Icon Browser
+# Fengrid
 
-[![Branch: dev](https://img.shields.io/badge/branch-dev-e8925a)](https://github.com/nativeit/gtk4-icon-browser/tree/dev)
+[![Branch: dev](https://img.shields.io/badge/branch-dev-39B8C4)](https://github.com/fengrid/fengrid/tree/dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2a313b)](LICENSE.md)
 
 A single-file, dependency-free showcase for the icon themes and icon folders
@@ -9,7 +9,7 @@ icons (or your installed system themes) and get a filterable, searchable,
 size-adjustable grid of every icon, with one-click copy of each icon's name
 and an optional QR-code webshare for your phone.
 
-![Icon Browser screenshot](docs/assets/screenshot.png)
+![fengrid screenshot — light and dark themes side by side](docs/assets/screenshot.png)
 
 ## Why
 
@@ -59,21 +59,21 @@ page — no build step, no runtime, no server required.
 **Linux / macOS**
 
 ```bash
-git clone https://github.com/nativeit/gtk4-icon-browser.git
-cd gtk4-icon-browser
+git clone https://github.com/fengrid/fengrid.git
+cd fengrid
 bash install.sh
 ```
 
 **Windows (PowerShell)**
 
 ```powershell
-git clone https://github.com/nativeit/gtk4-icon-browser.git
-cd gtk4-icon-browser
+git clone https://github.com/fengrid/fengrid.git
+cd fengrid
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
 The installers ask before doing anything irreversible and never require
-admin rights. Default install is a visible `~/icon-browser` (sandboxed
+admin rights. Default install is a visible `~/fengrid` (sandboxed
 browsers can't read hidden paths). Custom scan folders and install locations
 are supported — hidden or system-owned destinations get an extra
 confirmation.
