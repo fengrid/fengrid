@@ -60,8 +60,9 @@ browser.
   row or the **TAG** button in the details bar; they're saved in your browser
   and the search box matches them too.
 - On a phone the layout is fully responsive: chips swipe horizontally,
-  tapping a card shows its details, and the sliders button in the title row
-  collapses the search/filter panel for a full-page grid.
+  tapping a card shows its details, and the search/filter panel starts
+  collapsed for a full-page grid — the sliders button in the title row
+  expands it, and your choice is remembered.
 
 ## Share it on your network (phones & tablets)
 
