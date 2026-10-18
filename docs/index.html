@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GTK4 Icon Browser — a local icon showcase</title>
-<meta name="description" content="A single-file, dependency-free showcase for the GTK icon themes installed on your machine.">
+<title>Icon Browser — a local icon showcase</title>
+<meta name="description" content="A single-file, dependency-free showcase for the icon themes and icon folders on your machine.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -112,8 +112,8 @@
 
 <div class="top">
   <div class="wrap">
-    <h1>GTK4 Icon Browser</h1>
-    <a class="ver" href="https://github.com/nativeit/gtk4-icon-browser/releases">v0.0.1</a>
+    <h1>Icon Browser</h1>
+    <a class="ver" href="https://github.com/nativeit/gtk4-icon-browser/releases">v0.1.2</a>
     <span class="spacer"></span>
     <a class="mono-link" href="https://github.com/nativeit/gtk4-icon-browser">github.com/nativeit/gtk4-icon-browser</a>
   </div>
@@ -122,9 +122,10 @@
 <div class="wrap">
   <section class="hero">
     <h1>Every icon<br>on your machine,<br><em>one page.</em></h1>
-    <p class="lede">A single-file, dependency-free showcase for the GTK icon themes
-    installed on your machine. Filter it, search it, resize it, copy icon names
-    out of it — no build step, no runtime, no server required.</p>
+    <p class="lede">A single-file, dependency-free showcase for the icon themes
+    and icon folders on your machine — on Linux, macOS, or Windows. Filter it,
+    search it, resize it, copy icon names out of it, even open it on your phone —
+    no build step, no runtime, no server required.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/nativeit/gtk4-icon-browser/releases">Download release</a>
       <a class="btn" href="https://github.com/nativeit/gtk4-icon-browser#readme">README</a>
@@ -132,11 +133,11 @@
     </div>
     <div class="cmd">
       <code>git clone <b>https://github.com/nativeit/gtk4-icon-browser.git</b> &amp;&amp; bash install.sh</code>
-      <span class="hint">no sudo required</span>
+      <span class="hint">linux · macos · windows · no sudo</span>
     </div>
 
     <figure class="shot">
-      <div class="frame"><img src="assets/screenshot.png" alt="GTK4 Icon Browser — dark theme, icon grid with search, size slider, and theme filter chips"></div>
+      <div class="frame"><img src="assets/screenshot.png" alt="Icon Browser — dark theme, icon grid with search, size slider, and theme filter chips"></div>
       <figcaption>Dark theme · 32px grid · search + size slider + theme chips</figcaption>
     </figure>
   </section>
@@ -144,11 +145,13 @@
   <section class="features">
     <h2>What it does</h2>
     <ul>
-      <li><span class="k">Every installed icon</span><span class="d">Grouped by theme, size variants deduplicated, best variant chosen per preview size.</span></li>
+      <li><span class="k">Any icon source</span><span class="d">System theme folders or any folder of icons you keep — png, svg, ico, plus icns/xpm via built-in converters.</span></li>
       <li><span class="k">Size slider</span><span class="d">Snaps to standard icon sizes — 16 through 256.</span></li>
-      <li><span class="k">Search &amp; filter</span><span class="d">By name, theme (with counts), and context: actions, devices, status, …</span></li>
-      <li><span class="k">Hover inspector</span><span class="d">Name, theme, context, every size variant, formats, full path.</span></li>
+      <li><span class="k">Search &amp; filter</span><span class="d">By name, source folder (with counts), and context: actions, devices, status, …</span></li>
+      <li><span class="k">Hover / tap inspector</span><span class="d">Name, theme, context, every size variant, formats, full path — tap works on phones.</span></li>
       <li><span class="k">One-click copy</span><span class="d">Corner button on every card copies the icon's name.</span></li>
+      <li><span class="k">QR webshare</span><span class="d">Optional local webserver; scan a QR code to browse the showcase on your phone over the LAN.</span></li>
+      <li><span class="k">Mobile layout</span><span class="d">Responsive controls, swipeable filter chips, big touch targets.</span></li>
       <li><span class="k">Fully local</span><span class="d">Self-hosted fonts, no CDN, no framework. Works offline over file://.</span></li>
     </ul>
   </section>
