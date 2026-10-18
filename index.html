@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GTK4 Icon Browser</title>
+<title>Icon Browser</title>
 <style>
   /* Self-hosted fonts (subset to Latin, WOFF2) — no CDN required */
   @font-face {
@@ -45,7 +45,7 @@
     --accent: #e8925a;
     --accent-ink: #14100c;
     --accent-soft: rgba(232, 146, 90, 0.14);
-    --checker: rgba(255, 255, 255, 0.045);
+    --checker: rgba(255, 255, 255, 0.02);
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   }
   [data-theme="light"] {
@@ -60,7 +60,7 @@
     --accent: #c96a2e;
     --accent-ink: #fff;
     --accent-soft: rgba(201, 106, 46, 0.12);
-    --checker: rgba(0, 0, 0, 0.04);
+    --checker: rgba(0, 0, 0, 0.018);
     --shadow: 0 12px 32px rgba(30, 25, 18, 0.12);
   }
 
@@ -135,6 +135,26 @@
   .icon-btn:hover { color: var(--ink); border-color: var(--border-strong); }
   [data-theme="dark"] .sun { display: block; } [data-theme="dark"] .moon { display: none; }
   [data-theme="light"] .sun { display: none; } [data-theme="light"] .moon { display: block; }
+
+  /* webshare QR modal */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.45);
+  }
+  .modal-overlay[hidden] { display: none; }
+  .modal-card {
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: 12px; padding: 18px 22px 16px; max-width: 340px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35); text-align: center;
+  }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .modal-head .label { color: var(--accent); letter-spacing: 0.14em; }
+  #qr-body { display: flex; justify-content: center; padding: 4px 0 10px; min-height: 30px; }
+  #qr-body svg { display: block; }
+  .qr-url { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-muted); word-break: break-all; }
+  .qr-hint { font-size: 13px; line-height: 1.55; color: var(--ink-muted); margin-top: 8px; }
+  .qr-hint code { font-family: var(--font-mono); color: var(--accent); }
 
   /* theme chips */
   .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -253,15 +273,32 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   #gate.hidden { display: none; }
 
-  @media (max-width: 640px) {
+  /* ---------- responsive: tablets & phones ---------- */
+  @media (max-width: 720px) {
     header { padding: 12px 14px 10px; }
     main { padding: 14px 14px 40px; }
-    .title-row h1 { font-size: 28px; }
+    .title-row h1 { font-size: 26px; }
+    .ver-badge { padding: 4px 10px; }
+    .controls { gap: 8px; }
+    .field { flex: 1 1 100%; height: 44px; min-height: 44px; }
     .field input { width: 100%; flex: 1; }
-    .field { flex: 1 1 100%; }
-    .size-ctl { flex: 1 1 100%; }
-    #inspector { padding: 10px 14px; }
+    .field:has(select) { flex: 1 1 46%; }
+    .size-ctl { flex: 1 1 100%; height: 44px; }
+    input[type="range"] { flex: 1; width: auto; }
+    .chips { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip { flex: 0 0 auto; padding: 8px 16px; }
+    #grid { gap: 8px; }
+    .card { padding: 10px 6px 8px; border-radius: 8px; }
+    body { padding-bottom: 92px; }
+    #inspector { padding: 10px 14px; min-height: 64px; gap: 14px; }
     #inspector .path { display: none; }
+  }
+  /* touch devices (no hover): copy button stays visible; tapping a card
+     selects it and populates the inspector */
+  @media (hover: none) {
+    .copy-btn { opacity: 1; }
+    .card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   }
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; animation: none !important; }
@@ -280,13 +317,16 @@
 
 <header>
   <div class="title-row">
-    <h1>GTK4 Icon Browser</h1>
+    <h1>Icon Browser</h1>
     <span class="count" id="count-line"></span>
     <a class="ver-badge" id="ver-badge" href="https://github.com/nativeit/gtk4-icon-browser/releases" target="_blank" rel="noopener" title="Releases"></a>
     <span class="spacer"></span>
     <button class="icon-btn" id="mode-btn" title="Toggle light / dark" aria-label="Toggle light or dark mode">
       <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="icon-btn" id="qr-btn" title="Show QR code for the local web server" aria-label="Show QR code for local web server">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h.01M17.5 14h.01M21 14h.01M14 17.5h.01M14 21h.01M17.5 21h.01M21 17.5h.01"/></svg>
     </button>
   </div>
 
@@ -334,9 +374,24 @@
   <span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>
 </div>
 
+<div id="qr-modal" class="modal-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Local web server QR code">
+    <div class="modal-head">
+      <span class="label">Scan to open</span>
+      <button class="icon-btn" id="qr-close" title="Close" aria-label="Close QR dialog">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="qr-body"></div>
+    <div id="qr-url" class="qr-url"></div>
+    <div id="qr-hint" class="qr-hint"></div>
+  </div>
+</div>
+
 <div id="toast" role="status"></div>
 
 <!-- file:// fallback data (generated by install.sh alongside list.txt) -->
+<script src="server/vendor/qrcode.min.js"></script>
 <script src="list.js"></script>
 <script>
 (function () {
@@ -344,7 +399,7 @@
 
   var SIZES = [16, 22, 24, 32, 48, 64, 96, 128, 256];
   var PAGE = 240; // chunked render size
-  var APP_VERSION = 'v0.0.1'; // keep in sync with the latest git tag
+  var APP_VERSION = 'v0.1.1'; // keep in sync with the latest git tag
 
   document.getElementById('ver-badge').textContent = APP_VERSION;
 
@@ -367,6 +422,8 @@
   };
 
   var icons = [];        // grouped: {key, name, theme, context, variants: [{path,size,px,ext}]}
+  var iconMap = new Map(); // key -> grouped icon (for inspector delegation)
+  var hoverCard = null;  // currently hovered/selected card element
   var themes = [];       // [{name, count}]
   var contexts = [];
   var filtered = [];
@@ -543,8 +600,32 @@
       copyText(g.name, copy);
     });
 
-    card.addEventListener('mouseenter', function () { showInspector(g, v); });
-    card.addEventListener('mouseleave', hideInspector);
+    /* hover inspector via delegation on the grid: single listeners survive
+       re-renders and cover every card, including chunks added later */
+    els.grid.addEventListener('mouseover', function (e) {
+      var card = e.target.closest('.card');
+      if (!card || card === hoverCard) return;
+      hoverCard = card;
+      var g = iconMap.get(card.dataset.key);
+      if (g) showInspector(g, pickVariant(g, state.size));
+    });
+    els.grid.addEventListener('mouseout', function (e) {
+      var to = e.relatedTarget;
+      if (hoverCard && (!to || !to.closest || !to.closest('.card'))) {
+        hoverCard = null;
+        hideInspector();
+      }
+    });
+
+    // click/tap selects the card and pins the inspector on every device
+    card.addEventListener('click', function () {
+      [].forEach.call(document.querySelectorAll('.card.selected'), function (c) {
+        c.classList.remove('selected');
+      });
+      card.classList.add('selected');
+      hoverCard = card;
+      showInspector(g, pickVariant(g, state.size));
+    });
 
     card.appendChild(copy);
     card.appendChild(thumb);
@@ -563,11 +644,13 @@
       '<span class="name">' + esc(g.name) + '</span>' +
       '<span>' + esc(g.theme) + ' / ' + esc(g.context) + '</span>' +
       '<span>' + esc(sizes) + ' &nbsp;[' + esc(g.exts) + ']</span>' +
+      '<span>' + (v.px ? esc(v.ext.toUpperCase()) + ' · ' + v.px + 'px source' : 'vector source (' + esc(v.ext.toUpperCase()) + ')') + '</span>' +
       '<span class="path" title="' + esc(v.path) + '"><span dir="ltr">' + esc(v.path) + '</span></span>';
   }
   function hideInspector() {
+    var hint = matchMedia('(hover: none)').matches ? 'Tap an icon for details' : 'Hover an icon for details';
     els.inspector.innerHTML =
-      '<span class="label" style="letter-spacing:0.14em;">Hover an icon for details</span>' +
+      '<span class="label" style="letter-spacing:0.14em;">' + hint + '</span>' +
       '<span class="spacer"></span><span><kbd>/</kbd> search &nbsp; <kbd>Esc</kbd> clear</span>';
   }
   function esc(s) {
@@ -649,10 +732,165 @@
     }
   });
 
+  // tapping outside any card clears touch selection
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.card')) return;
+    [].forEach.call(document.querySelectorAll('.card.selected'), function (c) {
+      c.classList.remove('selected');
+    });
+  });
+
+  /* webshare QR modal */
+  (function () {
+    var qrModal = document.getElementById('qr-modal');
+    var qrBody = document.getElementById('qr-body');
+    var qrUrl = document.getElementById('qr-url');
+    var qrHint = document.getElementById('qr-hint');
+    var esc = function (s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    };
+
+    function closeQr() {
+      qrModal.hidden = true;
+      qrBody.innerHTML = '';
+      qrUrl.textContent = '';
+      qrHint.innerHTML = '';
+    }
+    document.getElementById('qr-close').addEventListener('click', closeQr);
+    qrModal.addEventListener('click', function (e) {
+      if (e.target === qrModal) closeQr();
+    });
+
+    function showQrFor(url) {
+      // The vendored qrcode.min.js exposes the factory as a global `qrcode`
+      // (lowercase) via `var qrcode = function(){...}()`. Its API is the
+      // factory pattern: qrcode(type, ecc) -> addData/make/createSvgTag.
+      var q = (typeof window !== 'undefined' && window.qrcode) ||
+              (typeof qrcode !== 'undefined' ? qrcode : null);
+      if (!q) {
+        qrNotRunning('QR library not loaded — is <code>server/vendor/qrcode.min.js</code> present?');
+        return;
+      }
+      qrUrl.textContent = url;
+      qrHint.innerHTML = '';
+      try {
+        var qr = q(0, 'M');                   // auto type detection, medium ECC
+        qr.addData(url);
+        qr.make();
+        // createSvgTag output comes from the bundled local library —
+        // fully trusted, static markup; no untrusted content is interpolated.
+        qrBody.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2 });
+      } catch (err) {
+        qrBody.innerHTML = '';
+        qrHint.textContent = 'Could not render QR: ' + err.message;
+      }
+    }
+
+    function qrNotRunning(msg) {
+      qrBody.innerHTML = '';
+      qrUrl.textContent = '';
+      qrHint.innerHTML = msg;
+    }
+
+    function startServerHint() {
+      return 'The local web server is not running.<br><br>Start it with:<br><br>' +
+        '<code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code><br><br>' +
+        '…then tap this button again.';
+    }
+
+    function resolveWebshare() {
+      qrBody.innerHTML = '';
+      qrUrl.textContent = '';
+      qrHint.innerHTML = 'Looking for the local web server…';
+
+      // served over http by a real host (LAN IP or any non-localhost origin):
+      // the address bar is authoritative
+      if (location.protocol === 'http:' && location.hostname !== 'localhost' &&
+          location.hostname !== '127.0.0.1' && location.hostname !== '[::1]') {
+        showQrFor(location.origin + '/');
+        return;
+      }
+
+      // file:// (or localhost dev): discover the LAN URL via server-state.js,
+      // written by serve.py at startup. Try the cache-busted dynamic route
+      // first, then the plain file path (some browsers ignore queries on file://).
+      window.LAN_WEBSHARE = undefined;
+      var settled = false;
+      function settle(st) {
+        if (settled) return;
+        settled = true;
+        var url = st && st.url;
+        if (!url) {
+          qrNotRunning(startServerHint());
+          return;
+        }
+        // probe reachability (a state file can outlive a SIGKILLed server).
+        // A failed probe is NOT blocking: sandboxed browsers often block
+        // requests to the host's own public/LAN IP even when every other
+        // device on the network can reach it fine — warn and still show the QR.
+        var probe = new Image();
+        var t = setTimeout(function () { probeDone(false); }, 3000);
+        function probeDone(ok) {
+          clearTimeout(t);
+          if (ok) {
+            showQrFor(url);
+          } else {
+            showQrFor(url);
+            var note = document.createElement('div');
+            note.innerHTML = 'Note: the URL could not be probed from this browser ' +
+              '(sandboxed for external requests, or the server has stopped). ' +
+              'If your phone cannot connect, restart the server:<br><br>' +
+              '<code>cd ~/icon-browser/server &amp;&amp; python3 serve.py</code>';
+            qrHint.innerHTML = note.innerHTML;
+          }
+        }
+        probe.onload = function () { probeDone(true); };
+        probe.onerror = function () { probeDone(false); };
+        probe.src = url + 'list.txt?probe=' + Date.now();
+      }
+
+      function finish(st) { settle(st || null); }
+
+      var s = document.createElement('script');
+      s.onload = function () { settle(window.LAN_WEBSHARE || null); };
+      s.onerror = function () {
+        var s2 = document.createElement('script');
+        s2.onload = function () { settle(window.LAN_WEBSHARE || null); };
+        s2.onerror = function () { settle(null); };
+        s2.src = 'server-state.js';
+        document.head.appendChild(s2);
+      };
+      s.src = 'server-state.js?cb=' + Date.now();
+      document.head.appendChild(s);
+      setTimeout(function () { settle(window.LAN_WEBSHARE || null); }, 3000);
+    }
+
+    document.getElementById('qr-btn').addEventListener('click', function () {
+      qrModal.hidden = false;
+      resolveWebshare();
+    });
+
+    // Escape closes the QR dialog (in addition to clearing search)
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !qrModal.hidden) {
+        e.stopPropagation();
+        closeQr();
+      }
+    });
+  })();
+
   /* light / dark */
   function setMode(mode) {
     document.documentElement.dataset.theme = mode;
     localStorage.setItem('gib-mode', mode);
+  }
+  // touch devices have no hover — phrase the idle inspector hint accordingly
+  if (matchMedia('(hover: none)').matches) {
+    els.inspector.innerHTML =
+      '<span class="label" style="letter-spacing:0.14em;">Tap an icon for details</span>' +
+      '<span class="spacer"></span><span><kbd>/</kbd> search</span>';
   }
   els.modeBtn.addEventListener('click', function () {
     setMode(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
@@ -700,6 +938,8 @@
   //  - window.ICON_LIST (list.js) — works on file://, where fetch() is blocked
   function finish(rows) {
     icons = buildIcons(rows);
+    iconMap = new Map();
+    icons.forEach(function (g) { iconMap.set(g.key, g); });
 
     // facets
     var tMap = new Map(), cSet = new Set();
