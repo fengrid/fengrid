@@ -58,7 +58,7 @@ function Invoke-Uninstall {
             continue
         }
         if (-not (Test-Path (Join-Path $c 'index.html')) -or -not (Test-Path (Join-Path $c $ListFile))) {
-            Write-Warn2 "$c does not look like an Fengrid install - skipped for safety."
+            Write-Warn2 "$c does not look like a Fengrid install - skipped for safety."
             continue
         }
         $size = '{0:N1} MB' -f ((Get-ChildItem $c -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
