@@ -45,7 +45,7 @@ page — no build step, no runtime, no server required.
   extension); `/` jumps to search
 - **Mobile-friendly layout** — responsive controls, swipeable filter chips,
   44px touch targets, tap-to-select on phones, and a one-tap control
-  collapse for a full-page grid
+  collapse for a full-page grid (phones start with it collapsed)
 - **QR webshare (optional)** — a tiny local webserver publishes the showcase
   to your local network; open the connect page on any desktop and scan the
   QR with a phone. Same-origin serving means no CORS issues, and directory

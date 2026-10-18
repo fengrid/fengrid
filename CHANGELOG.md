@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file. Format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [v0.2.3] — 2026-10-18
+
+### Added
+
+- **Phones start with the filter panel collapsed** — on mobile widths
+  (≤ 720 px) the search/filter panel now begins minimized for a full-page
+  icon grid on first visit. Expanding it with the sliders button saves the
+  choice, so a visitor who prefers the panel open keeps it open across
+  visits; clearing the preference returns to the collapsed default.
+  Desktop layout is unchanged (the panel is always visible and the toggle
+  button remains a mobile-only control).
+
+### Changed
+
+- **Documentation updated** — README, QUICKSTART and the in-app help modal
+  now describe the collapsed-by-default mobile behavior and the remembered
+  choice.
+
 ## [v0.2.2] — 2026-10-18
 
 ### Added
