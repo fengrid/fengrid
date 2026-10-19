@@ -21,6 +21,7 @@
 #                        [--update-metadata enabled|disabled|force]
 #                        [--icons copy|link|hardlink]
 #                        [--webshare|--no-webshare]
+#                        [--fonts|--no-fonts]
 #   --no-shell            skip handing off to an interactive shell at the end
 #   --uninstall, --remove remove installs, launcher, and (on request) the
 #                         PATH entry; asks before deleting anything
@@ -35,6 +36,9 @@
 #   --webshare            expose the showcase on the LAN (QR share) without
 #                         prompting — also the default answer to the prompt
 #   --no-webshare         keep the server local-only, skip the prompt
+#   --fonts               scan font folders for the font showcase without
+#                         prompting — also the default answer to the prompt
+#   --no-fonts            skip the font scan entirely
 #   --update-metadata <mode>
 #                         icon metadata handling (meta.js): enabled (default —
 #                         on install every icon is new, so all are identified;
@@ -73,10 +77,27 @@ ok()    { printf "${GREEN}::${OFF} %s\n" "$*"; }
 warn()  { printf "${YELLOW}::${OFF} %s\n" "$*"; }
 die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 
+# show_progress <current> <total> [label] — in-place progress bar on stderr.
+# Only draws when stderr is a terminal (piped/redirected output stays clean).
+show_progress() {
+    [ -t 2 ] || return 0
+    local cur=$1 total=$2 label="${3:-}"
+    [ "$total" -gt 0 ] 2>/dev/null || return 0
+    local pct=$((cur * 100 / total))
+    [ "$pct" -gt 100 ] && pct=100
+    local width=28 filled i bar=""
+    filled=$((pct * width / 100))
+    for ((i = 0; i < filled; i++)); do bar+="█"; done
+    for ((i = filled; i < width; i++)); do bar+="░"; done
+    printf '\r  %s [%s] %3d%% (%d/%d)\033[K' "$label" "$bar" "$pct" "$cur" "$total" >&2
+}
+progress_done() { [ -t 2 ] && printf '\n' >&2; return 0; }
+
 NO_SHELL=false
 UNINSTALL=false
 AUTO_UPDATES=false
 WEB_SHARE="ask"       # --webshare / --no-webshare; "ask" = prompt, default yes
+FONT_SCAN="ask"       # --fonts / --no-fonts; "ask" = prompt, default yes
 META_MODE="enabled"   # --update-metadata default: scan for changes on install
 ICONS_MODE="copy"     # --icons default: copy (self-contained install)
 while [ $# -gt 0 ]; do
@@ -86,13 +107,15 @@ while [ $# -gt 0 ]; do
         --automatic-updates)  AUTO_UPDATES=true ;;
         --webshare)           WEB_SHARE=yes ;;
         --no-webshare)        WEB_SHARE=no ;;
+        --fonts)              FONT_SCAN=yes ;;
+        --no-fonts)           FONT_SCAN=no ;;
         --icons)
             case "${2:-}" in copy|link|hardlink) ICONS_MODE="$2"; shift ;; esac ;;
         --icons=*)            ICONS_MODE="${1#--icons=}" ;;
         --update-metadata)
             case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac ;;
         --update-metadata=*)  META_MODE="${1#--update-metadata=}" ;;
-        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --icons copy|link|hardlink, --webshare/--no-webshare, --update-metadata [enabled|disabled|force])" ;;
+        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --icons copy|link|hardlink, --webshare/--no-webshare, --fonts/--no-fonts, --update-metadata [enabled|disabled|force])" ;;
     esac
     shift
 done
@@ -413,6 +436,7 @@ else
 fi
 
 CUSTOM_PATHS=()
+FONT_EXTRA=()
 
 have_icons() {
     local n
@@ -542,12 +566,17 @@ mkdir -p "$INSTALL_DIR" || die "Cannot create $INSTALL_DIR (permission denied?)"
 # instead of updating the files in place.
 mkdir -p "$INSTALL_DIR/fonts" "$INSTALL_DIR/server"
 cp "$SCRIPT_DIR/index.html" "$INSTALL_DIR/index.html" || die "Failed to copy index.html."
+cp "$SCRIPT_DIR/fonts.html" "$INSTALL_DIR/fonts.html" || die "Failed to copy fonts.html."
+cp "$SCRIPT_DIR/code.html" "$INSTALL_DIR/code.html" || die "Failed to copy code.html."
+cp "$SCRIPT_DIR/colors.html" "$INSTALL_DIR/colors.html" || die "Failed to copy colors.html."
+cp "$SCRIPT_DIR/projects.html" "$INSTALL_DIR/projects.html" || die "Failed to copy projects.html."
 cp -r "$SCRIPT_DIR/fonts/." "$INSTALL_DIR/fonts/" || die "Failed to copy fonts/."
 cp -r "$SCRIPT_DIR/server/." "$INSTALL_DIR/server/" || die "Failed to copy server/."
 cp "$SCRIPT_DIR/refresh-icons.sh" "$INSTALL_DIR/refresh-icons.sh" || die "Failed to copy refresh-icons.sh."
 cp "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR/icon-meta.sh" || die "Failed to copy icon-meta.sh."
+cp "$SCRIPT_DIR/scan-fonts.sh" "$INSTALL_DIR/scan-fonts.sh" || die "Failed to copy scan-fonts.sh."
 cp "$LIST_FILE" "$INSTALL_DIR/$LIST_FILE" || die "Failed to copy list.txt."
-ok "Installed index.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon-meta.sh"
+ok "Installed index.html + fonts.html + code.html + colors.html + projects.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon-meta.sh + scan-fonts.sh"
 
 # ----------------------------------------------------------------------------
 # 3b. Local icon tree (self-contained previews)
@@ -582,8 +611,11 @@ case "$ICONS_MODE" in
 esac
 mkdir -p "$INSTALL_DIR/icons"
 COPIED=0
+ITER=0
 : > "$INSTALL_DIR/$LIST_FILE.new"
 while IFS= read -r p; do
+    ITER=$((ITER + 1))
+    show_progress "$ITER" "$N" "copying"
     [ -f "$p" ] || continue
     case "$p" in
         */icons/*) rel="${p#*/icons/}" ;;
@@ -629,6 +661,7 @@ while IFS= read -r p; do
     esac
     COPIED=$((COPIED + 1))
 done < "$INSTALL_DIR/$LIST_FILE" > "$INSTALL_DIR/$LIST_FILE.new"
+progress_done
 case "$ICONS_MODE" in
     link)     ok "Icon tree linked: $COPIED symlinks under icons/ (targets untouched; removing the install removes only the links)" ;;
     hardlink) ok "Icon tree hardlinked: $COPIED files share inodes with the originals (cross-device entries were copied)" ;;
@@ -658,6 +691,66 @@ if command -v identify >/dev/null 2>&1 || command -v magick >/dev/null 2>&1; the
     fi
 else
     info "ImageMagick not found — skipping metadata (the page falls back to filename-derived specs). Install imagemagick and re-run install.sh or fengrid-refresh to add richer specs."
+fi
+
+# ----------------------------------------------------------------------------
+# 3c. Font showcase scan (fonts.html + scan-fonts.sh)
+# ----------------------------------------------------------------------------
+# The font showcase needs its own data files (fonts-list.txt + font-meta.js),
+# generated by scan-fonts.sh from the user's font folders. Default folders
+# (~/.local/share/fonts, ~/.fonts, /usr/share/fonts) are pre-configured;
+# the prompt below lets the user add custom font folders or skip entirely.
+if [ "$FONT_SCAN" = ask ]; then
+    printf "Scan font folders for the font showcase (fonts.html)? [Y/n]: "
+    read -r answer
+    case "$answer" in
+        [nN]|[nN][oO]) FONT_SCAN=no ;;
+        *)             FONT_SCAN=yes ;;
+    esac
+fi
+if [ "$FONT_SCAN" = yes ] && [ -f "$SCRIPT_DIR/scan-fonts.sh" ]; then
+    if ! command -v fc-scan >/dev/null 2>&1; then
+        warn "fc-scan not found (fontconfig) — font metadata will fall back to filenames."
+        printf "Scan fonts anyway? [Y/n]: "
+        read -r answer
+        case "$answer" in [nN]|[nN][oO]) FONT_SCAN=no ;; esac
+    fi
+fi
+if [ "$FONT_SCAN" = yes ] && [ -f "$SCRIPT_DIR/scan-fonts.sh" ]; then
+    # show the default folders that will be scanned
+    if [ -f "$HOME/.local/state/fengrid/font-dirs.conf" ]; then
+        info "Font folders configured:"
+        grep -v '^#' "$HOME/.local/state/fengrid/font-dirs.conf" 2>/dev/null | grep -v '^$' | while read -r d; do
+            info "  $d"
+        done
+    else
+        info "Default font folders: ~/.local/share/fonts, ~/.fonts, /usr/share/fonts"
+    fi
+    while true; do
+        printf "Add a font folder to scan? (path, or Enter to scan defaults): "
+        read -r answer
+        [ -z "$answer" ] && break
+        if [ -d "$answer" ]; then
+            FONT_EXTRA+=("$answer")
+            ok "Will scan: $answer"
+        else
+            warn "Not a directory: $answer — skipped"
+        fi
+    done
+    info "Scanning font folders ..."
+    if [ ${#FONT_EXTRA[@]} -gt 0 ]; then
+        bash "$SCRIPT_DIR/scan-fonts.sh" --dir "$INSTALL_DIR" "${FONT_EXTRA[@]}"
+    else
+        bash "$SCRIPT_DIR/scan-fonts.sh" --dir "$INSTALL_DIR"
+    fi
+    if [ -f "$INSTALL_DIR/fonts-list.txt" ]; then
+        NF=$(wc -l < "$INSTALL_DIR/fonts-list.txt")
+        ok "Font showcase ready: $NF fonts in fonts-list.txt"
+    else
+        warn "Font scan produced no data — the Fonts tab will be empty until you run scan-fonts.sh."
+    fi
+elif [ "$FONT_SCAN" = no ]; then
+    info "Skipping font scan (--no-fonts). Run scan-fonts.sh later to populate the font showcase."
 fi
 
 # ----------------------------------------------------------------------------

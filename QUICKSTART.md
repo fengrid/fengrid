@@ -38,6 +38,10 @@ You'll be asked:
 4. **LAN webshare** — default **yes** (exposes the showcase to your local
    network for QR sharing; answer `n` or rerun with `--no-webshare` to keep
    it local-only).
+5. **Font folders** — default **yes**: scans `~/.local/share/fonts`,
+   `~/.fonts`, and `/usr/share/fonts` for the font showcase (answer `n`
+   or rerun with `--no-fonts` to skip; add custom font folders when
+   prompted).
 
 Then it copies the icons next to the page (a few minutes on very large icon
 sets — macOS converts `.icns` with the built-in `sips`) and opens it in your
@@ -111,6 +115,106 @@ metadata automatically:
 The import needs the local web server (the `fengrid` launcher starts it
 automatically). SVGs that lack the `xmlns` namespace attribute are fixed
 during import so they render correctly in `<img>` tags.
+
+## Font showcase
+
+The **Fonts** tab opens `fonts.html` — the same grid experience for the
+typefaces on your machine, grouped by **family**: each card previews the
+family's regular face, and its meta line shows how many more styles are
+installed. The **Families** panel on the left is an alphabetical index —
+click a family to jump to its card. Tick checkboxes (or Shift/Ctrl-click)
+to select whole families, then **Export CSS** (generates `@font-face`
+rules with correct weights and styles) or **Export ZIP** (packages every
+selected font file + CSS + README). Click a font name for the detail
+modal — the typeface at
+multiple sizes, all installed variants of the same family, a full glyph
+specimen, and metadata.
+
+Scan font folders with:
+
+```bash
+bash scan-fonts.sh                     # scan the default folders
+bash scan-fonts.sh --add ~/my/fonts    # add a folder to the list
+bash scan-fonts.sh ~/custom/fonts      # scan a one-off folder
+bash scan-fonts.sh --link              # symlink instead of copy (persists)
+bash scan-fonts.sh --copy              # go back to copying
+```
+
+Supported: `.ttf`, `.otf`, `.woff`, `.woff2`, `.ttc`, `.eot`. Metadata
+comes from `fc-scan` (fontconfig).
+
+## Code playground
+
+The **Code** tab opens `code.html` — a JSFiddle-style pane for writing
+and testing snippets. Three tabbed editors (HTML / CSS / JS) with syntax
+highlighting sit beside a live **Result** preview: press **Run ▸** or
+Ctrl+Enter to render, and **Save** (or Ctrl+S) to store the snippet in a
+local SQLite database (`snippets.db`, created on first save). The
+sidebar lists saved snippets with search, a language filter,
+recent/title/created sorting, and a clickable tag cloud; click a snippet
+to reopen it. **Export HTML** downloads the current snippet as a
+standalone file.
+
+The editor speaks IDE: emacs-style commands (Ctrl-A/E line home/end,
+Ctrl-K kill line, Ctrl-Y yank, Alt-B/F word motion, Ctrl-X Ctrl-S save)
+work everywhere, and the **VIM** toggle (or Ctrl+Alt+V) enables modal
+editing — motions `h j k l w b e 0 $ gg G`, operators `d c y` with
+motions (`dd yy cc dw x D C`), `p P` paste, and `:w` to save, with the
+current mode shown in the pane label.
+
+The **Import** button brings snippets in from other tools: VSCode
+`.code-snippets` / `.json` files (comments and trailing commas are
+fine) and massCode's `db.sqlite`. Both are translated into fengrid's
+snippet store — languages map onto the HTML/CSS/JS fields, tags carry
+over, and re-importing skips what is already present. Leave the path
+empty to scan the editors' default locations, or pick a file to upload.
+
+## Colors
+
+The **Colors** tab opens `colors.html` — a palette generator: five
+swatches, a harmony selector (pleasing mix, analogous, complementary,
+triadic, monochrome), and the spacebar to roll new colors (locked
+swatches stay put). Click a swatch to edit it with HSL sliders or a hex
+value; every swatch shows its contrast ratio against white and black
+with WCAG badges. **Save palette** stores it in SQLite with a name and
+tags; the sidebar lists saved palettes with search, sorting, and a tag
+cloud. Exports: CSS custom properties, JSON, and palette board images
+(SVG and 2× PNG) — rounded swatch cards with hex codes and
+auto-generated color names, ready for READMEs and style guides.
+
+## Projects
+
+The **Projects** tab opens `projects.html` — a CSS configurator where
+you define the design assets for a project, tune the parameters, and
+generate a ready-to-use starter kit. Four parameter areas:
+
+- **Colors** — apply one of your saved palettes (roles are assigned
+  automatically), then tweak each color role — background, surface,
+  ink, muted, accent, border — with the pickers, set the corner radius,
+  and choose the CSS custom-property prefix.
+- **Type** — pick the body and heading families from your installed
+  fonts (choosing a family adds every installed style to the project),
+  set the base size and a modular scale ratio; the type ramp
+  (small → base → h3 → h2 → h1 → hero) is generated from them.
+- **Icons** — pick icons for the pack and set their size.
+- **Preview** — render the live preview as the built-in boilerplate
+  website, or pick one of your snippets: the snippet's HTML/CSS/JS
+  renders inside the token environment, and ships in the archive as a
+  ready page.
+
+The live preview on the right renders a full boilerplate site — header,
+hero, cards with icons, type specimen, palette strip, footer — and
+updates as you tweak. **Save project** (Ctrl+S) persists everything;
+**Export .zip** or **.tar.gz** generates the template files:
+`css/tokens.css` (color roles, radius, font stacks, type scale),
+`css/fonts.css`, `css/icons.css`, `js/icons.js`, the boilerplate
+`index.html`, `palettes.json`, `manifest.json`, and a README — a small
+custom frontend framework starter you can drop into any project. Assets
+can live in any number of projects.
+
+Each pane has its own brand-derived accent — Icons are teal, Fonts are
+violet, Code is coral, Colors are rose, Projects are green — while the
+lit-pane amber stays the shared interaction accent everywhere.
 
 ## Add your own icons
 

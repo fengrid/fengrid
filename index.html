@@ -199,6 +199,15 @@
   .chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
   .chip .n { opacity: 0.65; margin-left: 5px; font-size: 11px; }
 
+  /* mode switch: Icons | Fonts */
+  .mode-switch { display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); align-self: center; }
+  .mode-switch a { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; padding: 0 14px; line-height: 36px; text-decoration: none; color: var(--ink-muted); background: var(--surface); }
+  .mode-switch a.active { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  /* Projects is the aggregator pane — visually set apart from the feature tabs */
+  .mode-div { width: 1px; margin: 5px 3px; background: var(--border-strong); }
+  .mode-switch a.projects:not(.active) { background: transparent; }
+  .mode-switch a:hover:not(.active) { color: var(--ink); }
+
   /* version badge -> GitHub releases */
   .ver-badge {
     font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
@@ -482,6 +491,14 @@
 
 <header>
   <div class="title-row">
+    <div class="mode-switch">
+      <a href="index.html" class="active">Icons</a>
+      <a href="fonts.html">Fonts</a>
+      <a href="code.html">Code</a>
+      <a href="colors.html">Colors</a>
+      <span class="mode-div" aria-hidden="true"></span>
+      <a href="projects.html" class="projects">Projects</a>
+    </div>
     <h1 class="wordmark">fen<span class="wm-grid">grid</span></h1>
     <span class="count" id="count-line"></span>
     <a class="ver-badge" id="ver-badge" href="https://github.com/fengrid/fengrid/releases" target="_blank" rel="noopener" title="Releases"></a>
@@ -681,6 +698,22 @@
       <b>SIZE</b> slider to scale previews — it snaps to standard icon sizes
       (16, 22, 24, 32, 48, 64, 96, 128, 256) and picks the sharpest available
       variant for each size.</p>
+
+      <h3>The other panes</h3>
+      <p>The header switch opens sibling panes built on the same grid, each
+      with its own accent color:</p>
+      <ul>
+        <li><b>Fonts</b> — your installed typefaces grouped by family, live
+        previews, and family-level CSS/ZIP export.</li>
+        <li><b>Code</b> — a JSFiddle-style snippet playground with a live
+        preview, a local snippet database, IDE-style editing (emacs
+        bindings, toggleable vim), and import from VSCode or massCode.</li>
+        <li><b>Colors</b> — a palette generator with harmony rules, WCAG
+        contrast readouts, and CSS/JSON/board-image exports.</li>
+        <li><b>Projects</b> — a CSS configurator: combine palettes, fonts,
+        and icons with typography and color parameters, preview a
+        boilerplate site, and export a token-based starter kit.</li>
+      </ul>
 
       <h3>Search &amp; filter</h3>
       <p>Press <kbd>/</kbd> to jump to search, <kbd>Esc</kbd> to clear it — search

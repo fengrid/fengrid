@@ -6,8 +6,127 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Snippet import from VSCode and massCode** — the Code pane's new
+  **Import** button reads `.code-snippets` / per-language `.json`
+  snippet files (JSONC: comments and trailing commas tolerated) and
+  massCode's `db.sqlite`, translating both into fengrid's snippet
+  schema. VSCode `scope` and massCode fragment languages map onto the
+  HTML/CSS/JS fields (html/css/scss/less → CSS, js/ts/json → JS,
+  markdown → Markdown); unmapped languages land in the JS pane with a
+  `lang:<name>` tag. massCode's JSON fragment lists, JSON tag arrays,
+  and soft-deleted rows are all handled; empty paths scan the editors'
+  default locations, or a path/file upload can be given. Re-importing
+  skips snippets already present (title + body match). Endpoint:
+  `GET/POST /api/snippets/import?kind=vscode|masscode`.
+- **Project coordinator (`projects.html`)** — collect icons, fonts,
+  snippets, and palettes into named projects (SQLite-backed; assets can
+  belong to any number of projects). A spec panel tweaks the CSS class
+  prefix, icon size, and background/ink/accent colors with a live
+  preview rendering the chosen assets and settings. **Export .zip** or
+  **.tar.gz** produces a distributable archive: the selected files under
+  `assets/`, generated `css/colors.css` (palette custom properties),
+  `css/fonts.css` (@font-face rules), `css/icons.css`, `js/icons.js`,
+  a demo `index.html` template, `palettes.json`, `manifest.json`, and a
+  README. Endpoint: `POST /api/projects/<id>/export`.
+- **Colors pane (`colors.html`)** — a palette generator in the coolors
+  mold: five swatches with harmony rules (pleasing mix, analogous,
+  complementary, triadic, monochrome), spacebar to reroll unlocked
+  swatches, per-swatch lock/remove/reorder, an HSL/hex editor, and
+  WCAG contrast readouts against white and black. Palettes save to
+  SQLite with tags; the sidebar offers search, sorting, and a tag
+  cloud. Exports: CSS custom properties, JSON, and **palette board
+  images** (SVG + 2× PNG) in the palettd style — rounded swatch cards
+  with hex codes and automatically chosen color names, text ink picked
+  by WCAG contrast.
+- **Code playground (`code.html`)** — a JSFiddle-style pane for writing,
+  previewing, and organizing HTML/CSS/JS snippets. Tabbed editors, a
+  live Result iframe (Run ▸ / Ctrl+Enter), and Save to a local SQLite
+  database (`snippets.db`). The taxonomy sidebar lists snippets with
+  search, sorting, a tag cloud, and Export HTML for standalone files.
+  Endpoints: `GET/POST /api/snippets`, `GET/PUT/DELETE /api/snippets/<id>`,
+  `GET /api/tags`.
+- **IDE-grade editor bindings in the Code pane** — the syntax
+  highlighter now covers functions, pseudo-classes, doctype, JSON, and
+  Markdown; emacs-style commands (Ctrl-A/E/K/Y/D, Alt-B/F/D,
+  Ctrl-X Ctrl-S) work everywhere, and a VIM toggle (button or
+  Ctrl+Alt+V) adds modal normal/insert/visual editing with motions
+  (h j k l w b e 0 $ gg G), operators (d/c/y with motions, dd yy cc
+  x D C), paste (p P), undo, and `:w` save, with a mode/line status
+  readout.
+- **Color-coded modes** — each pane of the app now has its own accent
+  derived from the brand palette: **Icons** stay teal (`#39B8C4` /
+  `#0E7C86`), **Fonts** turn violet (`#A78BFA` / `#6D4FC4`), **Code**
+  is coral (`#F0885C` / `#C44A1E`), **Colors** rose (`#E879A6` /
+  `#B0306A`), and **Projects** green (`#63C48B` / `#1B7A4E`). The
+  wordmark, mode switch, buttons, chips, and focus rings all follow the
+  pane's accent; the lit-pane amber remains the shared interaction
+  accent everywhere.
+
+- **Font families in the Fonts pane** — the grid now shows one card per
+  font family instead of one per file: the card previews the family's
+  regular face, and its meta line counts the remaining styles. A new
+  **Families** panel on the left is an alphabetical index (letter
+  sections, per-family style counts, a lit dot when a family has
+  anything selected) that jumps straight to the family's card in the
+  grid. Selection is family-based — tick a card to select every
+  installed style; Shift-click spans a range of families, Ctrl-click
+  toggles one, and the selection bar reports families with their total
+  font count — so **Export CSS/ZIP** packages complete families with
+  correct weights and styles in one click. The detail modal remains the
+  extended preview: all installed variants of the family, switchable,
+  at multiple sizes with a glyph specimen.
+
+- **Projects pane redesigned as a CSS configurator** — the pane where
+  frontend design assets are defined, tuned, and generated. Four
+  parameter areas: **Colors** (apply a saved palette with positional
+  role assignment, then tweak six color roles — background, surface,
+  ink, muted, accent, border — plus corner radius and the CSS prefix),
+  **Type** (body and heading family pickers over the installed fonts;
+  picking a family pulls in all of its installed styles, and a base
+  size + modular scale ratio generate the type ramp), **Icons** (pack
+  picker with size), and **Preview** (a boilerplate website by default,
+  or an HTML snippet rendered inside the token environment). The live
+  preview renders a full boilerplate site — header, hero, cards with
+  icons, type specimen, palette strip, footer — driven entirely by the
+  configuration. **Export** generates a token-based starter kit:
+  `css/tokens.css` (color roles, radius, font stacks, type scale),
+  `css/fonts.css`, `css/icons.css`, `js/icons.js`, the boilerplate
+  `index.html`, the preview snippet as a ready page when snippet mode is
+  selected, `palettes.json`, and `manifest.json` — as `.zip` or
+  `.tar.gz`. Old flat settings migrate automatically on first open.
+- **Link mode for scanned fonts** — `scan-fonts.sh --link` materializes
+  `fonts/<Family>/<file>` as symlinks back to the scanned originals
+  instead of copies: no duplicate data on disk, edits to the source
+  show up immediately, and uninstalling removes only the links. The
+  choice persists in the state dir so rescans keep it; `--copy` reverts.
+  (Icons already had `--icons copy|link|hardlink`.) Project export
+  resolves symlinked assets correctly.
+
 ### Fixed
 
+- **scan-fonts.sh corrupted font-meta.js on multi-face `.ttc` files** —
+  `fc-scan` concatenates every face in a collection when the format
+  lacks a trailing newline, so one WenQuanYi entry emitted invalid
+  JavaScript that took down the whole metadata file (fonts.html showed
+  nothing). The format now ends in `\n`, and family/style are
+  JSON-escaped while weight/slant are stripped to digits.
+- **fonts.html never loaded `font-meta.js` over http** — the page read
+  `window.FONT_META` but nothing populated it, so every card silently
+  fell back to the directory name as the family and exported all
+  `@font-face` rules as weight 400. The generated data file is now
+  loaded (as projects.html already does), and serve.py marks the
+  generated data files (`list.txt`, `fonts-list.txt`, `font-meta.js`,
+  `meta.js`, `list.js`) with `Cache-Control: no-cache` so browsers
+  revalidate instead of serving stale copies after a rescan or
+  reinstall.
+- **Font previews stalled the renderer on huge fonts** — the grid
+  loaded the regular face of every rendered card up front; with heavy
+  collections (Iosevka Nerd Font files are ~13 MB each) that parsed
+  hundreds of megabytes at boot and froze the page. Preview fonts now
+  load lazily, one at a time, only when a card approaches the
+  viewport.
 - **Windows paths were dropped by the page's list parser** — `parseLine`
   rejected any `list.txt` line not starting with `/`, so Windows drive
   paths (`D:/Library/.../icon.png`) yielded zero icons. It now accepts
@@ -37,6 +156,26 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Font showcase install step** — the installer now asks to scan font
+  folders (default yes; `--fonts`/`--no-fonts` to control it
+  non-interactively). Scanned fonts generate `fonts-list.txt` +
+  `font-meta.js` for the font showcase. Custom font folders can be added
+  at the prompt.
+- **Font showcase** — the header's Icons / Fonts switch opens `fonts.html`,
+  a sibling page with the same design system but wider grid cells and
+  live typeface previews. Each card renders the preview text in its own
+  font via a dynamically injected `@font-face` rule. Sort by name, weight,
+  or style; filter by style (Regular/Bold/Italic/Other) and format
+  (TTF/OTF/WOFF/WOFF2/TTC/EOT); customize the preview text and size.
+  Select fonts via checkboxes, Shift-click range, or Ctrl-click toggle;
+  export as CSS (`@font-face` rules) or ZIP (font files + fonts.css +
+  README) via the new `POST /fonts-export` endpoint. Clicking a font name
+  opens a detail modal with the typeface at six sizes, all installed
+  variants of the same family, a full glyph specimen, and metadata.
+  Font scanning via `scan-fonts.sh` (fc-scan for family/style/weight/
+  slant; configurable folders persisted to `~/.local/state/fengrid/
+  font-dirs.conf`). Metadata from fc-scan covers TTF/OTF/TTC; WOFF/WOFF2
+  fall back to filename-derived family names.
 - **Import icon sets** — a new folder-plus button in the title row opens an
   import modal with four sources: a local folder (browser picker or
   server-local path), a `.zip` archive, a git repository or archive URL

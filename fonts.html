@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>fengrid fonts — the typeface explorer</title>
+<meta name="description" content="fengrid fonts lays out every typeface on your machine as one searchable, inspectable grid. Local-first, no account, works offline.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='12' height='12' rx='3' fill='none' stroke='%23A78BFA' stroke-width='2.5'/%3E%3Crect x='17' y='3' width='12' height='12' rx='3' fill='none' stroke='%23A78BFA' stroke-width='2.5'/%3E%3Crect x='3' y='17' width='12' height='12' rx='3' fill='none' stroke='%23A78BFA' stroke-width='2.5'/%3E%3Crect x='17' y='17' width='12' height='12' rx='3.5' fill='%23F5C25C'/%3E%3C/svg%3E">
+<style>
+  @font-face { font-family:'Inter'; src:url('fonts/Inter-Variable.woff2') format('woff2-variations'); font-weight:100 900; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Iosevka'; src:url('fonts/IosevkaMono-Regular.woff2') format('woff2'); font-weight:400; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Iosevka'; src:url('fonts/IosevkaMono-Medium.woff2') format('woff2'); font-weight:500; font-style:normal; font-display:swap; }
+
+  :root {
+    --font-head: 'Inter', 'Helvetica', 'Arial', sans-serif;
+    --font-mono: 'Iosevka', 'Roboto Mono', 'Courier New', monospace;
+    --font-body: 'Inter', 'Helvetica', 'Arial', sans-serif;
+  }
+  [data-theme="dark"] {
+    --bg: #101418; --surface: #161B21; --surface-2: #1D242B;
+    --border: #2A333B; --border-strong: #3B454F;
+    --ink: #E7EDF2; --ink-muted: #93A3B0; --ink-faint: #5F6C78;
+    --accent: #A78BFA; --accent-ink: #101418;
+    --accent-soft: rgba(167, 139, 250, 0.14);
+    --hl: #F5C25C; --hl-ink: #F5C25C; --hl-contrast: #101418;
+    --hl-soft: rgba(245, 194, 92, 0.15);
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+  [data-theme="light"] {
+    --bg: #F7F8F9; --surface: #FFFFFF; --surface-2: #ECEEF1;
+    --border: #DFE3E7; --border-strong: #C3CAD1;
+    --ink: #16202B; --ink-muted: #6B7A88; --ink-faint: #9AA6B0;
+    --accent: #6D4FC4; --accent-ink: #FFFFFF;
+    --accent-soft: rgba(109, 79, 196, 0.12);
+    --hl: #F5B841; --hl-ink: #A16207; --hl-contrast: #16202B;
+    --hl-soft: rgba(245, 184, 65, 0.15);
+    --shadow: 0 12px 32px rgba(22, 32, 43, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 14px; line-height: 1.5; padding-bottom: 20px; }
+  h1, h2, h3 { font-family: var(--font-head); font-weight: 400; text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+  .wordmark { text-transform: none; font-weight: 600; letter-spacing: 0.06em; }
+  .wordmark .wm-grid { font-family: var(--font-mono); font-weight: 500; color: var(--accent); letter-spacing: 0.02em; }
+  a { color: var(--accent); }
+
+  header { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); padding: 14px 24px 12px; }
+  .title-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .title-row h1 { font-size: 30px; line-height: 1.1; }
+  .title-row .count { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); letter-spacing: 0.08em; }
+  .spacer { flex: 1; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .field { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; height: 38px; }
+  .field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field svg { flex: none; color: var(--ink-faint); }
+  .field input, .field select { background: none; border: none; outline: none; color: var(--ink); font-family: var(--font-mono); font-size: 13px; height: 100%; }
+  .field input { width: 210px; }
+  .field select { cursor: pointer; appearance: none; padding-right: 4px; }
+  .field select option { background: var(--surface); color: var(--ink); }
+  .label { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-muted); }
+
+  .size-ctl { display: flex; align-items: center; gap: 10px; height: 38px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; }
+  input[type="range"] { appearance: none; width: 120px; height: 3px; background: var(--border-strong); border-radius: 2px; outline: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-thumb { appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--accent); }
+  input[type="range"]::-moz-range-thumb { width: 13px; height: 13px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--accent); }
+  .size-readout { font-family: var(--font-mono); font-size: 12.5px; color: var(--accent); min-width: 52px; text-align: right; font-weight: 500; }
+
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 8px; cursor: pointer; background: var(--surface); border: 1px solid var(--border); color: var(--ink-muted); }
+  .icon-btn:hover { color: var(--ink); border-color: var(--border-strong); }
+  .icon-btn:disabled { opacity: 0.6; cursor: progress; }
+  [data-theme="dark"] .sun { display: block; } [data-theme="dark"] .moon { display: none; }
+  [data-theme="light"] .sun { display: none; } [data-theme="light"] .moon { display: block; }
+
+  /* mode switch: Icons | Fonts */
+  .mode-switch { display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .mode-switch a { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; padding: 0 14px; line-height: 36px; text-decoration: none; color: var(--ink-muted); background: var(--surface); }
+  .mode-switch a.active { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  /* Projects is the aggregator pane — visually set apart from the feature tabs */
+  .mode-div { width: 1px; margin: 5px 3px; background: var(--border-strong); }
+  .mode-switch a.projects:not(.active) { background: transparent; }
+  .mode-switch a:hover:not(.active) { color: var(--ink); }
+
+  .modal-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); }
+  .modal-overlay[hidden] { display: none; }
+  .modal-card { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 18px 22px 16px; max-width: 340px; box-shadow: var(--shadow); text-align: center; }
+  .modal-card.wide { max-width: 680px; text-align: left; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .modal-head .label { color: var(--accent); letter-spacing: 0.14em; }
+  .help-scroll { max-height: 72vh; overflow-y: auto; padding-right: 6px; }
+  .help-scroll h3 { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 16px 0 4px; font-weight: 500; }
+  .help-scroll h3:first-child { margin-top: 0; }
+  .help-scroll p, .help-scroll li { font-size: 13px; color: var(--ink-muted); margin: 4px 0; line-height: 1.55; }
+  .help-scroll ul { margin: 4px 0 10px 18px; padding: 0; }
+  .help-scroll code { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+
+  /* selection bar */
+  .sel-bar { position: sticky; bottom: 0; z-index: 25; background: var(--surface); border-top: 2px solid var(--hl); padding: 10px 24px; display: flex; align-items: center; gap: 12px; }
+  .sel-bar[hidden] { display: none; }
+  .sel-bar .n { font-family: var(--font-mono); font-size: 13px; color: var(--hl-ink); font-weight: 500; }
+  .sel-btn { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; background: var(--surface-2); color: var(--ink-muted); border: 1px solid var(--border-strong); border-radius: 6px; padding: 6px 14px; }
+  .sel-btn:hover { color: var(--hl-ink); border-color: var(--hl); }
+  .sel-btn.primary { background: var(--hl); border-color: var(--hl); color: var(--hl-contrast); font-weight: 500; }
+  .sel-btn.primary:hover { filter: brightness(1.1); }
+
+  /* ---------- font grid: wider cells for preview text ---------- */
+  main { display: flex; align-items: stretch; }
+  .fam-wrap { flex: 1; min-width: 0; padding: 20px 24px 40px; }
+  #fgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--cell-w, 340px), 1fr));
+    gap: 14px;
+  }
+  /* family navigator — alphabetical index tree for jumping around the grid */
+  #fam-nav {
+    position: sticky; top: 0; align-self: flex-start;
+    width: 225px; flex: none; margin: 16px 0 24px 16px;
+    max-height: calc(100vh - 32px); overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 0 12px;
+  }
+  .fam-nav-head { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); padding: 6px 14px; }
+  .fam-nav-letter { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; color: var(--accent); padding: 8px 14px 2px; }
+  .fam-nav-item { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: none; border: none; border-left: 2px solid transparent; cursor: pointer; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-muted); padding: 3px 12px; }
+  .fam-nav-item:hover { color: var(--ink); border-left-color: var(--border-strong); }
+  .fam-nav-item.active { color: var(--accent); border-left-color: var(--accent); }
+  .fam-nav-item .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .fam-nav-item .n { margin-left: auto; font-size: 9px; color: var(--ink-faint); flex: none; }
+  .fam-nav-item .dot { width: 6px; height: 6px; border-radius: 99px; background: var(--hl); flex: none; visibility: hidden; }
+  .fam-nav-item.has-sel .dot { visibility: visible; }
+  .fcard.nav-flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft, rgba(167,139,250,0.3)); transition: box-shadow 0.8s ease; }
+  .fcard {
+    position: relative; display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 14px 10px; cursor: default; min-width: 0;
+    transition: border-color 0.12s ease;
+  }
+  .fcard:hover { border-color: var(--accent); }
+  .fcard.selected { border-color: var(--hl); box-shadow: 0 0 0 1px var(--hl); }
+  .fcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; min-height: 20px; }
+  .fcard-check { appearance: none; width: 16px; height: 16px; border: 1.5px solid var(--border-strong); border-radius: 4px; cursor: pointer; flex: none; position: relative; }
+  .fcard-check:checked { background: var(--hl); border-color: var(--hl); }
+  .fcard-check:checked::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--hl-contrast); font-weight: bold; }
+  .fcard-name { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fcard-actions { display: flex; gap: 4px; flex: none; }
+  .fact-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; cursor: pointer; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-muted); opacity: 0; transition: opacity 0.12s ease; }
+  .fcard:hover .fact-btn, .fcard.selected .fact-btn { opacity: 1; }
+  .fact-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .fcard-preview {
+    font-size: var(--fsize, 28px); line-height: 1.25; color: var(--ink);
+    padding: 12px 0; overflow: hidden; overflow-wrap: break-word;
+    min-height: calc(var(--fsize, 28px) * 1.25);
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  }
+  .fcard-meta { display: flex; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-top: 4px; }
+  .fcard-meta .fmt { color: var(--accent); }
+  .fcard-meta .sz { color: var(--ink-faint); }
+
+  /* detail modal */
+  .specimen { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .specimen:last-child { border-bottom: none; }
+  .specimen .sz-label { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); letter-spacing: 0.1em; margin-bottom: 4px; }
+  .specimen .sample { overflow: hidden; word-break: break-all; line-height: 1.2; }
+  .glyphs { font-size: 18px; line-height: 1.8; color: var(--ink); word-break: break-all; }
+  .d-variants { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .d-var { font-family: var(--font-mono); font-size: 11px; color: var(--ink-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  .d-var:hover, .d-var.active { color: var(--hl-ink); border-color: var(--hl); }
+  .d-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-muted); margin-top: 8px; line-height: 1.8; }
+  .d-meta b { color: var(--ink); font-weight: 500; }
+  .d-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+  /* gate */
+  #gate { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 99; background: var(--bg); }
+  #gate.hidden { display: none; }
+  #gate .box { text-align: center; }
+  #gate h1 { font-size: 44px; color: var(--accent); margin-bottom: 10px; }
+  #gate p { font-family: var(--font-mono); font-size: 13px; color: var(--ink-muted); }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #toast { position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%) translateY(16px); z-index: 70;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong);
+    border-radius: 8px; padding: 8px 18px; font-family: var(--font-mono); font-size: 12.5px;
+    box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: all 0.2s ease; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .exp-btn { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.05em; background: var(--surface-2); color: var(--ink-muted); border: 1px solid var(--border-strong); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  .exp-btn:hover { color: var(--hl-ink); border-color: var(--hl); }
+  .exp-btn.active { background: var(--hl); border-color: var(--hl); color: var(--hl-contrast); font-weight: 500; }
+  .exp-note { font-size: 12.5px; color: var(--ink-muted); margin-top: 10px; line-height: 1.5; }
+
+  @media (max-width: 720px) {
+    .title-row h1 { font-size: 24px; }
+    #fgrid { grid-template-columns: 1fr; }
+    .field input { width: 140px; }
+    #fam-nav { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- generated data (font scan output; gitignored) -->
+<script src="font-meta.js"></script>
+<!-- font-face rules are injected here by the boot code -->
+<style id="font-faces"></style>
+
+<header>
+  <div class="title-row">
+    <div class="mode-switch">
+      <a href="index.html">Icons</a>
+      <a href="fonts.html" class="active">Fonts</a>
+      <a href="code.html">Code</a>
+      <a href="colors.html">Colors</a>
+      <span class="mode-div" aria-hidden="true"></span>
+      <a href="projects.html" class="projects">Projects</a>
+    </div>
+    <h1 class="wordmark">fen<span class="wm-grid">grid</span></h1>
+    <span class="count" id="count-line"></span>
+    <span class="spacer"></span>
+    <a class="ver-badge" id="ver-badge" href="https://github.com/fengrid/fengrid/releases" target="_blank" rel="noopener" title="Releases"></a>
+  </div>
+  <div class="controls">
+    <div class="field">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="search" placeholder="search fonts ( / )">
+    </div>
+    <div class="field">
+      <input type="text" id="preview-text" placeholder="preview text" value="The quick brown fox jumps over the lazy dog" style="width: 240px;">
+    </div>
+    <div class="size-ctl">
+      <span class="label">Size</span>
+      <input type="range" id="fsize" min="12" max="72" value="28" step="2">
+      <span class="size-readout" id="fsize-readout">28px</span>
+    </div>
+    <div class="field">
+      <select id="sort">
+        <option value="name-asc">Name A-Z</option>
+        <option value="name-desc">Name Z-A</option>
+        <option value="weight-asc">Weight ↑</option>
+        <option value="weight-desc">Weight ↓</option>
+        <option value="style">Style</option>
+        <option value="size-desc">File size ↓</option>
+      </select>
+    </div>
+    <div class="field">
+      <select id="style-filter"><option value="">Style</option></select>
+    </div>
+    <div class="field">
+      <select id="fmt-filter"><option value="">Format</option></select>
+    </div>
+    <button class="icon-btn" id="mode-btn" title="Toggle light / dark" aria-label="Toggle light or dark mode">
+      <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="icon-btn" id="help-btn" title="Help &amp; guide" aria-label="Help and guide">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- selection action bar (appears when > 0 fonts selected) -->
+<div class="sel-bar" id="sel-bar" hidden>
+  <span class="n" id="sel-count">0 selected</span>
+  <span class="spacer"></span>
+  <button class="sel-btn" id="sel-css">Export CSS</button>
+  <button class="sel-btn primary" id="sel-zip">Export ZIP</button>
+  <button class="sel-btn" id="sel-clear">Clear</button>
+</div>
+
+<main>
+  <aside id="fam-nav" aria-label="Font family navigator">
+    <div class="fam-nav-head">Families</div>
+    <div id="fam-nav-list"></div>
+  </aside>
+  <div class="fam-wrap">
+    <div id="fgrid"></div>
+    <div id="sentinel" style="height: 1px;"></div>
+  </div>
+</main>
+
+<!-- gate -->
+<div id="gate">
+  <div class="box">
+    <div class="spinner" id="gate-spinner"></div>
+    <h1 class="wordmark">fen<span class="wm-grid">grid</span></h1>
+    <p id="gate-msg">Reading <code>fonts-list.txt</code>…</p>
+  </div>
+</div>
+
+<!-- detail modal -->
+<div id="detail-modal" class="modal-overlay" hidden>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Font details">
+    <div class="modal-head">
+      <span class="label" id="detail-label" style="color:var(--hl-ink)">Font details</span>
+      <button class="icon-btn" id="detail-close" title="Close" aria-label="Close details">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="help-scroll" id="detail-body"></div>
+  </div>
+</div>
+
+<!-- help modal -->
+<div id="help-modal" class="modal-overlay" hidden>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Help and guide">
+    <div class="modal-head">
+      <span class="label" style="color:var(--hl-ink)">fengrid fonts</span>
+      <button class="icon-btn" id="help-close" title="Close" aria-label="Close help">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="help-scroll">
+      <h3>Browsing fonts</h3>
+      <p>Font <b>families</b> are grouped into one card each — the card
+      previews the family's regular face, and the meta line shows how many
+      additional styles the family has. Type your own preview text in the
+      toolbar and adjust the size slider to see it at any scale. The
+      <b>Families</b> panel on the left is an alphabetical index: click an
+      entry to jump straight to that family's card in the grid.</p>
+      <h3>Selecting &amp; exporting</h3>
+      <p>Selection works on whole families: tick a card's checkbox to select
+      every installed style of that family, Shift-click for a range of
+      families, Ctrl-click to toggle one. A filled dot in the Families panel
+      marks families with anything selected. When fonts are selected a bar
+      appears at the bottom with <b>Export CSS</b> (generates
+      <code>@font-face</code> rules with correct weights and styles for web
+      use) and <b>Export ZIP</b> (packages every selected font file + CSS +
+      a README) — so one click packages a complete family.</p>
+      <h3>Font details</h3>
+      <p>Click a font name to open a detail modal with the typeface rendered
+      at multiple sizes, all installed variants of the same family (switch
+      between them to compare weights and styles), a full
+      glyph specimen, and metadata (family, style, weight, file size, path).</p>
+      <h3>Scanning folders</h3>
+      <p>Run <code>bash scan-fonts.sh --add ~/.local/share/fonts</code> to
+      add a font folder, then <code>bash scan-fonts.sh</code> to scan.
+      The scanner copies fonts into <code>fonts/&lt;Family&gt;/</code> and
+      generates <code>fonts-list.txt</code> + <code>font-meta.js</code>.
+      Metadata comes from <code>fc-scan</code> (fontconfig).</p>
+      <h3>Supported formats</h3>
+      <p>TrueType (<code>.ttf</code>), OpenType (<code>.otf</code>), Web Open
+      Font Format (<code>.woff</code>, <code>.woff2</code>), TrueType
+      Collection (<code>.ttc</code>), and Embedded OpenType
+      (<code>.eot</code>).</p>
+      <h3>Copying &amp; downloading</h3>
+      <p>The corner buttons on each card copy the font's family name or
+      download the font file. In the detail modal you can download any
+      variant of the family.</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var SIZES = [12, 14, 16, 18, 21, 24, 28, 32, 36, 42, 48, 56, 64, 72];
+  var PAGE = 60; // chunked render size (fewer than icons: preview text is heavy)
+  var APP_VERSION = 'v0.3.1';
+  var FORMAT_MAP = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2', ttc: 'collection', eot: 'embedded-opentype' };
+
+  document.getElementById('ver-badge').textContent = APP_VERSION;
+
+  var els = {
+    gate: document.getElementById('gate'),
+    gateSpinner: document.getElementById('gate-spinner'),
+    gateMsg: document.getElementById('gate-msg'),
+    grid: document.getElementById('fgrid'),
+    famNavList: document.getElementById('fam-nav-list'),
+    sentinel: document.getElementById('sentinel'),
+    search: document.getElementById('search'),
+    previewText: document.getElementById('preview-text'),
+    fsize: document.getElementById('fsize'),
+    fsizeReadout: document.getElementById('fsize-readout'),
+    sort: document.getElementById('sort'),
+    styleFilter: document.getElementById('style-filter'),
+    fmtFilter: document.getElementById('fmt-filter'),
+    count: document.getElementById('count-line'),
+    toast: document.getElementById('toast'),
+    modeBtn: document.getElementById('mode-btn'),
+    selBar: document.getElementById('sel-bar'),
+    selCount: document.getElementById('sel-count'),
+    fontFaces: document.getElementById('font-faces')
+  };
+
+  var fonts = [];         // [{rel, src, family, style, weight, slant, ext, size, alias, selected}]
+  var filtered = [];
+  var famOrder = [];      // [{name, idxs: [indices into filtered], primary: idx}] — one per family
+  var rendered = 0;
+  var state = { fsize: 28, search: '', sort: 'name-asc', styleFilter: '', fmtFilter: '' };
+  var selected = new Set();
+  var lastCheckedIdx = -1; // for Shift-click range selection (family index now)
+  var toastTimer;
+
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { els.toast.classList.remove('show'); }, 1600);
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function fmtSize(bytes) {
+    if (!bytes) return '';
+    if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    return Math.round(bytes / 1024) + ' KB';
+  }
+
+  function weightLabel(w) {
+    if (!w) return '';
+    var names = { 0: 'Thin', 40: 'ExtraLight', 50: 'Light', 80: 'Regular', 100: 'Medium', 180: 'Bold', 200: 'ExtraBold', 210: 'Black' };
+    for (var k in names) { if (+w === +k) return names[k]; }
+    if (w < 60) return 'Light'; if (w < 90) return 'Regular'; if (w < 160) return 'Medium'; return 'Bold';
+  }
+
+  function cssWeight(w) {
+    // fontconfig weight scale (0-210) -> CSS font-weight (100-900)
+    if (!w) return 400;
+    return Math.round(Math.max(100, Math.min(900, w / 210 * 900)));
+  }
+
+  /* ---------- parse list + build metadata ---------- */
+
+  function parseFontLine(line) {
+    line = line.trim();
+    if (!line) return null;
+    // extract the fonts/-relative part (like the icon showcase's icons/ rule)
+    var idx = line.lastIndexOf('/fonts/');
+    var rel = idx >= 0 ? 'fonts/' + line.slice(idx + 7) : line;
+    var ext = (rel.split('.').pop() || '').toLowerCase();
+    if (!FORMAT_MAP[ext]) return null;
+    var meta = (window.FONT_META || {})[rel] || {};
+    return {
+      rel: rel,
+      src: rel,
+      file: rel.split('/').pop(),
+      ext: ext,
+      family: meta.f || rel.split('/').slice(1, -1).join(' ') || rel.split('/').pop().replace(/\.[^.]+$/, ''),
+      style: meta.s || '',
+      weight: +meta.w || 0,
+      slant: +meta.l || 0,
+      dir: rel.split('/').slice(1, -1).join('/'),
+      selected: false
+    };
+  }
+
+  /* ---------- @font-face injection ---------- */
+
+  function injectFontFaces() {
+    var css = [];
+    fonts.forEach(function (f, i) {
+      f.alias = 'fg-' + i;
+      var fmt = FORMAT_MAP[f.ext];
+      css.push('@font-face{font-family:"' + f.alias + '";src:url("' + f.src + '")' +
+        (fmt ? ' format("' + fmt + '")' : '') + ';font-display:swap;}');
+    });
+    els.fontFaces.textContent = css.join('\n');
+  }
+
+  /* ---------- sorting + filtering ---------- */
+
+  function applyFilters() {
+    var q = state.search.toLowerCase();
+    filtered = fonts.filter(function (f) {
+      if (q && (f.family + ' ' + f.file + ' ' + f.style + ' ' + f.dir).toLowerCase().indexOf(q) < 0) return false;
+      if (state.styleFilter) {
+        var sl = f.style.toLowerCase();
+        var want = state.styleFilter.toLowerCase();
+        if (want === 'italic' && sl.indexOf('italic') < 0 && sl.indexOf('oblique') < 0) return false;
+        if (want === 'bold' && sl.indexOf('bold') < 0) return false;
+        if (want === 'regular' && !sl && f.weight !== 80) return false;
+        if (want === 'other' && (sl.indexOf('italic') >= 0 || sl.indexOf('bold') >= 0 || !sl)) return false;
+      }
+      if (state.fmtFilter && f.ext !== state.fmtFilter) return false;
+      return true;
+    });
+
+    var sorters = {
+      'name-asc': function (a, b) { return a.family.localeCompare(b.family) || a.style.localeCompare(b.style); },
+      'name-desc': function (a, b) { return b.family.localeCompare(a.family); },
+      'weight-asc': function (a, b) { return (a.weight || 0) - (b.weight || 0) || a.family.localeCompare(b.family); },
+      'weight-desc': function (a, b) { return (b.weight || 0) - (a.weight || 0) || a.family.localeCompare(b.family); },
+      'style': function (a, b) { return a.style.localeCompare(b.style) || a.family.localeCompare(b.family); },
+      'size-desc': function (a, b) { return (b.bytes || 0) - (a.bytes || 0); }
+    };
+    filtered.sort(sorters[state.sort] || sorters['name-asc']);
+
+    buildFamilies();
+    rendered = 0;
+    els.grid.innerHTML = '';
+    els.count.textContent = famOrder.length + ' famil' + (famOrder.length === 1 ? 'y' : 'ies') +
+      ' · ' + filtered.length + ' font file' + (filtered.length !== 1 ? 's' : '') +
+      (filtered.length !== fonts.length ? ' (of ' + fonts.length + ')' : '');
+    renderMore();
+    syncSelection();
+    updateSelBar();
+  }
+
+  /* ---------- family grouping + navigator ---------- */
+
+  function buildFamilies() {
+    famOrder = [];
+    var map = {};
+    filtered.forEach(function (f, i) {
+      var g = map[f.family];
+      if (!g) { g = map[f.family] = { name: f.family, idxs: [], primary: -1 }; famOrder.push(g); }
+      g.idxs.push(i);
+    });
+    famOrder.forEach(function (g) { g.primary = pickPrimary(g.idxs); });
+    renderNav();
+  }
+
+  function pickPrimary(idxs) {
+    // the "regular" face: closest to fontconfig weight 80 (Regular),
+    // non-italic preferred — this is what the card preview renders
+    var best = idxs[0], bestScore = 1e9;
+    idxs.forEach(function (i) {
+      var f = filtered[i];
+      var sl = (f.style || '').toLowerCase();
+      var italic = sl.indexOf('italic') >= 0 || f.slant > 0;
+      var score = Math.abs((f.weight || 80) - 80) + (italic ? 1000 : 0);
+      if (score < bestScore) { bestScore = score; best = i; }
+    });
+    return best;
+  }
+
+  function familySelected(g) {
+    return g.idxs.length > 0 && g.idxs.every(function (i) { return selected.has(i); });
+  }
+
+  function renderNav() {
+    var letters = {};
+    var sorted = famOrder.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var html = '';
+    var lastLetter = '';
+    sorted.forEach(function (g) {
+      var letter = (g.name[0] || '#').toUpperCase();
+      if (!/[A-Z]/.test(letter)) letter = '#';
+      if (letter !== lastLetter) { html += '<div class="fam-nav-letter">' + esc(letter) + '</div>'; lastLetter = letter; letters[letter] = true; }
+      html += '<button class="fam-nav-item" data-fam="' + esc(g.name) + '" title="' + esc(g.name) + ' — jump to card">' +
+        '<span class="dot"></span><span class="nm">' + esc(g.name) + '</span>' +
+        '<span class="n">' + g.idxs.length + '</span></button>';
+    });
+    els.famNavList.innerHTML = html ||
+      '<div class="fam-nav-letter" style="padding-top:2px;">No families match</div>';
+    updateNavSelDots();
+  }
+
+  function updateNavSelDots() {
+    els.famNavList.querySelectorAll('.fam-nav-item').forEach(function (b) {
+      var g = famOrder.find(function (x) { return x.name === b.dataset.fam; });
+      b.classList.toggle('has-sel', !!g && g.idxs.some(function (i) { return selected.has(i); }));
+    });
+  }
+
+  els.famNavList.addEventListener('click', function (e) {
+    var b = e.target.closest('.fam-nav-item');
+    if (!b) return;
+    var gi = famOrder.findIndex(function (g) { return g.name === b.dataset.fam; });
+    if (gi < 0) return;
+    while (rendered <= gi) renderMore();  // make sure the card exists (lazy grid)
+    var card = els.grid.querySelector('.fcard[data-gi="' + gi + '"]');
+    els.famNavList.querySelectorAll('.fam-nav-item.active').forEach(function (x) { x.classList.remove('active'); });
+    b.classList.add('active');
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card.classList.add('nav-flash');
+      setTimeout(function () { card.classList.remove('nav-flash'); }, 900);
+    }
+  });
+
+  /* ---------- grid rendering (chunked) ---------- */
+
+  function renderMore() {
+    if (rendered >= famOrder.length) return;
+    var frag = document.createDocumentFragment();
+    var end = Math.min(rendered + PAGE, famOrder.length);
+    for (var i = rendered; i < end; i++) {
+      frag.appendChild(buildFamilyCard(famOrder[i], i));
+    }
+    rendered = end;
+    els.grid.appendChild(frag);
+    sweepPreviews();
+  }
+
+  function buildFamilyCard(g, gi) {
+    var f = filtered[g.primary];
+    var card = document.createElement('div');
+    card.className = 'fcard' + (familySelected(g) ? ' selected' : '');
+    card.dataset.gi = gi;
+
+    var head = document.createElement('div');
+    head.className = 'fcard-head';
+
+    var check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'fcard-check';
+    check.checked = familySelected(g);
+    check.indeterminate = !check.checked && g.idxs.some(function (i) { return selected.has(i); });
+    check.setAttribute('aria-label', 'Select family ' + g.name);
+    check.addEventListener('click', function (e) { e.stopPropagation(); toggleFamily(gi, e.shiftKey, e.ctrlKey || e.metaKey); });
+
+    var name = document.createElement('span');
+    name.className = 'fcard-name';
+    name.textContent = g.name;
+    name.title = g.name + ' — ' + g.idxs.length + ' style' + (g.idxs.length === 1 ? '' : 's') + ' (click for details)';
+    name.style.cursor = 'pointer';
+    name.addEventListener('click', function () { openDetail(f); });
+
+    var actions = document.createElement('div');
+    actions.className = 'fcard-actions';
+
+    var copyBtn = document.createElement('button');
+    copyBtn.className = 'fact-btn';
+    copyBtn.title = 'Copy font family name';
+    copyBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    copyBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      navigator.clipboard.writeText(g.name).then(function () { toast('Copied: ' + g.name); });
+    });
+
+    var dlBtn = document.createElement('button');
+    dlBtn.className = 'fact-btn';
+    dlBtn.title = 'Download ' + (f.style || 'regular') + ' file (select the family to export all styles)';
+    dlBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+    dlBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var a = document.createElement('a');
+      a.href = f.src; a.download = f.file;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    });
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(dlBtn);
+    head.appendChild(check);
+    head.appendChild(name);
+    head.appendChild(actions);
+
+    var preview = document.createElement('div');
+    preview.className = 'fcard-preview';
+    // font family attached lazily on first visibility (see sweepPreviews)
+    preview.dataset.alias = f.alias;
+    preview.style.fontFamily = 'var(--font-mono)';
+    preview.textContent = els.previewText.value || 'Fengrid 123';
+
+    var meta = document.createElement('div');
+    meta.className = 'fcard-meta';
+    var parts = [];
+    if (f.style) parts.push('<span>' + esc(f.style) + '</span>');
+    if (f.weight) parts.push('<span>' + weightLabel(f.weight) + ' ' + f.weight + '</span>');
+    parts.push('<span class="fmt">' + f.ext.toUpperCase() + '</span>');
+    if (f.bytes) parts.push('<span class="sz">' + fmtSize(f.bytes) + '</span>');
+    if (g.idxs.length > 1) parts.push('<span class="fmt">+' + (g.idxs.length - 1) + ' more style' + (g.idxs.length > 2 ? 's' : '') + '</span>');
+    meta.innerHTML = parts.join('');
+
+    card.appendChild(head);
+    card.appendChild(preview);
+    card.appendChild(meta);
+    return card;
+  }
+
+  /* ---------- selection (family-based) ---------- */
+
+  function toggleFamily(gi, shiftKey, ctrlKey) {
+    var g = famOrder[gi];
+    if (!g) return;
+    if (shiftKey && lastCheckedIdx >= 0) {
+      // Shift spans a range of FAMILIES in grid order
+      var lo = Math.min(lastCheckedIdx, gi), hi = Math.max(lastCheckedIdx, gi);
+      for (var fi = lo; fi <= hi; fi++) {
+        famOrder[fi].idxs.forEach(function (i) { selected.add(i); });
+      }
+    } else if (familySelected(g)) {
+      g.idxs.forEach(function (i) { selected.delete(i); });
+    } else {
+      g.idxs.forEach(function (i) { selected.add(i); });
+    }
+    lastCheckedIdx = gi;
+    syncSelection();
+    updateSelBar();
+  }
+
+  function syncSelection() {
+    els.grid.querySelectorAll('.fcard').forEach(function (c) {
+      var g = famOrder[+c.dataset.gi];
+      if (!g) return;
+      var cb = c.querySelector('.fcard-check');
+      var all = familySelected(g), some = g.idxs.some(function (i) { return selected.has(i); });
+      if (cb) { cb.checked = all; cb.indeterminate = !all && some; }
+      c.classList.toggle('selected', all);
+    });
+    updateNavSelDots();
+  }
+
+  function updateSelBar() {
+    els.selBar.hidden = selected.size === 0;
+    if (selected.size) {
+      var fams = new Set();
+      selected.forEach(function (i) { fams.add(filtered[i].family); });
+      els.selCount.textContent = fams.size + ' famil' + (fams.size === 1 ? 'y' : 'ies') +
+        ' (' + selected.size + ' font' + (selected.size === 1 ? '' : 's') + ') selected';
+    }
+  }
+
+  /* ---------- CSS + ZIP export ---------- */
+
+  function generateCSS() {
+    var rules = [];
+    var byFamily = {};
+    Array.from(selected).sort(function (a, b) {
+      return filtered[a].family.localeCompare(filtered[b].family);
+    }).forEach(function (idx) {
+      var f = filtered[idx];
+      var w = cssWeight(f.weight);
+      var isItalic = f.style.toLowerCase().indexOf('italic') >= 0 || f.slant > 0;
+      var fmt = FORMAT_MAP[f.ext];
+      rules.push(
+        '/* ' + f.family + ' ' + (f.style || '') + ' */\n' +
+        '@font-face {\n' +
+        '  font-family: \'' + f.family.replace(/'/g, "\\'") + '\';\n' +
+        '  src: url(\'' + f.src + '\')' + (fmt ? ' format(\'' + fmt + '\')' : '') + ';\n' +
+        '  font-weight: ' + w + ';\n' +
+        '  font-style: ' + (isItalic ? 'italic' : 'normal') + ';\n' +
+        '  font-display: swap;\n' +
+        '}');
+    });
+    return rules.join('\n\n') + '\n';
+  }
+
+  document.getElementById('sel-css').addEventListener('click', function () {
+    var css = generateCSS();
+    var blob = new Blob([css], { type: 'text/css' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'fengrid-fonts.css';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+    toast('Exported fengrid-fonts.css (' + selected.size + ' @font-face rules)');
+  });
+
+  document.getElementById('sel-zip').addEventListener('click', function () {
+    if (!overHttp()) {
+      toast('Export ZIP needs the local web server — Export CSS works offline');
+      return;
+    }
+    var paths = Array.from(selected).map(function (idx) { return filtered[idx].rel; });
+    if (!paths.length) return;
+    toast('Packaging ' + paths.length + ' fonts …');
+    fetch('/fonts-export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: paths, css: generateCSS() })
+    }).then(function (r) {
+      if (!r.ok) throw new Error(r.status);
+      var cd = r.headers.get('Content-Disposition') || '';
+      var fname = (cd.match(/filename="?([^";]+)"?/) || [,'fengrid-fonts.zip'])[1];
+      return r.blob().then(function (b) { return { blob: b, fname: fname }; });
+    }).then(function (r) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(r.blob);
+      a.download = r.fname;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+      toast('Exported ' + r.fname);
+    }).catch(function (e) { toast('Export failed: ' + (e.message || e)); });
+  });
+
+  document.getElementById('sel-clear').addEventListener('click', function () {
+    selected.clear();
+    syncSelection();
+    updateSelBar();
+  });
+
+  function overHttp() { return location.protocol === 'http:' || location.protocol === 'https:'; }
+
+  /* ---------- detail modal ---------- */
+
+  var detailModal = document.getElementById('detail-modal');
+  function closeDetail() { detailModal.hidden = true; }
+  document.getElementById('detail-close').addEventListener('click', closeDetail);
+  detailModal.addEventListener('click', function (e) { if (e.target === detailModal) closeDetail(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !detailModal.hidden) { e.stopPropagation(); closeDetail(); }
+  });
+
+  function openDetail(f) {
+    var body = document.getElementById('detail-body');
+    document.getElementById('detail-label').textContent = f.family;
+
+    // find all variants of the same family
+    var siblings = fonts.filter(function (x) { return x.family === f.family; });
+    var cur = f;
+
+    var html = '<div class="d-variants">';
+    siblings.forEach(function (s) {
+      html += '<button class="d-var' + (s === f ? ' active' : '') + '" data-rel="' + esc(s.rel) + '">' +
+        esc(s.style || s.file) + '</button>';
+    });
+    html += '</div>';
+
+    var sizes = [14, 18, 24, 36, 48, 72];
+    sizes.forEach(function (sz) {
+      html += '<div class="specimen"><div class="sz-label">' + sz + 'px</div>' +
+        '<div class="sample" style="font-family:\'' + cur.alias + '\'; font-size:' + sz + 'px;">' +
+        esc(els.previewText.value || 'Fengrid 123') + '</div></div>';
+    });
+
+    // glyph specimen
+    html += '<div class="specimen"><div class="sz-label">Glyphs</div>' +
+      '<div class="glyphs" style="font-family:\'' + cur.alias + '\'; font-size:20px;">' +
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>abcdefghijklmnopqrstuvwxyz<br>' +
+      '0123456789 .,;:!?&amp;@#()[]{}«»„“’–—<br>ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß</div></div>';
+
+    html += '<div class="d-meta">' +
+      '<b>Family:</b> ' + esc(cur.family) + '<br>' +
+      (cur.style ? '<b>Style:</b> ' + esc(cur.style) + '<br>' : '') +
+      (cur.weight ? '<b>Weight:</b> ' + weightLabel(cur.weight) + ' (' + cur.weight + ')<br>' : '') +
+      '<b>Format:</b> ' + cur.ext.toUpperCase() + '<br>' +
+      (cur.bytes ? '<b>File size:</b> ' + fmtSize(cur.bytes) + '<br>' : '') +
+      '<b>Path:</b> <code>' + esc(cur.rel) + '</code></div>';
+
+    html += '<div class="d-actions">' +
+      '<button class="exp-btn" id="detail-copy">Copy family name</button>' +
+      '<button class="exp-btn" id="detail-dl">Download font file</button></div>';
+
+    body.innerHTML = html;
+
+    // variant switcher
+    body.querySelectorAll('.d-var').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var target = fonts.find(function (x) { return x.rel === b.dataset.rel; });
+        if (target && target !== cur) { openDetail(target); }
+      });
+    });
+
+    document.getElementById('detail-copy').addEventListener('click', function () {
+      navigator.clipboard.writeText(cur.family).then(function () { toast('Copied: ' + cur.family); });
+    });
+    document.getElementById('detail-dl').addEventListener('click', function () {
+      var a = document.createElement('a');
+      a.href = cur.src; a.download = cur.file;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    });
+
+    detailModal.hidden = false;
+  }
+
+  /* ---------- toolbar wiring ---------- */
+
+  els.search.addEventListener('input', function () {
+    state.search = this.value;
+    applyFilters();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && !e.target.matches('input, textarea, select')) {
+      e.preventDefault();
+      els.search.focus();
+    }
+    if (e.key === 'Escape' && e.target === els.search) {
+      els.search.value = ''; state.search = ''; applyFilters();
+      els.search.blur();
+    }
+  });
+
+  els.previewText.addEventListener('input', function () {
+    var text = this.value || 'Fengrid 123';
+    els.grid.querySelectorAll('.fcard-preview').forEach(function (p) { p.textContent = text; });
+  });
+
+  els.fsize.addEventListener('input', function () {
+    state.fsize = SIZES[+this.value] || 28;
+    els.fsizeReadout.textContent = state.fsize + 'px';
+    els.grid.style.setProperty('--fsize', state.fsize + 'px');
+  });
+
+  els.sort.addEventListener('change', function () { state.sort = this.value; applyFilters(); });
+  els.styleFilter.addEventListener('change', function () { state.styleFilter = this.value; applyFilters(); });
+  els.fmtFilter.addEventListener('change', function () { state.fmtFilter = this.value; applyFilters(); });
+
+  els.modeBtn.addEventListener('click', function () {
+    var mode = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = mode;
+    localStorage.setItem('fgf-mode', mode);
+  });
+  (function () {
+    var saved = localStorage.getItem('fgf-mode');
+    if (!saved) saved = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.dataset.theme = saved;
+  })();
+
+  /* help modal */
+  var helpModal = document.getElementById('help-modal');
+  document.getElementById('help-btn').addEventListener('click', function () { helpModal.hidden = false; });
+  document.getElementById('help-close').addEventListener('click', function () { helpModal.hidden = true; });
+  helpModal.addEventListener('click', function (e) { if (e.target === helpModal) helpModal.hidden = true; });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !helpModal.hidden) { e.stopPropagation(); helpModal.hidden = true; }
+  });
+
+  /* ---------- lazy render via IntersectionObserver ---------- */
+
+  var io = new IntersectionObserver(function (entries) {
+    if (entries.some(function (e) { return e.isIntersecting; })) renderMore();
+  });
+  io.observe(els.sentinel);
+
+  // preview fonts load lazily AND strictly one at a time — some system
+  // fonts are tens of MB (e.g. Iosevka Nerd Font), and parsing a herd of
+  // them at once stalls the renderer on heavy font collections. Visibility
+  // is computed manually (IntersectionObserver callbacks don't fire in
+  // background tabs, where the browser skips rendering frames).
+  var pq = [], pumping = false;
+  function pumpPreviews() {
+    if (pumping) return;
+    var el = pq.shift();
+    if (!el) return;
+    if (!el.isConnected || !el.dataset.alias) { pumpPreviews(); return; }
+    pumping = true;
+    var alias = el.dataset.alias;
+    delete el.dataset.queued;
+    document.fonts.load('12px "' + alias + '"').then(function () {
+      el.style.fontFamily = "'" + alias + "'";
+      delete el.dataset.alias;
+    }).catch(function () {}).then(function () {
+      pumping = false;
+      setTimeout(pumpPreviews, 40);
+    });
+  }
+  function sweepPreviews() {
+    var vTop = -300, vBottom = (window.innerHeight || 800) + 300;
+    els.grid.querySelectorAll('.fcard-preview[data-alias]:not([data-queued])').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.top < vBottom && r.bottom > vTop) {
+        el.dataset.queued = '1';
+        pq.push(el);
+      }
+    });
+    pumpPreviews();
+  }
+  var sweepT;
+  window.addEventListener('scroll', function () {
+    clearTimeout(sweepT);
+    sweepT = setTimeout(sweepPreviews, 150);
+  }, { passive: true });
+  window.addEventListener('resize', function () {
+    clearTimeout(sweepT);
+    sweepT = setTimeout(sweepPreviews, 150);
+  });
+
+  /* ---------- gate ---------- */
+
+  function gateFail(msg) {
+    els.gateSpinner.style.display = 'none';
+    els.gate.querySelector('h1').textContent = 'No font list found';
+    els.gateMsg.innerHTML = msg;
+  }
+
+  function finish(rows) {
+    fonts = rows.map(parseFontLine).filter(Boolean);
+
+    // fetch file sizes lazily (from the static server's Content-Length or
+    // from font-meta.js's size field when available)
+    fonts.forEach(function (f) {
+      f.bytes = (window.FONT_META || {})[f.rel] && (window.FONT_META || {})[f.rel].b || 0;
+    });
+
+    injectFontFaces();
+
+    // populate the style filter
+    var styles = new Set();
+    fonts.forEach(function (f) {
+      if (f.style) {
+        var sl = f.style.toLowerCase();
+        if (sl.indexOf('italic') >= 0 || sl.indexOf('oblique') >= 0) styles.add('Italic');
+        else if (sl.indexOf('bold') >= 0) styles.add('Bold');
+        else if (sl) styles.add('Other');
+        else styles.add('Regular');
+      } else {
+        styles.add('Regular');
+      }
+    });
+    ['Regular', 'Bold', 'Italic', 'Other'].forEach(function (s) {
+      if (!styles.has(s)) return;
+      var o = document.createElement('option');
+      o.value = s.toLowerCase(); o.textContent = s;
+      els.styleFilter.appendChild(o);
+    });
+
+    // format filter
+    var fmts = new Set(fonts.map(function (f) { return f.ext; }));
+    Array.from(fmts).sort().forEach(function (e) {
+      var o = document.createElement('option');
+      o.value = e; o.textContent = e.toUpperCase();
+      els.fmtFilter.appendChild(o);
+    });
+
+    // restore state
+    var sv = localStorage.getItem('fgf-size'); if (sv !== null) els.fsize.value = sv;
+    var ss = localStorage.getItem('fgf-sort'); if (ss) els.sort.value = ss;
+    state.sort = els.sort.value;
+    var sp = localStorage.getItem('fgf-preview');
+    if (sp) els.previewText.value = sp;
+    state.fsize = +els.fsize.value;
+    els.fsizeReadout.textContent = state.fsize + 'px';
+    els.grid.style.setProperty('--fsize', state.fsize + 'px');
+
+    els.previewText.addEventListener('change', function () {
+      localStorage.setItem('fgf-preview', this.value);
+    });
+
+    applyFilters();
+    els.gate.classList.add('hidden');
+  }
+
+  // boot: read fonts-list.txt (http) or window.FONT_LIST (file://)
+  if (Array.isArray(window.FONT_LIST) && window.FONT_LIST.length) {
+    finish(window.FONT_LIST);
+  } else {
+    fetch('fonts-list.txt?imported=' + Date.now())
+      .then(function (r) {
+        if (!r.ok) throw new Error(r.status);
+        return r.text();
+      })
+      .then(function (text) {
+        var rows = text.split('\n').filter(Boolean);
+        if (!rows.length) throw new Error('empty');
+        finish(rows);
+      })
+      .catch(function (err) {
+        gateFail('Could not read <code>fonts-list.txt</code> (' + esc(err.message) + ').<br><br>' +
+          'Generate it with:<br><br><code>bash scan-fonts.sh</code><br><br>' +
+          'or run <code>install.sh</code>.');
+      });
+  }
+})();
+</script>
+</body>
+</html>
