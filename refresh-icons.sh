@@ -80,7 +80,10 @@ fi
 # find runs to a temp file first: a `while read < <(find ...)` process
 # substitution would run in a subshell and lose the conversion counters
 FILES=$(mktemp) || exit 1
-find "$ICONS_DIR" -type f > "$FILES"
+# -type f alone would skip symlinks (--icons link installs): a linked file
+# would look deleted here and get pruned from list.txt. -type l adds the
+# links; the per-file `[ -f ]` below still filters out dangling ones.
+find "$ICONS_DIR" \( -type f -o -type l \) > "$FILES"
 
 MANUAL=$(mktemp) || exit 1
 MANUAL_CONVERSIONS=0

@@ -6,8 +6,10 @@
 A single-file, dependency-free showcase for the icon themes and icon folders
 on your machine — on Linux, macOS or Windows. Point it at any folder of
 icons (or your installed system themes) and get a filterable, searchable,
-size-adjustable grid of every icon, with one-click copy of each icon's name
-and an optional QR-code webshare for your phone.
+size-adjustable grid of every icon, with one-click copy of each icon's name,
+an import button that pulls sets from local folders, zip archives, git
+repositories, or a catalog of 200+ open-source icon sets, and an optional
+QR-code webshare for your phone.
 
 ![fengrid screenshot — light and dark themes side by side](docs/assets/screenshot.png)
 
@@ -46,8 +48,12 @@ page — no build step, no runtime, no server required.
 - **Mobile-friendly layout** — responsive controls, swipeable filter chips,
   44px touch targets, tap-to-select on phones, and a one-tap control
   collapse for a full-page grid (phones start with it collapsed)
-- **QR webshare (optional)** — a tiny local webserver publishes the showcase
-  to your local network; open the connect page on any desktop and scan the
+- **Local web server by default** — `fengrid` starts a loopback-only server
+  and opens `http://127.0.0.1:8642/`, so the refresh button and
+  ImageMagick-powered export work without any setup in every browser;
+  `fengrid --file` opens the plain file when Python is unavailable
+- **QR webshare (optional)** — the same local webserver can be exposed to
+  your local network; open the connect page on any desktop and scan the
   QR with a phone. Same-origin serving means no CORS issues, and directory
   listings are disabled
 - **Light & dark modes** — persisted between visits

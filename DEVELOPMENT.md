@@ -124,9 +124,12 @@ Both are deliberately conservative:
   are kept away from hidden dirs); custom locations allowed,
   hidden/root-owned paths require a second confirmation
 - The launcher (`~/.local/bin/fengrid` on Linux/macOS, `fengrid.cmd`
-  on Windows) is a tiny **script** that opens the *real* install path —
-  not a symlink to the HTML: browsers keep the symlink's own URL, which
-  would resolve page-relative assets under the launcher folder and break
+  on Windows) is a tiny **script** that starts the install's local web
+  server (loopback bind) and opens `http://127.0.0.1:8642/` — not a
+  symlink to the HTML: browsers keep the symlink's own URL, which would
+  resolve page-relative assets under the launcher folder and break. It
+  reuses a server that is already up on the port and falls back to the
+  plain file when Python is missing (`--file` forces that)
 - `--uninstall` / `-Uninstall` asks per location, knows all historical
   install locations, removes only launchers it created, refuses dirs that
   don't look like an install, and protects the running repository
@@ -154,8 +157,12 @@ link into its target.
   and only falls back to the server-injected LAN URL when opened from a
   loopback address — so the QR always encodes something a phone can open
 
-On Windows the same goal is reached with `python serve.py` if Python is
-installed; no PowerShell-native server is provided in this release.
+Both installers default to the server: `install.sh` writes a bash
+launcher and `install.ps1` a `fengrid.cmd`, each starting `serve.py` on the
+loopback interface and opening `http://127.0.0.1:8642/` (reusing a server
+already up on the port; plain-file fallback without Python or via
+`--file`). The LAN webshare below (bind `0.0.0.0`) is enabled by the
+install by default now (`--no-webshare` to skip).
 
 ## Versioning & releases
 
@@ -253,6 +260,40 @@ through; `src` must be the `icons/`-prefixed relative path). On `file://`
 pages the browser rebuilds PNG/JPEG/WebP via canvas and falls back to
 saving the original file for other formats.
 
+## Import endpoint (server/serve.py + import_engine.py)
+
+The import button opens a modal with four sources, all funnelled through
+`/import`:
+
+- `GET /import?kind=folder&path=<dir>&name=<theme>` — copies the
+  previewable files (png/svg/ico/jpg/webp/gif/bmp; xpm/icns converted via
+  ImageMagick when available) of a server-local directory into
+  `icons/<theme>/`.
+- `POST /import` (multipart) — folder picks and `.zip` uploads from the
+  browser. Files carry their path relative to the picked folder's root as
+  the multipart `filename`; the server writes them to a temp dir and runs
+  the same import. Zip members are vetted against path traversal (no
+  absolute paths, drive letters, or `..`).
+- `GET /import?kind=url&url=<url>&name=<theme>` — downloads a git
+  repository (shallow clone) or an archive (`.zip`, `.tar.gz`, `.tar.xz`,
+  `.7z`, …) and imports its contents. Code-hosting archive endpoints
+  (codeload URLs ending in a branch name) are detected by path shape.
+- `GET /import?kind=iconify&set=<prefix>` — downloads the set's Iconify
+  JSON from `fengrid/icon-sets` and renders one SVG file per icon
+  (aliases resolved, dimensions from the set/icon defaults).
+- `GET /import?kind=catalog` — the live catalog from `collections.json`
+  (hidden sets excluded), returned as a JSON array for the browser.
+
+`server/import_engine.py` holds the engine: theme-name sanitisation and
+collision avoidance (`My Set!!` → `My-Set`, existing names get `-2`),
+path-safe archive unpacking (PEP 706 tar filters; manual zip vetting), and
+an SVG namespace fix — `<img>`-loaded SVGs must declare `xmlns`; sets that
+omit it are patched on import so they don't render as MISSING cards.
+
+After every import the endpoint runs the same refresh + metadata pipeline
+as the refresh button, so the new set appears in the source chips and gets
+its hover specs immediately. One import/refresh runs at a time (HTTP 409).
+
 ## Refresh endpoint (server/serve.py)
 
 `GET /refresh?mode=enabled|force` runs the install's `refresh-icons.sh` and
@@ -260,7 +301,13 @@ saving the original file for other formats.
 (plain click sends `enabled`, Shift-click sends `force`). One refresh runs
 at a time (HTTP 409 when busy); the JSON reply carries a summary the page
 toasts before reloading. On `file://` pages there is no server: the CLI
-(`fengrid-refresh`) is the way to refresh.
+(`fengrid-refresh`) is the way to refresh. The `fengrid` launcher makes
+this rare — it starts `serve.py --host 127.0.0.1 --kill-existing` in the
+background (log: `~/.local/state/fengrid/server.log`) and opens the page
+over `http://127.0.0.1:8642/`; `fengrid --file` opts out. The loopback
+bind keeps the launcher's server invisible to the LAN (unlike the QR
+webshare, which binds `0.0.0.0` on request). CORS stays refused by
+design, so a `file://`-opened page still cannot drive the server.
 
 ## Testing
 

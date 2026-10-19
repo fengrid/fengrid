@@ -43,6 +43,8 @@
     --accent-ink: #101418;
     --accent-soft: rgba(57, 184, 196, 0.14);
     --hl: #F5C25C;                        /* lit pane — the one warm light */
+    --hl-ink: #F5C25C;                    /* lit-pane text: readable on dark surfaces */
+    --hl-contrast: #101418;               /* text sitting ON an amber fill */
     --hl-soft: rgba(245, 194, 92, 0.15);
     --checker: rgba(255, 255, 255, 0.02);
     --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
@@ -59,7 +61,9 @@
     --accent: #0E7C86;                    /* pane teal */
     --accent-ink: #FFFFFF;
     --accent-soft: rgba(14, 124, 134, 0.12);
-    --hl: #F5B841;                        /* warm light through glass */
+    --hl: #F5B841;                        /* warm light through glass (borders, fills) */
+    --hl-ink: #A16207;                    /* lit-pane text, daylight-darkened for AA contrast */
+    --hl-contrast: #16202B;               /* text sitting ON an amber fill */
     --hl-soft: rgba(245, 184, 65, 0.15);
     --checker: rgba(0, 0, 0, 0.018);
     --shadow: 0 12px 32px rgba(22, 32, 43, 0.12);
@@ -257,7 +261,7 @@
   .copy-btn { right: 6px; }
   .export-btn { left: 6px; }
   .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
-  .export-btn:hover { color: var(--hl); border-color: var(--hl); }
+  .export-btn:hover { color: var(--hl-ink); border-color: var(--hl); }
   .copy-btn.copied { color: var(--accent); border-color: var(--accent); opacity: 1; }
   .card:hover .copy-btn, .card:hover .export-btn,
   .card.menu-open .copy-btn, .card.menu-open .export-btn { opacity: 1; }
@@ -280,9 +284,9 @@
     font-size: 10.5px; padding: 3px 8px; border-radius: 5px;
   }
   .export-menu .exp-btn.size.active {
-    background: var(--hl); border-color: var(--hl); color: var(--bg); font-weight: 500;
+    background: var(--hl); border-color: var(--hl); color: var(--hl-contrast); font-weight: 500;
   }
-  .export-menu .exp-btn.more { width: 100%; text-align: center; color: var(--hl); border-color: var(--border); }
+  .export-menu .exp-btn.more { width: 100%; text-align: center; color: var(--hl-ink); border-color: var(--border); }
   .export-menu .exp-btn.more:hover { border-color: var(--hl); }
 
   /* ---------- inspector (hover details) ---------- */
@@ -298,13 +302,13 @@
   #inspector.active { border-top: 2px solid var(--hl); }
   #inspector .details-tag {
     font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.18em;
-    text-transform: uppercase; color: var(--hl); border: 1px solid var(--hl);
+    text-transform: uppercase; color: var(--hl-ink); border: 1px solid var(--hl);
     background: var(--hl-soft); padding: 2px 8px; border-radius: 4px;
     font-weight: 500; flex: none;
   }
   #inspector .name {
-    color: var(--hl); font-weight: 500; font-size: 13.5px;
-    text-decoration: underline; text-decoration-color: var(--hl);
+    color: var(--hl-ink); font-weight: 500; font-size: 13.5px;
+    text-decoration: underline; text-decoration-color: var(--hl-ink);
     text-decoration-thickness: 2px; text-underline-offset: 4px;
   }
   #inspector .insp-row {
@@ -315,7 +319,7 @@
   #inspector .spec { white-space: nowrap; }
   #inspector .spec b { color: var(--ink); font-weight: 500; }
   #inspector .mono-chip {
-    color: var(--hl); border: 1px solid var(--hl); background: var(--hl-soft);
+    color: var(--hl-ink); border: 1px solid var(--hl); background: var(--hl-soft);
     border-radius: 4px; padding: 1px 7px; font-size: 10px; letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -331,16 +335,16 @@
     background: var(--surface-2); color: var(--ink-muted);
     border: 1px solid var(--border-strong); border-radius: 6px; padding: 5px 11px;
   }
-  .insp-btn:hover { color: var(--hl); border-color: var(--hl); }
+  .insp-btn:hover { color: var(--hl-ink); border-color: var(--hl); }
 
   /* tag pills (inspector + tag manager) */
   .tag-pill {
     font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em;
-    background: var(--hl-soft); color: var(--hl);
+    background: var(--hl-soft); color: var(--hl-ink);
     border: 1px solid var(--hl); border-radius: 99px;
     padding: 2px 10px; cursor: pointer; white-space: nowrap;
   }
-  .tag-pill:hover { background: var(--hl); color: var(--bg); }
+  .tag-pill:hover { background: var(--hl); color: var(--hl-contrast); }
 
   /* tags & collections manager + export modal (wide modal-cards) */
   .tag-input-row { display: flex; gap: 8px; margin: 8px 0; }
@@ -372,10 +376,29 @@
     border: 1px solid var(--border-strong); border-radius: 8px;
     padding: 7px 14px; cursor: pointer;
   }
-  .exp-btn:hover { color: var(--hl); border-color: var(--hl); }
-  .exp-btn.active { background: var(--hl); border-color: var(--hl); color: var(--bg); font-weight: 500; }
+  .exp-btn:hover { color: var(--hl-ink); border-color: var(--hl); }
+  .exp-btn.active { background: var(--hl); border-color: var(--hl); color: var(--hl-contrast); font-weight: 500; }
   .exp-note { font-size: 12.5px; color: var(--ink-muted); margin-top: 10px; line-height: 1.5; }
-  .exp-note code { font-family: var(--font-mono); color: var(--hl); }
+  .exp-note code { font-family: var(--font-mono); color: var(--hl-ink); }
+
+  /* import modal (folder / archive / url / catalog) */
+  .imp-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 0; }
+  .imp-row label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-faint); flex: none; width: 128px; }
+  .imp-input { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink);
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-radius: 8px; padding: 7px 10px; flex: 1; min-width: 0; }
+  .imp-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .imp-file { font-family: var(--font-mono); font-size: 12px; color: var(--ink); margin-top: 8px; }
+  .imp-sets { margin-top: 8px; max-height: 320px; overflow-y: auto; border: 1px solid var(--border);
+    border-radius: 10px; }
+  .imp-set { display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); }
+  .imp-set:last-child { border-bottom: none; }
+  .imp-set .nm { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink); flex: none; }
+  .imp-set .meta { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-faint);
+    flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imp-set .exp-btn { padding: 4px 10px; flex: none; }
 
   /* mobile collapse: hide the whole search/filter section for a full-page
      grid (the button is rendered inside the title row, phone widths only) */
@@ -468,6 +491,9 @@
     </button>
     <button class="icon-btn" id="refresh-btn" title="Refresh icon list &amp; metadata — Shift-click to re-scan everything" aria-label="Refresh icons and metadata">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+    <button class="icon-btn" id="import-btn" title="Import icon sets — local folder, archive, URL / git repo, or the open-source catalog" aria-label="Import icon sets" aria-haspopup="dialog">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg>
     </button>
     <button class="icon-btn" id="mode-btn" title="Toggle light / dark" aria-label="Toggle light or dark mode">
       <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -574,6 +600,73 @@
   </div>
 </div>
 
+<div id="import-modal" class="modal-overlay" hidden>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Import icon sets">
+    <div class="modal-head">
+      <span class="label" style="color:var(--hl-ink)">Import icon sets</span>
+      <button class="icon-btn" id="import-close" title="Close" aria-label="Close import dialog">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="help-scroll">
+      <div class="exp-grid" id="imp-tabs" role="tablist">
+        <button class="exp-btn active" data-tab="folder" role="tab" aria-selected="true">Folder</button>
+        <button class="exp-btn" data-tab="archive" role="tab" aria-selected="false">Archive (.zip)</button>
+        <button class="exp-btn" data-tab="url" role="tab" aria-selected="false">URL / git repo</button>
+        <button class="exp-btn" data-tab="browse" role="tab" aria-selected="false">Browse sets</button>
+      </div>
+
+      <div class="imp-panel" data-panel="folder">
+        <p class="exp-note">Import a folder from this machine. Browsers can't
+        hand the page a filesystem path, so the picker uploads the files
+        through the local server — or type a server-local path (e.g. a
+        system theme directory) instead.</p>
+        <input type="file" id="imp-folder-input" webkitdirectory multiple hidden>
+        <div class="exp-grid">
+          <button class="exp-btn" id="imp-folder-pick">Browse for a folder…</button>
+        </div>
+        <div class="imp-row"><label>Theme name</label><input type="text" id="imp-folder-name" class="imp-input" placeholder="(folder name)"></div>
+        <div class="imp-row"><label>or server-local path</label><input type="text" id="imp-folder-path" class="imp-input" placeholder="/usr/share/icons/SomeTheme"></div>
+        <div class="exp-grid"><button class="exp-btn" id="imp-folder-go">Import from path</button></div>
+      </div>
+
+      <div class="imp-panel" data-panel="archive" hidden>
+        <p class="exp-note">Select a <code>.zip</code> archive — it is uploaded,
+        unpacked safely, and its icon files land in a new theme folder.
+        Other formats (tar.gz, 7z, git repos) work through the URL tab.</p>
+        <input type="file" id="imp-zip-input" accept=".zip" hidden>
+        <div class="exp-grid"><button class="exp-btn" id="imp-zip-pick">Choose a .zip…</button></div>
+        <div class="imp-row"><label>Theme name</label><input type="text" id="imp-zip-name" class="imp-input" placeholder="(archive name)"></div>
+        <div id="imp-zip-file" class="imp-file"></div>
+        <div class="exp-grid"><button class="exp-btn" id="imp-zip-go" disabled>Import archive</button></div>
+      </div>
+
+      <div class="imp-panel" data-panel="url" hidden>
+        <p class="exp-note">Paste a URL to a git repository
+        (github.com/…/repo — cloned shallow) or to an archive
+        (<code>.zip</code>, <code>.tar.gz</code>, <code>.tar.xz</code>,
+        <code>.7z</code>, …), or a local archive path the server can read.
+        It is downloaded, unpacked, and imported into a new theme folder.</p>
+        <div class="imp-row"><label>URL or path</label><input type="text" id="imp-url" class="imp-input" placeholder="https://github.com/user/icons/archive/refs/heads/main.zip"></div>
+        <div class="imp-row"><label>Theme name</label><input type="text" id="imp-url-name" class="imp-input" placeholder="(derived from the source)"></div>
+        <div class="exp-grid"><button class="exp-btn" id="imp-url-go">Download &amp; import</button></div>
+      </div>
+
+      <div class="imp-panel" data-panel="browse" hidden>
+        <p class="exp-note">200+ open-source icon sets from
+        <a href="https://github.com/fengrid/icon-sets" target="_blank" rel="noopener">fengrid/icon-sets</a>
+        — fetched live, downloaded on import, and rendered into a theme
+        folder with every license shown. Check an author's license terms
+        before using their icons.</p>
+        <input type="text" id="imp-cat-search" class="imp-input" placeholder="search sets, categories, licenses…" style="width:100%">
+        <div id="imp-cat-list" class="imp-sets"></div>
+      </div>
+
+      <div class="exp-note" id="imp-status"></div>
+    </div>
+  </div>
+</div>
+
 <div id="help-modal" class="modal-overlay" hidden>
   <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Help and guide">
     <div class="modal-head">
@@ -625,7 +718,9 @@
 
       <h3>Share on your network (QR)</h3>
       <p>The <b>QR button</b> shows a scannable code for opening this showcase
-      on a phone or tablet. It needs the local web server running:</p>
+      on a phone or tablet. It needs the local web server running — the
+      <code>fengrid</code> launcher starts one automatically (local-only), or
+      start a shareable one manually:</p>
       <p><code>cd ~/fengrid/server &amp;&amp; python3 serve.py</code></p>
       <p>If the server was started after you opened this page, tap the QR
       button again — it re-reads the server state each time.</p>
@@ -658,13 +753,28 @@
         <code>refresh-icons.sh</code> inside the install folder) and reload.
         Files dropped loose in <code>icons/</code> are filed under the
         <code>Manual</code> theme; <code>.icns</code>/<code>.xpm</code> files
-        are converted to PNG when a converter is available.</li>
+        are converted to PNG when a converter is available. With
+        <code>--icons link</code> installs the scanned entries are symlinks
+        to the originals — your own drops are still real files, and
+        uninstalling never follows the links.</li>
+        <li><b>Importing icon sets</b> — the <b>folder-plus button</b> in the
+        title row imports sets four ways: pick a local folder (uploaded
+        through the local server), choose a <code>.zip</code> archive, point
+        at a git repository or archive URL (<code>.tar.gz</code>,
+        <code>.7z</code>, …), or browse 200+ open-source icon sets from
+        <code>fengrid/icon-sets</code> with licenses shown. Everything lands
+        in a theme folder under <code>icons/</code> and is scanned for
+        metadata automatically — reload shows it in the source chips.</li>
         <li><b>Updates</b> — <code>fengrid-update --check</code> checks
         for a newer release; the weekly cron job (if enabled) does this
         automatically.</li>
         <li><b>Refreshing</b> — the circular-arrows button in the title row
         re-scans the <code>icons/</code> folder and updates the metadata
         through the web server (Shift-click re-identifies <i>every</i> icon).
+        The <code>fengrid</code> launcher starts that server automatically
+        (local-only, loopback bind) and opens the page over
+        <code>http://</code>, so refresh and every export format work out of
+        the box; <code>fengrid --file</code> opens the plain file instead.
         From the shell the same thing is <code>fengrid-refresh</code>;
         all scripts accept <code>--update-metadata enabled|disabled|force</code>.</li>
       </ul>
@@ -675,7 +785,7 @@
 <div id="export-modal" class="modal-overlay" hidden>
   <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Export icon">
     <div class="modal-head">
-      <span class="label" style="color:var(--hl)">Export</span>
+      <span class="label" style="color:var(--hl-ink)">Export</span>
       <button class="icon-btn" id="export-close" title="Close" aria-label="Close export dialog">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -694,7 +804,7 @@
 <div id="tag-modal" class="modal-overlay" hidden>
   <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Tags and collections">
     <div class="modal-head">
-      <span class="label" style="color:var(--hl)">Tags &amp; collections</span>
+      <span class="label" style="color:var(--hl-ink)">Tags &amp; collections</span>
       <button class="icon-btn" id="tag-close" title="Close" aria-label="Close tags dialog">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -796,20 +906,25 @@
 
   function parseLine(line) {
     line = line.trim();
-    if (!line || line[0] !== '/') return null;
+    // POSIX absolute paths and Windows drive paths (D:/...) are both accepted;
+    // the Windows installers write drive paths into list.txt
+    if (!line || (line[0] !== '/' && !/^[A-Za-z]:\//.test(line))) return null;
     var marker = '/icons/';
     var mi = line.indexOf(marker);
     var rel, theme;
     if (mi !== -1) {
       rel = line.slice(mi + marker.length);
-      theme = rel.slice(0, rel.indexOf('/')) || 'other';
+      var slash = rel.indexOf('/');
+      theme = slash === -1 ? 'other' : rel.slice(0, slash);
     } else {
-      // custom root: theme = first dir under the scan root's parent is unknowable;
-      // treat the parent directory name as the theme
+      // custom root: the installer copies these flat as icons/<theme>/<file>,
+      // where theme = the file's parent directory name. Build rel from the
+      // LAST two segments — slicing at indexOf(theme) breaks whenever the
+      // theme name also occurs earlier in the path.
       var segs = line.split('/');
-      segs.pop();
+      var f = segs.pop();
       theme = segs.pop() || 'other';
-      rel = line.slice(line.indexOf(theme));
+      rel = theme + '/' + f;
     }
     var segs = rel.split('/');
     var file = segs.pop();
@@ -818,11 +933,19 @@
     var name = file.slice(0, dot);
     var ext = file.slice(dot + 1).toLowerCase();
     var size = '', px = 0, context = '';
-    if (segs.length && (SIZE_RE.test(segs[0]) || segs[0] === 'scalable')) {
-      var m = segs[0].match(SIZE_RE);
-      if (m) { size = segs[0]; px = parseInt(m[1], 10) * (m[2] ? 2 : 1); }
+    // rel starts with the theme segment, so the size directory (16x16,
+    // 32x32@2, scalable, ...) can sit at any position — find it, and the
+    // context is the directory inside it (documented layout). Custom-root
+    // copies are flat, so segs is just [theme] and context falls back to it.
+    var sizeIdx = -1;
+    for (var i = 0; i < segs.length; i++) {
+      if (SIZE_RE.test(segs[i]) || segs[i] === 'scalable') { sizeIdx = i; break; }
+    }
+    if (sizeIdx !== -1) {
+      var m = segs[sizeIdx].match(SIZE_RE);
+      if (m) { size = segs[sizeIdx]; px = parseInt(m[1], 10) * (m[2] ? 2 : 1); }
       else { size = 'scalable'; px = 512; }
-      context = segs.length > 1 ? segs[1] : '';
+      context = sizeIdx + 1 < segs.length ? segs[sizeIdx + 1] : '';
     } else {
       context = segs.length ? segs[0] : '';
     }
@@ -1230,7 +1353,7 @@
      On file:// pages there is no server to run scripts — point at the CLI. */
   els.refreshBtn.addEventListener('click', function (e) {
     if (!overHttp()) {
-      toast('Start the web server to refresh from here — or run: fengrid-refresh');
+      toast('Open fengrid with its launcher (starts the local server), or run: fengrid-refresh');
       return;
     }
     if (els.refreshBtn.dataset.busy) return;
@@ -1455,6 +1578,233 @@
     });
   })();
 
+  /* import modal — folder/zip uploads and server-side URL/git/catalog
+     imports all go through serve.py's /import (refresh + metadata included) */
+  (function () {
+    var modal = document.getElementById('import-modal');
+    if (!modal) return;
+    var statusEl = document.getElementById('imp-status');
+    var busy = false;
+    var esc = function (s) {  // local esc — the QR modal's esc is not in scope
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    };
+
+    function setStatus(msg, loading) {
+      statusEl.innerHTML = loading ? '<span class="spinning" style="display:inline-block"></span> ' + msg : msg;
+    }
+    function close() {
+      modal.hidden = true;
+      statusEl.innerHTML = '';
+    }
+    document.getElementById('import-btn').addEventListener('click', function () {
+      if (!overHttp()) {
+        toast('Open fengrid with its launcher (starts the local server) to import icon sets');
+        return;
+      }
+      modal.hidden = false;
+    });
+    document.getElementById('import-close').addEventListener('click', close);
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) close();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !modal.hidden) {
+        e.stopPropagation();
+        close();
+      }
+    });
+
+    function switchTab(name) {
+      document.querySelectorAll('#imp-tabs .exp-btn').forEach(function (b) {
+        var on = b.dataset.tab === name;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      document.querySelectorAll('.imp-panel').forEach(function (p) {
+        p.hidden = p.dataset.panel !== name;
+      });
+      if (name === 'browse') loadCatalog();
+    }
+    document.getElementById('imp-tabs').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-tab]');
+      if (b) switchTab(b.dataset.tab);
+    });
+
+    function summarize(r) {
+      var bits = [];
+      if (r.imported != null) bits.push(r.imported + ' icons');
+      if (r.set) bits.push('set: ' + r.set);
+      if (r.license) bits.push('license: ' + r.license);
+      return 'Imported <b>' + esc(r.theme || '?') + '</b>' +
+        (bits.length ? ' — ' + bits.join(', ') : '') +
+        ' in ' + r.seconds + 's' +
+        (r.notes && r.notes.length ? '<br><span style="font-size:11px">' +
+          r.notes.map(esc).join('<br>') + '</span>' : '');
+    }
+    function afterImport(r) {
+      setStatus(summarize(r));
+      toast('Imported ' + r.theme + ' — reloading');
+      setTimeout(function () { location.reload(); }, 900);
+    }
+    function fail(msg) { setStatus('<span style="color:var(--accent)">Import failed: ' + esc(msg) + '</span>'); }
+
+    function guardBusy() {
+      if (busy) { return true; }
+      busy = true;
+      return false;
+    }
+    function unbusy() { busy = false; }
+
+    // manual multipart assembly — the server parses it with email.parser
+    function multipart(fields, files) {
+      var B = 'fengridImportForm';
+      var parts = [];
+      Object.keys(fields).forEach(function (k) {
+        parts.push(new Blob(['--' + B + '\r\nContent-Disposition: form-data; name="' +
+          k + '"\r\n\r\n' + fields[k] + '\r\n']));
+      });
+      files.forEach(function (f) {
+        parts.push(new Blob(['--' + B + '\r\nContent-Disposition: form-data; name="files"; filename="' +
+          f.rel.replace(/"/g, '\\"') + '"\r\nContent-Type: application/octet-stream\r\n\r\n']));
+        parts.push(f.file);
+        parts.push(new Blob(['\r\n']));
+      });
+      parts.push(new Blob(['--' + B + '--\r\n']));
+      return { body: new Blob(parts), type: 'multipart/form-data; boundary=' + B };
+    }
+    function postMultipart(fields, files) {
+      var m = multipart(fields, files);
+      return fetch('/import', { method: 'POST', headers: { 'Content-Type': m.type }, body: m.body })
+        .then(function (r) { return r.json(); });
+    }
+
+    /* folder tab */
+    var folderInput = document.getElementById('imp-folder-input');
+    var folderName = document.getElementById('imp-folder-name');
+    document.getElementById('imp-folder-pick').addEventListener('click', function () {
+      folderInput.value = '';
+      folderInput.click();
+    });
+    folderInput.addEventListener('change', function () {
+      if (!folderInput.files || !folderInput.files.length) return;
+      var root = folderInput.files[0].webkitRelativePath.split('/')[0];
+      if (!folderName.value) folderName.value = root;
+      var files = Array.prototype.map.call(folderInput.files, function (f) {
+        return { file: f, rel: f.webkitRelativePath.split('/').slice(1).join('/') };
+      }).filter(function (f) { return f.rel; });
+      setStatus('Uploading ' + files.length + ' files from ' + esc(root) + ' …', true);
+      if (guardBusy()) return;
+      postMultipart({ kind: 'folder', name: folderName.value }, files)
+        .then(function (r) { if (r.ok) afterImport(r); else fail(r.error || 'import failed'); })
+        .catch(function (e) { fail(e.message || e); })
+        .finally(unbusy);
+    });
+    document.getElementById('imp-folder-go').addEventListener('click', function () {
+      var path = document.getElementById('imp-folder-path').value.trim();
+      if (!path) return;
+      if (guardBusy()) return;
+      setStatus('Importing from ' + esc(path) + ' …', true);
+      fetch('/import?kind=folder&path=' + encodeURIComponent(path) +
+            '&name=' + encodeURIComponent(folderName.value), { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) { if (r.ok) afterImport(r); else fail(r.error || 'import failed'); })
+        .catch(function (e) { fail(e.message || e); })
+        .finally(unbusy);
+    });
+
+    /* archive tab */
+    var zipInput = document.getElementById('imp-zip-input');
+    var zipName = document.getElementById('imp-zip-name');
+    var zipFile = null;
+    document.getElementById('imp-zip-pick').addEventListener('click', function () {
+      zipInput.value = '';
+      zipInput.click();
+    });
+    zipInput.addEventListener('change', function () {
+      zipFile = zipInput.files && zipInput.files[0] ? zipInput.files[0] : null;
+      document.getElementById('imp-zip-file').textContent = zipFile ?
+        zipFile.name + ' (' + Math.round(zipFile.size / 1024) + ' KB)' : '';
+      if (zipFile && !zipName.value) zipName.value = zipFile.name.replace(/\.zip$/i, '');
+      document.getElementById('imp-zip-go').disabled = !zipFile;
+    });
+    document.getElementById('imp-zip-go').addEventListener('click', function () {
+      if (!zipFile) return;
+      if (guardBusy()) return;
+      setStatus('Uploading and unpacking ' + esc(zipFile.name) + ' …', true);
+      postMultipart({ kind: 'zip', name: zipName.value },
+                     [{ file: zipFile, rel: zipFile.name }])
+        .then(function (r) { if (r.ok) afterImport(r); else fail(r.error || 'import failed'); })
+        .catch(function (e) { fail(e.message || e); })
+        .finally(unbusy);
+    });
+
+    /* url tab */
+    document.getElementById('imp-url-go').addEventListener('click', function () {
+      var url = document.getElementById('imp-url').value.trim();
+      if (!url) return;
+      if (guardBusy()) return;
+      setStatus('Downloading ' + esc(url) + ' …', true);
+      fetch('/import?kind=url&url=' + encodeURIComponent(url) +
+            '&name=' + encodeURIComponent(document.getElementById('imp-url-name').value),
+            { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) { if (r.ok) afterImport(r); else fail(r.error || 'import failed'); })
+        .catch(function (e) { fail(e.message || e); })
+        .finally(unbusy);
+    });
+
+    /* browse tab */
+    var catLoaded = false;
+    function loadCatalog() {
+      if (catLoaded) return;
+      setStatus('Fetching the icon-sets catalog …', true);
+      fetch('/import?kind=catalog', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) return fail(r.error || 'catalog unavailable');
+          catLoaded = true;
+          window.__impCatalog = r.sets;
+          setStatus('');
+          renderCatalog(r.sets, document.getElementById('imp-cat-search').value);
+        })
+        .catch(function (e) { fail(e.message || e); });
+    }
+    function renderCatalog(sets, q) {
+      var list = document.getElementById('imp-cat-list');
+      q = q.toLowerCase();
+      var rows = sets.filter(function (s) {
+        return !q || (s.name + ' ' + s.prefix + ' ' + s.category + ' ' +
+                      s.license + ' ' + s.author).toLowerCase().indexOf(q) >= 0;
+      });
+      list.innerHTML = rows.map(function (s) {
+        return '<div class="imp-set">' +
+          '<span class="nm">' + esc(s.name) + '</span>' +
+          '<span class="meta">' + esc(s.total) + ' · ' + esc(s.category || '—') +
+          ' · ' + esc(s.license) + (s.author ? ' · ' + esc(s.author) : '') + '</span>' +
+          '<button class="exp-btn" data-set="' + esc(s.prefix) + '">Import</button>' +
+          '</div>';
+      }).join('') || '<div class="imp-set"><span class="meta">no sets match</span></div>';
+    }
+    document.getElementById('imp-cat-search').addEventListener('input', function (e) {
+      if (window.__impCatalog) renderCatalog(window.__impCatalog, e.target.value);
+    });
+    var catList = document.getElementById('imp-cat-list');
+    catList.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-set]');
+      if (!b || busy) return;
+      var prefix = b.dataset.set;
+      busy = true;
+      setStatus('Downloading and rendering ' + esc(prefix) + ' …', true);
+      fetch('/import?kind=iconify&set=' + encodeURIComponent(prefix), { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (r) { if (r.ok) afterImport(r); else fail(r.error || 'import failed'); })
+        .catch(function (x) { fail(x.message || x); })
+        .finally(function () { busy = false; });
+    });
+  })();
+
   /* export modal — ImageMagick conversions via serve.py over http; canvas
      fallback for plain file:// installs */
   var EX_FORMATS = [
@@ -1566,11 +1916,12 @@
         '(ico exports bundle 16/24/32/48/64 px frames).';
       return;
     }
-    note.innerHTML = 'This page was opened as a file, so sizes and PNG/JPEG/WebP are ' +
+    note.innerHTML = 'This page was opened as a plain file, so sizes and PNG/JPEG/WebP are ' +
       'rebuilt in the browser (canvas). For ICO, PDF, TIFF and ImageMagick-quality ' +
-      'conversions, start the local server:<br><br>' +
-      '<code>cd ~/fengrid/server &amp;&amp; python3 serve.py</code><br><br>' +
-      '…then open the page through its <code>http://</code> address.';
+      'conversions — and the refresh button — open fengrid with its launcher, which ' +
+      'starts the local server and serves the page over <code>http://</code>:<br><br>' +
+      '<code>fengrid</code><br><br>' +
+      '(manual start: <code>cd ~/fengrid/server &amp;&amp; python3 serve.py</code>)';
   }
 
   function renderExportModal() {
@@ -1717,7 +2068,7 @@
     var cur = document.getElementById('tag-cur');
     var sugg = document.getElementById('tag-sugg');
     document.getElementById('tag-target').innerHTML = g
-      ? 'Tagging: <span style="font-family:var(--font-mono); color:var(--hl);">' + esc(g.name) + '</span> <span style="color:var(--ink-faint); font-size:11px;">(' + esc(g.theme) + ' / ' + esc(g.context) + ')</span>'
+      ? 'Tagging: <span style="font-family:var(--font-mono); color:var(--hl-ink);">' + esc(g.name) + '</span> <span style="color:var(--ink-faint); font-size:11px;">(' + esc(g.theme) + ' / ' + esc(g.context) + ')</span>'
       : '';
     inputRow.style.display = g ? 'flex' : 'none';
     noicon.style.display = g ? 'none' : 'block';
@@ -1998,7 +2349,7 @@
   if (Array.isArray(window.ICON_LIST) && window.ICON_LIST.length) {
     finish(window.ICON_LIST.map(parseLine).filter(Boolean));
   } else {
-    fetch('list.txt')
+    fetch('list.txt?imported=' + Date.now())  // cache-buster: imports change the list without a version bump
       .then(function (r) {
         if (!r.ok) throw new Error(r.status);
         return r.text();

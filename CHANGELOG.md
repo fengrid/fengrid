@@ -4,6 +4,101 @@ All notable changes to this project are documented in this file. Format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Windows paths were dropped by the page's list parser** — `parseLine`
+  rejected any `list.txt` line not starting with `/`, so Windows drive
+  paths (`D:/Library/.../icon.png`) yielded zero icons. It now accepts
+  drive paths, derives the relative path from the last two segments (a
+  theme name recurring earlier in the path no longer corrupts it), and
+  finds the size directory (`16x16`, `32x32@2`, `scalable`, …) anywhere
+  in the path — previously the size dir was only detected when it
+  directly followed `/icons/`, so theme-style layouts never got sizes
+  and their context fell back to the theme name (contrary to the
+  documented layout).
+- **Windows launcher (`fengrid.cmd`) set an empty `APP_DIR`** — inside a
+  PowerShell array literal the comma operator binds tighter than `+`, so
+  the unparenthesized `'set "APP_DIR=' + $InstallDir + '"'` in
+  `install.ps1` was parsed as three separate array elements and the
+  generated launcher had `APP_DIR` split across three lines; the
+  server-launch path could never work. The expression is now
+  parenthesized.
+
+- **Windows installer (`install.ps1`) rejects pasted paths** — entering
+  `"D:\Library\Design Library\Icons"` (as produced by Explorer's *Copy as
+  path* or PowerShell tab completion) failed the directory check even when
+  the folder existed. Typed paths are now normalized: surrounding quotes
+  and whitespace stripped, `~` expanded, and all user-supplied paths are
+  checked with `-LiteralPath` so `[`/`]` in folder names no longer act as
+  wildcards. The skip message now distinguishes "it is a file" from
+  "directory not found".
+
+### Added
+
+- **Import icon sets** — a new folder-plus button in the title row opens an
+  import modal with four sources: a local folder (browser picker or
+  server-local path), a `.zip` archive, a git repository or archive URL
+  (`.tar.gz`, `.7z`, …), and a live catalog of 200+ open-source icon sets
+  from [fengrid/icon-sets](https://github.com/fengrid/icon-sets) with
+  license and author shown per set. Every import lands in its own theme
+  folder under `icons/` and is scanned for metadata automatically
+  (`server/import_engine.py`; `GET/POST /import` in serve.py). Theme names
+  are sanitised and de-duplicated; archive extraction is path-traversal
+  safe; SVGs missing the `xmlns` namespace are patched on import so they
+  render in `<img>` tags instead of showing as MISSING cards.
+- **Icon storage modes (`--icons copy|link|hardlink`)** — copying all icons
+  into `icons/` is still the default (fully self-contained), but the
+  installer can now **symlink** each icon file to its original (no
+  duplicated disk; edits to the originals appear immediately;
+  `rm -rf` on uninstall removes only the links, never the system themes)
+  or **hardlink** them (no extra disk on the same filesystem, silently
+  falls back to a copy across devices). `fengrid-refresh` and
+  `icon-meta.sh` are symlink-aware: linked files are enumerated, scanned,
+  and fingerprinted exactly like real ones, and dangling links are
+  dropped rather than breaking the scan. Windows: `install.ps1
+  -IconMode hardlink` (per-file hardlinks, copy fallback on refusal).
+
+### Fixed
+
+- **Light-theme hover details were nearly invisible** — the details bar,
+  DETAILS badge, and icon name used the lit-pane amber (`#F5B841`) as text
+  on white (~1.8:1 contrast). Text now uses a daylight-darkened honey amber
+  (`#A16207`, ~4.9:1, AA); bright amber is reserved for borders, outlines,
+  underlines, and hovers. Text on amber fills (active format buttons, tag
+  pills) uses dark ink in both themes. Dark theme is unchanged.
+- **Loopback servers advertised a LAN URL** — a server started by the
+  launcher (`--host 127.0.0.1`) reported the machine's LAN IP in
+  `server-state.js`, so the QR button offered an unreachable address.
+  Loopback servers now advertise `http://127.0.0.1:<port>/` and no LAN
+  alternates.
+
+### Changed
+
+- **The LAN webshare is on by default** — the install prompt now reads
+  `[Y/n]`, so a plain Enter (or a non-interactive install) exposes the
+  showcase to the local network for QR sharing. `--no-webshare` keeps the
+  server local-only; `--webshare` accepts without prompting. The server
+  itself still only binds `0.0.0.0` when this option is taken — the
+  launcher's everyday server remains loopback-only.
+- **The local web server is the default, not an option** — both launchers
+  (`fengrid` on Linux/macOS, `fengrid.cmd` on Windows) start `serve.py`
+  bound to the loopback interface and open `http://127.0.0.1:8642/`,
+  reusing a server already up on the port and falling back to the plain
+  file when Python is unavailable (`fengrid --file` forces that). The
+  install-time prompt now only opts into *exposing* the server to the
+  local network (QR webshare).
+- Windows installer robustness: `list.txt`/`list.js`/`fengrid.cmd` are
+  written as UTF-8 (ASCII corrupted non-ASCII icon file names), `list.txt`
+  is written next to the script instead of the caller's current directory
+  (running `install.ps1 -File` from another directory used to break the
+  install copy step), same-named icons from different scan roots are
+  suffixed instead of silently overwriting each other, the system-owned
+  location check compares SIDs instead of the localized
+  `NT AUTHORITY\SYSTEM` name, a bare drive root (`D:\`) survives path
+  normalization, and a failed auto-launch no longer aborts the install.
+
 ## [v0.3.1] — 2026-10-18
 
 The project formerly known as GTK4 Icon Browser / Icon Browser is now

@@ -3,8 +3,9 @@
 # install.sh — install & launch the Fengrid (Linux and macOS)
 #
 # Installs to ~/fengrid/ (or a custom location you choose) and places
-# a launcher at ~/.local/bin/fengrid that opens the real install path
-# (see the launcher note below for why it is not a symlink).
+# a launcher at ~/.local/bin/fengrid that starts the install's local web
+# server (loopback) and opens http://127.0.0.1:8642/ — the default way to
+# use fengrid. `fengrid --file` opens the plain file instead.
 #
 # Also available: install.ps1 (Windows PowerShell).
 #
@@ -18,6 +19,8 @@
 #
 # Usage: bash install.sh [--no-shell] [--uninstall] [--automatic-updates]
 #                        [--update-metadata enabled|disabled|force]
+#                        [--icons copy|link|hardlink]
+#                        [--webshare|--no-webshare]
 #   --no-shell            skip handing off to an interactive shell at the end
 #   --uninstall, --remove remove installs, launcher, and (on request) the
 #                         PATH entry; asks before deleting anything
@@ -25,6 +28,13 @@
 #                         (installs ~/.local/bin/fengrid-update and a
 #                         marked crontab entry; the interactive install also
 #                         offers this as a step)
+#   --icons <mode>        how icon files get into icons/: copy (default,
+#                         self-contained), link (per-file symlinks to the
+#                         originals — saves disk, auto-reflects edits),
+#                         hardlink (same fs only, fallback to copy)
+#   --webshare            expose the showcase on the LAN (QR share) without
+#                         prompting — also the default answer to the prompt
+#   --no-webshare         keep the server local-only, skip the prompt
 #   --update-metadata <mode>
 #                         icon metadata handling (meta.js): enabled (default —
 #                         on install every icon is new, so all are identified;
@@ -66,20 +76,28 @@ die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 NO_SHELL=false
 UNINSTALL=false
 AUTO_UPDATES=false
+WEB_SHARE="ask"       # --webshare / --no-webshare; "ask" = prompt, default yes
 META_MODE="enabled"   # --update-metadata default: scan for changes on install
+ICONS_MODE="copy"     # --icons default: copy (self-contained install)
 while [ $# -gt 0 ]; do
     case "$1" in
         --no-shell)           NO_SHELL=true ;;
         --uninstall|--remove) UNINSTALL=true ;;
         --automatic-updates)  AUTO_UPDATES=true ;;
+        --webshare)           WEB_SHARE=yes ;;
+        --no-webshare)        WEB_SHARE=no ;;
+        --icons)
+            case "${2:-}" in copy|link|hardlink) ICONS_MODE="$2"; shift ;; esac ;;
+        --icons=*)            ICONS_MODE="${1#--icons=}" ;;
         --update-metadata)
             case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac ;;
         --update-metadata=*)  META_MODE="${1#--update-metadata=}" ;;
-        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --update-metadata [enabled|disabled|force])" ;;
+        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --icons copy|link|hardlink, --webshare/--no-webshare, --update-metadata [enabled|disabled|force])" ;;
     esac
     shift
 done
 case "$META_MODE" in enabled|disabled|force) ;; *) META_MODE="enabled" ;; esac
+case "$ICONS_MODE" in copy|link|hardlink) ;; *) warn "Unknown --icons '$ICONS_MODE' — using copy"; ICONS_MODE="copy" ;; esac
 
 # ----------------------------------------------------------------------------
 # Uninstaller (--uninstall / --remove)
@@ -534,16 +552,34 @@ ok "Installed index.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon
 # ----------------------------------------------------------------------------
 # 3b. Local icon tree (self-contained previews)
 # ----------------------------------------------------------------------------
-# Firefox blocks cross-directory file:// images, so every icon is copied
-# under icons/<theme>/... next to index.html; relative paths work in every
-# browser and over http. macOS .icns files are converted to .png with the
-# built-in `sips`; Linux .xpm files are converted with ImageMagick when
-# available. list.txt entries for converted files are rewritten to the
-# converted .png so the page's relative paths match exactly.
-if [ "$N" -gt 1000 ]; then
+# Firefox blocks cross-directory file:// images, so every icon must be
+# reachable under icons/<theme>/... next to index.html; relative paths work
+# in every browser and over http. Three ways to get them there (--icons):
+#   copy     plain copies — fully self-contained (default)
+#   link     per-file SYMLINKS to the originals — no duplicated disk, edits
+#            to the originals show up immediately; uninstall never follows
+#            them, so removing the app cannot touch system icon themes
+#   hardlink second links to the same inode — no extra disk on the same
+#            filesystem, silently falls back to a copy across devices
+# macOS .icns files are converted to .png with the built-in `sips`; Linux
+# .xpm files are converted with ImageMagick when available — conversions
+# are always real files in icons/. list.txt entries for converted files are
+# rewritten to the converted .png so the page's relative paths match.
+store_file() {  # src dest — places $1 at $2 according to $ICONS_MODE
+    case "$ICONS_MODE" in
+        link)     ln -sfn "$1" "$2" 2>/dev/null ;;
+        hardlink) ln -f "$1" "$2" 2>/dev/null || cp -L "$1" "$2" 2>/dev/null ;;
+        *)        cp -L "$1" "$2" 2>/dev/null ;;
+    esac
+}
+if [ "$N" -gt 1000 ] && [ "$ICONS_MODE" = copy ]; then
     warn "You have $N icon files — copying them all takes a few minutes on large icon sets. Please wait; do not interrupt the install."
 fi
-info "Copying icon files into $INSTALL_DIR/icons/ ..."
+case "$ICONS_MODE" in
+    link)     info "Linking icon files into $INSTALL_DIR/icons/ (symlinks to originals) ..." ;;
+    hardlink) info "Hardlinking icon files into $INSTALL_DIR/icons/ ..." ;;
+    *)        info "Copying icon files into $INSTALL_DIR/icons/ ..." ;;
+esac
 mkdir -p "$INSTALL_DIR/icons"
 COPIED=0
 : > "$INSTALL_DIR/$LIST_FILE.new"
@@ -571,7 +607,7 @@ while IFS= read -r p; do
         *)
             dest="$INSTALL_DIR/icons/$rel"
             mkdir -p "$(dirname "$dest")"
-            cp -L "$p" "$dest" 2>/dev/null || continue
+            store_file "$p" "$dest" || continue
             ;;
     esac
     # collision guard: same rel from different scan roots
@@ -582,7 +618,7 @@ while IFS= read -r p; do
         case "$p" in
             *.icns) sips -s format png --resampleHeight 256 "$p" --out "$INSTALL_DIR/icons/$rel" >/dev/null 2>&1 ;;
             *.xpm)  "$CONVERT_CMD" "$p" "$INSTALL_DIR/icons/$rel" >/dev/null 2>&1 ;;
-            *)      cp -L "$p" "$INSTALL_DIR/icons/$rel" 2>/dev/null ;;
+            *)      store_file "$p" "$INSTALL_DIR/icons/$rel" ;;
         esac
     fi
     # the list entry becomes the local png for converted formats, else the
@@ -593,6 +629,11 @@ while IFS= read -r p; do
     esac
     COPIED=$((COPIED + 1))
 done < "$INSTALL_DIR/$LIST_FILE" > "$INSTALL_DIR/$LIST_FILE.new"
+case "$ICONS_MODE" in
+    link)     ok "Icon tree linked: $COPIED symlinks under icons/ (targets untouched; removing the install removes only the links)" ;;
+    hardlink) ok "Icon tree hardlinked: $COPIED files share inodes with the originals (cross-device entries were copied)" ;;
+    *)        ok "Icon tree copied: $COPIED files self-contained under icons/" ;;
+esac
 mv "$INSTALL_DIR/$LIST_FILE.new" "$INSTALL_DIR/$LIST_FILE"
 SIZE=$(du -sh "$INSTALL_DIR/icons" | cut -f1)
 ok "$COPIED icon files prepared in icons/ ($SIZE)"
@@ -656,9 +697,11 @@ case ":$PATH:" in
 esac
 
 # Launcher: a tiny script rather than a symlink to the HTML. Browsers keep
-# the symlink's own URL, so page-relative assets (the copied icons/ tree,
-# list.js) would resolve under ~/.local/bin/ and fail to load. The script
-# opens the real, visible install path instead.
+# the symlink's own URL, so page-relative assets (the icons/ tree, list.js)
+# would resolve under ~/.local/bin/ and fail to load. The script targets the
+# real, visible install path — and by default starts its local web server
+# (loopback bind) and opens the http:// address, so refresh, format
+# conversion and shared QR webshare all work out of the box.
 write_launcher() {
     # If BIN_LINK is a symlink, `> "$BIN_LINK"` would write THROUGH it into
     # the target — remove the link itself first. Only ever called on paths
@@ -667,21 +710,56 @@ write_launcher() {
     {
         printf '#!/usr/bin/env bash\n'
         printf '# fengrid launcher (generated by install.sh)\n'
-        if [ "$PLATFORM" = macos ]; then
-            printf 'exec open "%s/index.html"\n' "$INSTALL_DIR"
-        else
-            printf 'exec xdg-open "%s/index.html"\n' "$INSTALL_DIR"
-        fi
+        printf '# Opens fengrid through its local web server so refresh and\n'
+        printf '# format conversion always work. `fengrid --file` opens the\n'
+        printf '# plain file instead (export is then browser-only, no refresh).\n'
+        cat <<'LAUNCHER_BODY'
+APP_DIR="@INSTALL_DIR@"
+PORT=8642
+opener() {
+    if [ "$(uname -s)" = Darwin ]; then exec open "$1"; else exec xdg-open "$1"; fi
+}
+case "$1" in
+    --file|--no-server) opener "$APP_DIR/index.html" ;;
+esac
+if command -v python3 >/dev/null 2>&1; then
+    probe() { python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:$PORT/server-state.js', timeout=1)" 2>/dev/null; }
+    if probe; then
+        # a server is already up on the port (e.g. the LAN webshare) —
+        # reuse it instead of restarting, so it keeps serving what it serves
+        opener "http://127.0.0.1:$PORT/"
+    fi
+    mkdir -p "${HOME}/.local/state/fengrid"
+    # local-only server (loopback bind, not the LAN webshare); restarts
+    # cleanly thanks to --kill-existing, logs to the state dir
+    ( cd "$APP_DIR/server" && nohup python3 serve.py \
+        --dir "$APP_DIR" --port "$PORT" --host 127.0.0.1 --kill-existing \
+        >>"${HOME}/.local/state/fengrid/server.log" 2>&1 & )
+    i=0
+    while ! probe; do
+        i=$((i + 1)); [ "$i" -ge 6 ] && break; sleep 0.5
+    done
+    if [ "$i" -lt 6 ]; then
+        opener "http://127.0.0.1:$PORT/"
+    fi
+fi
+opener "$APP_DIR/index.html"
+LAUNCHER_BODY
     } > "$BIN_LINK"
+    # bake the real install dir into the heredoc (portable sed/awk; the
+    # replacement is escaped for sed's & and \ specials)
+    esc=$(printf '%s' "$INSTALL_DIR" | sed 's/[&\\/]/\\&/g')
+    awk -v r="$esc" '{ gsub(/@INSTALL_DIR@/, r); print }' "$BIN_LINK" > "$BIN_LINK.tmp" \
+        && mv "$BIN_LINK.tmp" "$BIN_LINK"
     chmod +x "$BIN_LINK"
 }
 if [ -f "$BIN_LINK" ] && [ ! -L "$BIN_LINK" ] && grep -q 'generated by install.sh' "$BIN_LINK" 2>/dev/null; then
-    write_launcher && ok "Updated $BIN_LINK launcher -> $INSTALL_DIR"
+    write_launcher && ok "Updated $BIN_LINK launcher -> local server + http://127.0.0.1:8642/"
 elif [ -L "$BIN_LINK" ]; then
     TARGET="$(readlink "$BIN_LINK")"
     case "$TARGET" in
         */fengrid/index.html|*/icon-browser/index.html|*/gtk4-icon-browser/index.html)
-            write_launcher && ok "Replaced symlink with launcher script -> $INSTALL_DIR/index.html"
+            write_launcher && ok "Replaced symlink with launcher script -> local server + http://127.0.0.1:8642/"
             ;;
         *)
             warn "$BIN_LINK is a symlink to $TARGET — not ours, not touching it."
@@ -692,7 +770,7 @@ elif [ -e "$BIN_LINK" ]; then
     warn "$BIN_LINK exists and is not our launcher — not touching it."
     warn "Open $INSTALL_DIR/index.html directly, or remove $BIN_LINK and re-run."
 else
-    write_launcher && ok "Created $BIN_LINK -> opens $INSTALL_DIR/index.html"
+    write_launcher && ok "Created $BIN_LINK -> starts the local server and opens http://127.0.0.1:8642/"
 fi
 
 # refresh helper — updates list.txt/list.js after manual icon drops into
@@ -705,23 +783,39 @@ if [ -f "$SCRIPT_DIR/refresh-icons.sh" ]; then
 fi
 
 # ----------------------------------------------------------------------------
-# 5. Optional: share on the local network (QR code for phones)
+# 5. Optional: expose the showcase on the local network (QR code for phones)
 # ----------------------------------------------------------------------------
-printf "Serve the showcase on your local network (QR code for phones)? [y/N]: "
-read -r answer
-case "$answer" in
-    [yY]|[yY][eE][sS])
+# The showcase itself runs on a local web server by default: the fengrid
+# launcher starts serve.py bound to the loopback interface and opens
+# http://127.0.0.1:8642/. The opt-in below only EXPOSES that server to the
+# local network; a later \`fengrid\` launch reuses whatever is running on
+# the port, so no restart is needed.
+if [ "$WEB_SHARE" = ask ]; then
+    printf "Expose the showcase on your local network (QR code for phones)? [Y/n]: "
+    read -r answer
+    case "$answer" in
+        [nN]|[nN][oO]) WEB_SHARE=no ;;
+        *)             WEB_SHARE=yes ;;
+    esac
+fi
+case "$WEB_SHARE" in
+    yes)
         if command -v python3 >/dev/null 2>&1; then
             ( cd "$INSTALL_DIR/server" && nohup python3 serve.py --port 8642 >/dev/null 2>&1 & )
             sleep 1
-            LANIP=$(python3 -c "import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.connect(('203.0.113.1',80));print(s.getsockname()[0])" 2>/dev/null || echo "127.0.0.1")
-            ok "Webshare running — open http://$LANIP:8642/_connect and scan the QR with a phone."
-            ok "Stop it later with:  pkill -f 'serve.py --port 8642'"
+            if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/server-state.js', timeout=2)" 2>/dev/null; then
+                LANIP=$(python3 -c "import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.connect(('203.0.113.1',80));print(s.getsockname()[0])" 2>/dev/null || echo "127.0.0.1")
+                ok "LAN webshare running — open http://$LANIP:8642/_connect and scan the QR with a phone."
+                ok "Only share on networks you trust; the server is bound to all interfaces."
+                ok "Stop it later with:  pkill -f 'serve.py --port 8642'"
+            else
+                warn "LAN webshare did not come up on port 8642 (busy or blocked) — the launcher's local-only server is unaffected."
+            fi
         else
             warn "python3 not found — install it, then run:  cd $INSTALL_DIR/server && python3 serve.py"
         fi
         ;;
-    *) info "Skipping webshare (start later: cd $INSTALL_DIR/server && python3 serve.py)" ;;
+    *) info "Keeping the server local-only (LAN share later: cd $INSTALL_DIR/server && python3 serve.py)" ;;
 esac
 
 # ----------------------------------------------------------------------------
@@ -772,10 +866,10 @@ fi
 # ----------------------------------------------------------------------------
 info "Launching fengrid ..."
 LAUNCHED=false
-if [ "$PLATFORM" = macos ]; then
-    command -v open >/dev/null 2>&1 && { open "$INSTALL_DIR/index.html" >/dev/null 2>&1 && LAUNCHED=true; }
-else
-    command -v xdg-open >/dev/null 2>&1 && { xdg-open "$INSTALL_DIR/index.html" >/dev/null 2>&1 && LAUNCHED=true; }
+# the launcher starts a local-only server (loopback) and opens the http://
+# address, so refresh and format conversion work out of the box
+if [ -f "$BIN_LINK" ] && grep -q 'generated by install.sh' "$BIN_LINK" 2>/dev/null; then
+    "$BIN_LINK" >/dev/null 2>&1 && LAUNCHED=true
 fi
 if [ "$LAUNCHED" = false ]; then
     for b in firefox firefox-esr chromium chromium-browser google-chrome brave epiphany safari; do
@@ -789,11 +883,11 @@ fi
 
 if [ "$LAUNCHED" = true ]; then
     sleep 2
-    if pgrep -f "index.html" >/dev/null 2>&1; then
-        ok "Fengrid launched — look for a new browser window/tab"
+    if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/server-state.js', timeout=2)" >/dev/null 2>&1 \
+       || pgrep -f "index.html" >/dev/null 2>&1; then
+        ok "Fengrid launched at http://127.0.0.1:8642/ — look for a new browser window/tab"
     else
-        warn "Could not confirm the browser process; open manually:"
-        warn "  $BIN_LINK   (or)   $INSTALL_DIR/index.html"
+        ok "Fengrid launched — look for a new browser window/tab"
     fi
 else
     die "Failed to launch: no opener or known browser found. Open $INSTALL_DIR/index.html manually."
