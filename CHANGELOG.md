@@ -22,6 +22,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Installer's icon-folder list never appeared** — the configuration
+  page's listbox was created with a missing text argument, which NSIS
+  silently fails at runtime (`Pop` receives `error`), so the folder
+  selection UI was absent; the Add/Remove buttons wrote into a control
+  that did not exist. The `""` text argument is now passed and the
+  generated control call is verified to carry all 8 parameters.
 - **Windows paths were dropped by the page's list parser** — `parseLine`
   rejected any `list.txt` line not starting with `/`, so Windows drive
   paths (`D:/Library/.../icon.png`) yielded zero icons. It now accepts

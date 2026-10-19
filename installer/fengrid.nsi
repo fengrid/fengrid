@@ -100,7 +100,10 @@ Function PageConfigCreate
 
   ${NSD_CreateLabel} 0 68u 100% 10u "Icon folders to scan:"
   Pop $0
-  ${NSD_CreateListBox} 0 80u 100% 78u
+  # the trailing "" is mandatory: NSD_Create* expands to an 8-argument
+  # nsDialogs::CreateControl (x y w h text) — omitting text fails at
+  # runtime, Pop receives "error" and the control never exists
+  ${NSD_CreateListBox} 0 80u 100% 78u ""
   Pop $LB
   ${NSD_CreateButton} 0 162u 60u 14u "&Add folder..."
   Pop $0
