@@ -4,11 +4,26 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>fengrid — the UI asset explorer</title>
-<meta name="description" content="fengrid turns everything on your machine into a grid — icons, fonts, and styles laid out, searchable, and inspectable on one local page. No cloud, no account, works offline.">
+<meta name="description" content="fengrid turns everything on your machine into a grid — icons, fonts, code snippets, and color palettes laid out, searchable, and inspectable on one local page. No cloud, no account, works offline.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='12' height='12' rx='3' fill='none' stroke='%2339B8C4' stroke-width='2.5'/%3E%3Crect x='17' y='3' width='12' height='12' rx='3' fill='none' stroke='%2339B8C4' stroke-width='2.5'/%3E%3Crect x='3' y='17' width='12' height='12' rx='3' fill='none' stroke='%2339B8C4' stroke-width='2.5'/%3E%3Crect x='17' y='17' width='12' height='12' rx='3.5' fill='%23F5C25C'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Self-hosted fonts (subset to Latin, WOFF2) — no CDN required */
+  @font-face {
+    font-family: 'Inter';
+    src: url('fonts/Inter-Variable.woff2') format('woff2-variations');
+    font-weight: 100 900; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Iosevka';
+    src: url('fonts/IosevkaMono-Regular.woff2') format('woff2');
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Iosevka';
+    src: url('fonts/IosevkaMono-Medium.woff2') format('woff2');
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+</style>
 <style>
   :root {
     --font-head: 'Inter', 'Helvetica', 'Arial', sans-serif;
@@ -110,15 +125,6 @@
 
   /* screenshot */
   .shot { margin: 56px 0 0; }
-  .shot .frame {
-    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
-    background:
-      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
-      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
-    background-size: 16px 16px; background-position: 0 0, 8px 8px;
-  }
-  .shot img { display: block; width: 100%; height: auto; }
-  .shot figcaption { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-faint); margin-top: 10px; }
 
   /* features */
   .features { padding: 56px 0 8px; border-top: 1px solid var(--border); }
@@ -127,6 +133,19 @@
   .features li { border-left: 2px solid var(--accent); padding-left: 14px; }
   .features li .k { display: block; margin-bottom: 3px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); }
   .features li .d { color: var(--ink-muted); font-size: 13.5px; margin-top: 3px; }
+
+  /* pane gallery */
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 34px; }
+  .gallery figure { margin: 0; }
+  .shot .frame, .gallery .frame {
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    background:
+      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
+      linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
+    background-size: 16px 16px; background-position: 0 0, 8px 8px;
+  }
+  .shot img, .gallery img { display: block; width: 100%; height: auto; }
+  .shot figcaption, .gallery figcaption { font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink-faint); margin-top: 10px; }
 
   /* footer */
   footer { margin-top: 72px; border-top: 1px solid var(--border); padding: 26px 0 40px; }
@@ -153,10 +172,11 @@
   <section class="hero">
     <h1>Every asset<br>on your machine,<br><em>on one grid.</em></h1>
     <p class="lede"><b>fengrid</b> is the UI asset explorer: it turns everything on your
-    machine into a grid. Icons, fonts, styles — every frontend asset you own,
-    laid out, searchable, and inspectable on one local page. No cloud, no
-    account, no build step. Every card is a window: tap one and you're
-    through the glass — variants, dimensions, path, export.</p>
+    machine into a grid. Icons, fonts, code snippets, color palettes — every
+    frontend asset you own, laid out, searchable, and inspectable on one
+    local page. No cloud, no account, no build step. Every card is a window:
+    tap one and you're through the glass — variants, dimensions, path,
+    export.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/fengrid/fengrid/releases">Download release</a>
       <a class="btn" href="https://github.com/fengrid/fengrid#readme">README</a>
@@ -192,7 +212,7 @@
   <section class="features">
     <h2>What it does</h2>
     <ul>
-      <li><span class="k">Any asset source</span><span class="d">System theme folders or any folder you keep — png, svg, ico, plus icns/xpm via built-in converters. Fonts and styles are next on the grid.</span></li>
+      <li><span class="k">Any asset source</span><span class="d">System theme folders or any folder you keep — png, svg, ico, plus icns/xpm via built-in converters.</span></li>
       <li><span class="k">Import icon sets</span><span class="d">Pull sets from a local folder, a zip archive, a git repository or archive URL, or browse 200+ open-source icon sets with licenses shown. Imported sets are scanned for metadata automatically.</span></li>
       <li><span class="k">Size slider</span><span class="d">Snaps to standard icon sizes — 16 through 256.</span></li>
       <li><span class="k">Search &amp; filter</span><span class="d">By name and your own tags, source folder (with counts), context, file type, and color vs. monochrome.</span></li>
@@ -205,6 +225,31 @@
       <li><span class="k">Not a CSS framework</span><span class="d">fengrid is a grid of your assets — an explorer, not a grid-layout generator.</span></li>
       <li><span class="k">Fully local</span><span class="d">Self-hosted fonts, no CDN, no framework. Works offline over file://.</span></li>
     </ul>
+  </section>
+
+  <section class="features" id="panes">
+    <h2>Five panes, one grid</h2>
+    <ul>
+      <li><span class="k">Icons</span><span class="d">The original pane: every icon on your machine in one searchable grid, with metadata, tags, collections, and any-format export.</span></li>
+      <li><span class="k">Fonts</span><span class="d">The typeface explorer. Scans your font folders (or links to them in place), groups everything by family with regular-face previews, shows details per style — weights, slants, glyph counts — and copies or downloads in one click.</span></li>
+      <li><span class="k">Code</span><span class="d">The snippet explorer: a live HTML/CSS/JS playground that saves to a local snippet database. Import straight from VSCode or massCode; emacs and vim editing modes included.</span></li>
+      <li><span class="k">Colors</span><span class="d">The palette explorer. Roll harmonious palettes, lock and edit individual colors, and export to CSS variables, JSON, or image boards.</span></li>
+      <li><span class="k">Projects</span><span class="d">The asset coordinator. Pull fonts, palettes, and icons from the other panes into one project, tune shape and naming, and preview it live — then export everything as a reusable package.</span></li>
+    </ul>
+    <div class="gallery">
+      <figure>
+        <div class="frame"><img src="assets/screenshot-code.png" alt="fengrid code pane — HTML/CSS/JS editors beside a live Result preview, snippet sidebar on the left" loading="lazy"></div>
+        <figcaption>Code · live snippet playground</figcaption>
+      </figure>
+      <figure>
+        <div class="frame"><img src="assets/screenshot-colors.png" alt="fengrid colors pane — generated palette swatches with contrast readouts and export controls" loading="lazy"></div>
+        <figcaption>Colors · palette explorer</figcaption>
+      </figure>
+      <figure>
+        <div class="frame"><img src="assets/screenshot-projects.png" alt="fengrid projects pane — CSS configurator with color roles, typefaces, and a live boilerplate preview" loading="lazy"></div>
+        <figcaption>Projects · asset coordinator</figcaption>
+      </figure>
+    </div>
   </section>
 </div>
 
