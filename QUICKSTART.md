@@ -90,6 +90,28 @@ QR with your phone. The showcase makes no cross-origin requests (everything
 is served same-origin), so it renders correctly on mobile without any CORS
 setup.
 
+## Import icon sets
+
+The **folder-plus button** in the title row imports icon sets four ways,
+each landing in its own theme folder under `icons/` and scanned for
+metadata automatically:
+
+- **Folder** — pick a folder in your browser (uploaded through the local
+  server), or type a server-local path (e.g. a system theme directory).
+- **Archive** — select a `.zip` archive; it is unpacked safely and its
+  icons are imported.
+- **URL / git repo** — paste a URL to a git repository (shallow-cloned) or
+  to an archive file (`.zip`, `.tar.gz`, `.tar.xz`, `.7z`, …), or a local
+  archive path.
+- **Browse sets** — 200+ open-source icon sets from
+  [fengrid/icon-sets](https://github.com/fengrid/icon-sets), fetched live
+  with license and author shown per set. Importing downloads the set's
+  Iconify JSON and renders one SVG file per icon.
+
+The import needs the local web server (the `fengrid` launcher starts it
+automatically). SVGs that lack the `xmlns` namespace attribute are fixed
+during import so they render correctly in `<img>` tags.
+
 ## Add your own icons
 
 Drop icon files into the `icons/` folder of your install — a subfolder

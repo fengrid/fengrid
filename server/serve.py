@@ -21,6 +21,8 @@ CORS / security notes
 
 import argparse
 import atexit
+import email
+import email.parser
 import functools
 import http.server
 import json
@@ -34,9 +36,12 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 from urllib.parse import urlparse, parse_qs
 
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SERVER_DIR)
+import import_engine  # noqa: E402  (server/import_engine.py lives next to us)
 # The served web root is the parent of server/ — the install dir holding
 # index.html, list.txt, fonts/ and icons/ (see install.sh layout).
 WEB_ROOT = os.path.dirname(SERVER_DIR)
@@ -99,6 +104,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         if path == "/refresh":
             self.handle_refresh()
+            return
+        if path == "/import":
+            self.handle_import()
             return
         # /_connect is a virtual path, so its relative asset refs resolve to
         # /vendor/... — serve those from the server/ dir explicitly
@@ -281,6 +289,140 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json_response(500, {"ok": False, "error": str(exc)})
         finally:
             Handler.REFRESH_LOCK.release()
+
+    # ------------------------------------------------------------------
+    # POST /import  — uploaded archives and picked folders (multipart)
+    #
+    # The browser cannot hand the page a filesystem path, so folder and
+    # .zip imports arrive as a manually assembled multipart/form-data body:
+    #   fields: kind ("zip" | "folder"), name (optional theme name)
+    #   files:  filename = path relative to the picked folder's root
+    # The body is parsed with the email package (multipart-aware), written
+    # to a temp dir, then run through the same import + refresh + metadata
+    # pipeline as the GET forms. One import/refresh at a time.
+    # ------------------------------------------------------------------
+    def do_POST(self):
+        if urlparse(self.path).path == "/import":
+            self.handle_import_post()
+            return
+        self.send_error(404, "Not found")
+
+    def _read_body(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0 or length > import_engine.MAX_DOWNLOAD:
+            raise ValueError("empty or oversized upload (limit %d MB)"
+                             % (import_engine.MAX_DOWNLOAD >> 20))
+        return self.rfile.read(length)
+
+    def handle_import_post(self):
+        started = time.time()
+        try:
+            body = self._read_body()
+        except Exception as exc:  # noqa: BLE001
+            return self._json_response(400, {"ok": False, "error": str(exc)})
+        if not Handler.REFRESH_LOCK.acquire(blocking=False):
+            return self._json_response(
+                409, {"ok": False, "error": "an import or refresh is already running"})
+        started = time.time()
+        tmpdir = tempfile.TemporaryDirectory(prefix="fengrid-upload-")
+        try:
+            msg = email.parser.BytesParser().parsebytes(
+                b"Content-Type: " + self.headers.get("Content-Type", "").encode()
+                + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+            fields, src_dir = {}, os.path.join(tmpdir.name, "src")
+            os.makedirs(src_dir, exist_ok=True)
+            for part in msg.walk():
+                if part.is_multipart():
+                    continue
+                fname = part.get_filename()
+                if fname:
+                    rel = fname.replace("\\", "/").lstrip("/")
+                    if ".." in rel.split("/"):
+                        raise ValueError("unsafe upload path: " + fname)
+                    dest = os.path.join(src_dir, rel)
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with open(dest, "wb") as f:
+                        f.write(part.get_payload(decode=True) or b"")
+                else:
+                    fields[part.get_param("name", header="content-disposition")] = \
+                        part.get_payload(decode=True).decode("utf-8", "replace")
+            kind = fields.get("kind", "folder")
+            name = fields.get("name") or None
+            if kind == "zip":
+                zips = [f for f in os.listdir(src_dir) if f.lower().endswith(".zip")]
+                if len(zips) != 1:
+                    raise ValueError("expected exactly one .zip file in the upload")
+                with open(os.path.join(src_dir, zips[0]), "rb") as f:
+                    data = f.read()
+                result = import_engine.import_archive(
+                    data, zips[0], self.server.app_dir, name)
+            else:
+                result = import_engine.import_folder(src_dir, self.server.app_dir, name)
+            return self._finish_import(result, started)
+        except Exception as exc:  # noqa: BLE001 — surfaced to the UI
+            return self._json_response(500, {"ok": False, "error": str(exc)[:300]})
+        finally:
+            tmpdir.cleanup()
+            Handler.REFRESH_LOCK.release()
+
+    def handle_import(self):
+        """GET /import?kind=folder|url|iconify|catalog — server-side sources."""
+        qs = parse_qs(urlparse(self.path).query)
+        kind = (qs.get("kind", [""])[0] or "").lower()
+        app = self.server.app_dir
+        try:
+            if kind == "catalog":
+                return self._json_response(200, {"ok": True,
+                                                 "sets": import_engine.catalog()})
+            if not Handler.REFRESH_LOCK.acquire(blocking=False):
+                return self._json_response(
+                    409, {"ok": False, "error": "an import or refresh is already running"})
+            started = time.time()
+            try:
+                name = (qs.get("name", [""])[0] or "").strip() or None
+                if kind == "folder":
+                    result = import_engine.import_folder(
+                        qs.get("path", [""])[0], app, name)
+                elif kind == "url":
+                    result = import_engine.import_url(
+                        qs.get("url", [""])[0], app, name)
+                elif kind == "iconify":
+                    result = import_engine.import_iconify(
+                        (qs.get("set", [""])[0] or "").strip(), app, name)
+                else:
+                    return self._json_response(
+                        400, {"ok": False, "error": "bad kind (folder|url|iconify|catalog)"})
+                return self._finish_import(result, started)
+            finally:
+                Handler.REFRESH_LOCK.release()
+        except subprocess.TimeoutExpired:
+            return self._json_response(504, {"ok": False, "error": "import timed out"})
+        except Exception as exc:  # noqa: BLE001 — surfaced to the UI
+            return self._json_response(500, {"ok": False, "error": str(exc)[:300]})
+
+    def _finish_import(self, result, started):
+        """Shared tail: refresh the list + metadata, then report."""
+        app = self.server.app_dir
+        refresh = os.path.join(app, "refresh-icons.sh")
+        meta = os.path.join(app, "icon-meta.sh")
+        notes = []
+        ok = True
+        for script, args in ((refresh, ["--dir", app, "--update-metadata", "enabled"]),
+                             (meta, [app, "--quiet", "--mode", "enabled"])):
+            if not os.path.isfile(script):
+                notes.append("not installed: " + os.path.basename(script))
+                ok = False
+                continue
+            p = subprocess.run(["bash", script] + args,
+                               capture_output=True, timeout=1200, text=True)
+            if p.returncode != 0:
+                ok = False
+                notes.append((p.stderr.strip() or "script failed").splitlines()[-1][:200])
+            else:
+                notes += [l for l in p.stdout.strip().splitlines() if l][:4]
+        result.update({"ok": ok, "seconds": round(time.time() - started, 1),
+                       "notes": notes[:8]})
+        return self._json_response(200 if ok else 500, result)
 
 
 class HTTPServer(socketserver.ThreadingTCPServer):

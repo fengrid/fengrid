@@ -260,6 +260,40 @@ through; `src` must be the `icons/`-prefixed relative path). On `file://`
 pages the browser rebuilds PNG/JPEG/WebP via canvas and falls back to
 saving the original file for other formats.
 
+## Import endpoint (server/serve.py + import_engine.py)
+
+The import button opens a modal with four sources, all funnelled through
+`/import`:
+
+- `GET /import?kind=folder&path=<dir>&name=<theme>` — copies the
+  previewable files (png/svg/ico/jpg/webp/gif/bmp; xpm/icns converted via
+  ImageMagick when available) of a server-local directory into
+  `icons/<theme>/`.
+- `POST /import` (multipart) — folder picks and `.zip` uploads from the
+  browser. Files carry their path relative to the picked folder's root as
+  the multipart `filename`; the server writes them to a temp dir and runs
+  the same import. Zip members are vetted against path traversal (no
+  absolute paths, drive letters, or `..`).
+- `GET /import?kind=url&url=<url>&name=<theme>` — downloads a git
+  repository (shallow clone) or an archive (`.zip`, `.tar.gz`, `.tar.xz`,
+  `.7z`, …) and imports its contents. Code-hosting archive endpoints
+  (codeload URLs ending in a branch name) are detected by path shape.
+- `GET /import?kind=iconify&set=<prefix>` — downloads the set's Iconify
+  JSON from `fengrid/icon-sets` and renders one SVG file per icon
+  (aliases resolved, dimensions from the set/icon defaults).
+- `GET /import?kind=catalog` — the live catalog from `collections.json`
+  (hidden sets excluded), returned as a JSON array for the browser.
+
+`server/import_engine.py` holds the engine: theme-name sanitisation and
+collision avoidance (`My Set!!` → `My-Set`, existing names get `-2`),
+path-safe archive unpacking (PEP 706 tar filters; manual zip vetting), and
+an SVG namespace fix — `<img>`-loaded SVGs must declare `xmlns`; sets that
+omit it are patched on import so they don't render as MISSING cards.
+
+After every import the endpoint runs the same refresh + metadata pipeline
+as the refresh button, so the new set appears in the source chips and gets
+its hover specs immediately. One import/refresh runs at a time (HTTP 409).
+
 ## Refresh endpoint (server/serve.py)
 
 `GET /refresh?mode=enabled|force` runs the install's `refresh-icons.sh` and

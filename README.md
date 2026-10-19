@@ -6,8 +6,10 @@
 A single-file, dependency-free showcase for the icon themes and icon folders
 on your machine — on Linux, macOS or Windows. Point it at any folder of
 icons (or your installed system themes) and get a filterable, searchable,
-size-adjustable grid of every icon, with one-click copy of each icon's name
-and an optional QR-code webshare for your phone.
+size-adjustable grid of every icon, with one-click copy of each icon's name,
+an import button that pulls sets from local folders, zip archives, git
+repositories, or a catalog of 200+ open-source icon sets, and an optional
+QR-code webshare for your phone.
 
 ![fengrid screenshot — light and dark themes side by side](docs/assets/screenshot.png)
 

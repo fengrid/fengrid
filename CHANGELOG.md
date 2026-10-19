@@ -37,6 +37,17 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Import icon sets** — a new folder-plus button in the title row opens an
+  import modal with four sources: a local folder (browser picker or
+  server-local path), a `.zip` archive, a git repository or archive URL
+  (`.tar.gz`, `.7z`, …), and a live catalog of 200+ open-source icon sets
+  from [fengrid/icon-sets](https://github.com/fengrid/icon-sets) with
+  license and author shown per set. Every import lands in its own theme
+  folder under `icons/` and is scanned for metadata automatically
+  (`server/import_engine.py`; `GET/POST /import` in serve.py). Theme names
+  are sanitised and de-duplicated; archive extraction is path-traversal
+  safe; SVGs missing the `xmlns` namespace are patched on import so they
+  render in `<img>` tags instead of showing as MISSING cards.
 - **Icon storage modes (`--icons copy|link|hardlink`)** — copying all icons
   into `icons/` is still the default (fully self-contained), but the
   installer can now **symlink** each icon file to its original (no
