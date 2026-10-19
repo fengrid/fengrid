@@ -64,6 +64,20 @@ adheres to [Semantic Versioning](https://semver.org/).
   pane's accent; the lit-pane amber remains the shared interaction
   accent everywhere.
 
+- **Font families in the Fonts pane** — the grid now shows one card per
+  font family instead of one per file: the card previews the family's
+  regular face, and its meta line counts the remaining styles. A new
+  **Families** panel on the left is an alphabetical index (letter
+  sections, per-family style counts, a lit dot when a family has
+  anything selected) that jumps straight to the family's card in the
+  grid. Selection is family-based — tick a card to select every
+  installed style; Shift-click spans a range of families, Ctrl-click
+  toggles one, and the selection bar reports families with their total
+  font count — so **Export CSS/ZIP** packages complete families with
+  correct weights and styles in one click. The detail modal remains the
+  extended preview: all installed variants of the family, switchable,
+  at multiple sizes with a glyph specimen.
+
 ### Fixed
 
 - **scan-fonts.sh corrupted font-meta.js on multi-face `.ttc` files** —
@@ -72,6 +86,21 @@ adheres to [Semantic Versioning](https://semver.org/).
   JavaScript that took down the whole metadata file (fonts.html showed
   nothing). The format now ends in `\n`, and family/style are
   JSON-escaped while weight/slant are stripped to digits.
+- **fonts.html never loaded `font-meta.js` over http** — the page read
+  `window.FONT_META` but nothing populated it, so every card silently
+  fell back to the directory name as the family and exported all
+  `@font-face` rules as weight 400. The generated data file is now
+  loaded (as projects.html already does), and serve.py marks the
+  generated data files (`list.txt`, `fonts-list.txt`, `font-meta.js`,
+  `meta.js`, `list.js`) with `Cache-Control: no-cache` so browsers
+  revalidate instead of serving stale copies after a rescan or
+  reinstall.
+- **Font previews stalled the renderer on huge fonts** — the grid
+  loaded the regular face of every rendered card up front; with heavy
+  collections (Iosevka Nerd Font files are ~13 MB each) that parsed
+  hundreds of megabytes at boot and froze the page. Preview fonts now
+  load lazily, one at a time, only when a card approaches the
+  viewport.
 - **Windows paths were dropped by the page's list parser** — `parseLine`
   rejected any `list.txt` line not starting with `/`, so Windows drive
   paths (`D:/Library/.../icon.png`) yielded zero icons. It now accepts

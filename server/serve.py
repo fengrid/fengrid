@@ -87,10 +87,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404, "File not found")
         return None
 
+    # generated data files change on every rescan/reinstall — browsers must
+    # revalidate instead of serving heuristic-cached copies (a stale
+    # font-meta.js silently strips weights/styles and breaks the font UI)
+    NO_CACHE_FILES = frozenset({
+        "list.txt", "list.js", "fonts-list.txt", "font-meta.js", "meta.js",
+    })
+
     def end_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
-        if urlparse(self.path).path == "/_connect":
-            self.send_header("Cache-Control", "no-store")
+        path = urlparse(self.path).path
+        if path == "/_connect" or os.path.basename(path) in self.NO_CACHE_FILES:
+            self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
     def do_GET(self):

@@ -118,13 +118,15 @@ during import so they render correctly in `<img>` tags.
 
 ## Font showcase
 
-The header's **Icons / Fonts / Code** switch opens `fonts.html` — the same grid
-experience for the typefaces on your machine. Each card renders live
-preview text in that font (customizable in the toolbar), with search,
-sort by name/weight/style, and style/format filters. Tick checkboxes (or
-Shift/Ctrl-click) to select fonts, then **Export CSS** (generates
-`@font-face` rules) or **Export ZIP** (packages the font files + CSS +
-README). Click a font name for the detail modal — the typeface at
+The **Fonts** tab opens `fonts.html` — the same grid experience for the
+typefaces on your machine, grouped by **family**: each card previews the
+family's regular face, and its meta line shows how many more styles are
+installed. The **Families** panel on the left is an alphabetical index —
+click a family to jump to its card. Tick checkboxes (or Shift/Ctrl-click)
+to select whole families, then **Export CSS** (generates `@font-face`
+rules with correct weights and styles) or **Export ZIP** (packages every
+selected font file + CSS + README). Click a font name for the detail
+modal — the typeface at
 multiple sizes, all installed variants of the same family, a full glyph
 specimen, and metadata.
 
