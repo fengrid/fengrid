@@ -26,3 +26,5 @@ __pycache__/
 
 # runtime state written by server/serve.py at startup (removed at shutdown)
 server-state.js
+fonts-list.txt
+font-meta.js

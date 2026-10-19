@@ -15,6 +15,8 @@ Everything you need to understand and work on the Fengrid.
 ```
 fengrid/                 # repo name; originally gtk4-icon-browser
 ├── index.html                # the entire application (HTML + CSS + JS, inline)
+├── fonts.html                # font showcase (same design system, wider grid cells)
+├── scan-fonts.sh             # font folder scanner → fonts-list.txt + font-meta.js
 ├── install.sh                # installer / uninstaller / launcher (Linux + macOS)
 ├── install.ps1               # installer / uninstaller / launcher (Windows)
 ├── server/                   # optional LAN webshare
@@ -23,6 +25,8 @@ fengrid/                 # repo name; originally gtk4-icon-browser
 │   └── vendor/qrcode.min.js  # qrcode-generator 1.4.4 (MIT)
 ├── list.txt                  # generated: one path per icon file (gitignored)
 ├── list.js                   # generated: list.txt mirrored as JS array (gitignored)
+├── fonts-list.txt            # generated: one path per font file (gitignored)
+├── font-meta.js              # generated: font metadata for the showcase (gitignored)
 ├── fonts/                    # subset WOFF2 faces + their licenses (committed)
 ├── docs/                     # GitHub Pages landing page (NOT the showcase itself)
 ├── README.md / QUICKSTART.md / DEVELOPMENT.md / LICENSE.md

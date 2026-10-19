@@ -37,6 +37,21 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Font showcase** — the header's Icons / Fonts switch opens `fonts.html`,
+  a sibling page with the same design system but wider grid cells and
+  live typeface previews. Each card renders the preview text in its own
+  font via a dynamically injected `@font-face` rule. Sort by name, weight,
+  or style; filter by style (Regular/Bold/Italic/Other) and format
+  (TTF/OTF/WOFF/WOFF2/TTC/EOT); customize the preview text and size.
+  Select fonts via checkboxes, Shift-click range, or Ctrl-click toggle;
+  export as CSS (`@font-face` rules) or ZIP (font files + fonts.css +
+  README) via the new `POST /fonts-export` endpoint. Clicking a font name
+  opens a detail modal with the typeface at six sizes, all installed
+  variants of the same family, a full glyph specimen, and metadata.
+  Font scanning via `scan-fonts.sh` (fc-scan for family/style/weight/
+  slant; configurable folders persisted to `~/.local/state/fengrid/
+  font-dirs.conf`). Metadata from fc-scan covers TTF/OTF/TTC; WOFF/WOFF2
+  fall back to filename-derived family names.
 - **Import icon sets** — a new folder-plus button in the title row opens an
   import modal with four sources: a local folder (browser picker or
   server-local path), a `.zip` archive, a git repository or archive URL

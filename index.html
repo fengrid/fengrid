@@ -199,6 +199,12 @@
   .chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 500; }
   .chip .n { opacity: 0.65; margin-left: 5px; font-size: 11px; }
 
+  /* mode switch: Icons | Fonts */
+  .mode-switch { display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); align-self: center; }
+  .mode-switch a { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; padding: 0 14px; line-height: 36px; text-decoration: none; color: var(--ink-muted); background: var(--surface); }
+  .mode-switch a.active { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  .mode-switch a:hover:not(.active) { color: var(--ink); }
+
   /* version badge -> GitHub releases */
   .ver-badge {
     font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em;
@@ -482,6 +488,10 @@
 
 <header>
   <div class="title-row">
+    <div class="mode-switch">
+      <a href="index.html" class="active">Icons</a>
+      <a href="fonts.html">Fonts</a>
+    </div>
     <h1 class="wordmark">fen<span class="wm-grid">grid</span></h1>
     <span class="count" id="count-line"></span>
     <a class="ver-badge" id="ver-badge" href="https://github.com/fengrid/fengrid/releases" target="_blank" rel="noopener" title="Releases"></a>
