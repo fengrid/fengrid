@@ -91,7 +91,8 @@ trap 'cleanup; exit 130' INT TERM
 # 1. current rasters: key <TAB> size <TAB> mtime  (sorted, stable)
 # key = path relative to icons/ (page/meta.js/ledger key). identify is handed
 # the icons/-prefixed path at run time (it executes from the install dir).
-find "$ICONS_DIR" -type f ! -name '*.svg' ! -name '*.svgz' | LC_ALL=C sort | \
+# include symlinks (--icons link installs); `[ -f ]` drops dangling links
+find "$ICONS_DIR" \( -type f -o -type l \) ! -name '*.svg' ! -name '*.svgz' | LC_ALL=C sort | \
 while IFS= read -r f; do
     key="${f#"$ICONS_DIR"/}"
     fp=$(smt "$f") || continue

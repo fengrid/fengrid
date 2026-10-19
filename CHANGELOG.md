@@ -35,8 +35,42 @@ adheres to [Semantic Versioning](https://semver.org/).
   wildcards. The skip message now distinguishes "it is a file" from
   "directory not found".
 
+### Added
+
+- **Icon storage modes (`--icons copy|link|hardlink`)** — copying all icons
+  into `icons/` is still the default (fully self-contained), but the
+  installer can now **symlink** each icon file to its original (no
+  duplicated disk; edits to the originals appear immediately;
+  `rm -rf` on uninstall removes only the links, never the system themes)
+  or **hardlink** them (no extra disk on the same filesystem, silently
+  falls back to a copy across devices). `fengrid-refresh` and
+  `icon-meta.sh` are symlink-aware: linked files are enumerated, scanned,
+  and fingerprinted exactly like real ones, and dangling links are
+  dropped rather than breaking the scan. Windows: `install.ps1
+  -IconMode hardlink` (per-file hardlinks, copy fallback on refusal).
+
+### Fixed
+
+- **Light-theme hover details were nearly invisible** — the details bar,
+  DETAILS badge, and icon name used the lit-pane amber (`#F5B841`) as text
+  on white (~1.8:1 contrast). Text now uses a daylight-darkened honey amber
+  (`#A16207`, ~4.9:1, AA); bright amber is reserved for borders, outlines,
+  underlines, and hovers. Text on amber fills (active format buttons, tag
+  pills) uses dark ink in both themes. Dark theme is unchanged.
+- **Loopback servers advertised a LAN URL** — a server started by the
+  launcher (`--host 127.0.0.1`) reported the machine's LAN IP in
+  `server-state.js`, so the QR button offered an unreachable address.
+  Loopback servers now advertise `http://127.0.0.1:<port>/` and no LAN
+  alternates.
+
 ### Changed
 
+- **The LAN webshare is on by default** — the install prompt now reads
+  `[Y/n]`, so a plain Enter (or a non-interactive install) exposes the
+  showcase to the local network for QR sharing. `--no-webshare` keeps the
+  server local-only; `--webshare` accepts without prompting. The server
+  itself still only binds `0.0.0.0` when this option is taken — the
+  launcher's everyday server remains loopback-only.
 - **The local web server is the default, not an option** — both launchers
   (`fengrid` on Linux/macOS, `fengrid.cmd` on Windows) start `serve.py`
   bound to the loopback interface and open `http://127.0.0.1:8642/`,

@@ -35,10 +35,16 @@ You'll be asked:
    you keep icons in. On Windows you pick the folders (`.png`, `.svg`,
    `.ico`).
 3. **PATH update** — allowed, if the launcher folder isn't already on PATH.
+4. **LAN webshare** — default **yes** (exposes the showcase to your local
+   network for QR sharing; answer `n` or rerun with `--no-webshare` to keep
+   it local-only).
 
 Then it copies the icons next to the page (a few minutes on very large icon
 sets — macOS converts `.icns` with the built-in `sips`) and opens it in your
-browser.
+browser. To avoid the copies entirely, add `--icons link` (symlinks to the
+originals — no duplicated disk) or `--icons hardlink` (same result on the
+same filesystem without symlinks); plain copies remain the default and are
+the most portable.
 
 ## 3. Use it
 
@@ -71,8 +77,9 @@ browser.
 ## Share it on your network (phones & tablets)
 
 The showcase already runs on a local web server — the `fengrid` launcher
-starts it bound to the loopback interface. To expose it to your network,
-say yes to the prompt during install, or start it later:
+starts it bound to the loopback interface. The install enables the LAN
+webshare by default (decline with the prompt's `n`, rerun with
+`--no-webshare`, or enable later):
 
 ```bash
 cd ~/fengrid/server && python3 serve.py
@@ -86,7 +93,11 @@ setup.
 ## Add your own icons
 
 Drop icon files into the `icons/` folder of your install — a subfolder
-becomes the theme name (e.g. `icons/MySet/logo.png`). Then refresh the list:
+becomes the theme name (e.g. `icons/MySet/logo.png`). With the default
+`--icons copy` install these are ordinary files; with `--icons link` the
+existing theme entries are symlinks to the system themes (drop new files
+anywhere under `icons/` — new drops are always real files), and
+`--icons hardlink` shows hardlinks. Then refresh the list:
 
 ```bash
 fengrid-refresh          # or: bash ~/fengrid/refresh-icons.sh

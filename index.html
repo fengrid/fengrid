@@ -664,7 +664,10 @@
         <code>refresh-icons.sh</code> inside the install folder) and reload.
         Files dropped loose in <code>icons/</code> are filed under the
         <code>Manual</code> theme; <code>.icns</code>/<code>.xpm</code> files
-        are converted to PNG when a converter is available.</li>
+        are converted to PNG when a converter is available. With
+        <code>--icons link</code> installs the scanned entries are symlinks
+        to the originals — your own drops are still real files, and
+        uninstalling never follows the links.</li>
         <li><b>Updates</b> — <code>fengrid-update --check</code> checks
         for a newer release; the weekly cron job (if enabled) does this
         automatically.</li>

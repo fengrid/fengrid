@@ -17,7 +17,9 @@
 [CmdletBinding()]
 param(
     [switch]$Uninstall,
-    [switch]$Remove   # alias for -Uninstall
+    [switch]$Remove,   # alias for -Uninstall
+    [string]$IconMode = 'copy'   # copy (default) or hardlink; hardlinks fall
+                                 # back to a copy when the filesystem refuses
 )
 if ($Remove) { $Uninstall = $true }
 
@@ -249,7 +251,15 @@ Copy-Item (Join-Path $ScriptDir $ListFile) $InstallDir -Force
 # (theme-style layouts), anything else flat as icons/<parent-dir>/<file>.
 # (Without the marker rule, a scan folder literally named "icons" would
 # diverge from the page's derived relative path and render broken.)
-Write-Info 'Copying icon files into icons\ ...'
+if ($IconMode -notin @('copy', 'hardlink')) {
+    Write-Warn2 "Unknown -IconMode '$IconMode' - using copy."
+    $IconMode = 'copy'
+}
+if ($IconMode -eq 'hardlink') {
+    Write-Info 'Hardlinking icon files into icons\ ...'
+} else {
+    Write-Info 'Copying icon files into icons\ ...'
+}
 $copied = 0
 foreach ($icon in $allIcons) {
     $p = $icon.FullName -replace '\\', '/'
@@ -273,10 +283,24 @@ foreach ($icon in $allIcons) {
         while (Test-Path -LiteralPath (Join-Path $destDir ('{0}-{1}{2}' -f $stem, $i, $ext))) { $i++ }
         $dest = Join-Path $destDir ('{0}-{1}{2}' -f $stem, $i, $ext)
     }
-    Copy-Item -LiteralPath $icon.FullName -Destination $dest -Force
+    if ($IconMode -eq 'hardlink') {
+        # hardlink to the original (no extra disk on the same volume); any
+        # refusal - cross-volume, older PowerShell, permission - falls back
+        # to a real copy so the install never half-fails
+        New-Item -ItemType HardLink -Path $dest -Target $icon.FullName -Force -ErrorAction SilentlyContinue | Out-Null
+        if (-not (Test-Path -LiteralPath $dest)) {
+            Copy-Item -LiteralPath $icon.FullName -Destination $dest -Force
+        }
+    } else {
+        Copy-Item -LiteralPath $icon.FullName -Destination $dest -Force
+    }
     $copied++
 }
-Write-Ok "$copied icon files copied to icons\"
+if ($IconMode -eq 'hardlink') {
+    Write-Ok "$copied icon files hardlinked to icons\ (refusals were copied)"
+} else {
+    Write-Ok "$copied icon files copied to icons\"
+}
 
 # list.js mirrors list.txt as a JS array (fetch() is blocked on file:// pages)
 $jsPaths = ($paths | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ','

@@ -19,6 +19,8 @@
 #
 # Usage: bash install.sh [--no-shell] [--uninstall] [--automatic-updates]
 #                        [--update-metadata enabled|disabled|force]
+#                        [--icons copy|link|hardlink]
+#                        [--webshare|--no-webshare]
 #   --no-shell            skip handing off to an interactive shell at the end
 #   --uninstall, --remove remove installs, launcher, and (on request) the
 #                         PATH entry; asks before deleting anything
@@ -26,6 +28,13 @@
 #                         (installs ~/.local/bin/fengrid-update and a
 #                         marked crontab entry; the interactive install also
 #                         offers this as a step)
+#   --icons <mode>        how icon files get into icons/: copy (default,
+#                         self-contained), link (per-file symlinks to the
+#                         originals — saves disk, auto-reflects edits),
+#                         hardlink (same fs only, fallback to copy)
+#   --webshare            expose the showcase on the LAN (QR share) without
+#                         prompting — also the default answer to the prompt
+#   --no-webshare         keep the server local-only, skip the prompt
 #   --update-metadata <mode>
 #                         icon metadata handling (meta.js): enabled (default —
 #                         on install every icon is new, so all are identified;
@@ -67,20 +76,28 @@ die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 NO_SHELL=false
 UNINSTALL=false
 AUTO_UPDATES=false
+WEB_SHARE="ask"       # --webshare / --no-webshare; "ask" = prompt, default yes
 META_MODE="enabled"   # --update-metadata default: scan for changes on install
+ICONS_MODE="copy"     # --icons default: copy (self-contained install)
 while [ $# -gt 0 ]; do
     case "$1" in
         --no-shell)           NO_SHELL=true ;;
         --uninstall|--remove) UNINSTALL=true ;;
         --automatic-updates)  AUTO_UPDATES=true ;;
+        --webshare)           WEB_SHARE=yes ;;
+        --no-webshare)        WEB_SHARE=no ;;
+        --icons)
+            case "${2:-}" in copy|link|hardlink) ICONS_MODE="$2"; shift ;; esac ;;
+        --icons=*)            ICONS_MODE="${1#--icons=}" ;;
         --update-metadata)
             case "${2:-}" in enabled|disabled|force) META_MODE="$2"; shift ;; esac ;;
         --update-metadata=*)  META_MODE="${1#--update-metadata=}" ;;
-        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --update-metadata [enabled|disabled|force])" ;;
+        *) die "Unknown option: $1 (supported: --uninstall/--remove, --automatic-updates, --no-shell, --icons copy|link|hardlink, --webshare/--no-webshare, --update-metadata [enabled|disabled|force])" ;;
     esac
     shift
 done
 case "$META_MODE" in enabled|disabled|force) ;; *) META_MODE="enabled" ;; esac
+case "$ICONS_MODE" in copy|link|hardlink) ;; *) warn "Unknown --icons '$ICONS_MODE' — using copy"; ICONS_MODE="copy" ;; esac
 
 # ----------------------------------------------------------------------------
 # Uninstaller (--uninstall / --remove)
@@ -535,16 +552,34 @@ ok "Installed index.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon
 # ----------------------------------------------------------------------------
 # 3b. Local icon tree (self-contained previews)
 # ----------------------------------------------------------------------------
-# Firefox blocks cross-directory file:// images, so every icon is copied
-# under icons/<theme>/... next to index.html; relative paths work in every
-# browser and over http. macOS .icns files are converted to .png with the
-# built-in `sips`; Linux .xpm files are converted with ImageMagick when
-# available. list.txt entries for converted files are rewritten to the
-# converted .png so the page's relative paths match exactly.
-if [ "$N" -gt 1000 ]; then
+# Firefox blocks cross-directory file:// images, so every icon must be
+# reachable under icons/<theme>/... next to index.html; relative paths work
+# in every browser and over http. Three ways to get them there (--icons):
+#   copy     plain copies — fully self-contained (default)
+#   link     per-file SYMLINKS to the originals — no duplicated disk, edits
+#            to the originals show up immediately; uninstall never follows
+#            them, so removing the app cannot touch system icon themes
+#   hardlink second links to the same inode — no extra disk on the same
+#            filesystem, silently falls back to a copy across devices
+# macOS .icns files are converted to .png with the built-in `sips`; Linux
+# .xpm files are converted with ImageMagick when available — conversions
+# are always real files in icons/. list.txt entries for converted files are
+# rewritten to the converted .png so the page's relative paths match.
+store_file() {  # src dest — places $1 at $2 according to $ICONS_MODE
+    case "$ICONS_MODE" in
+        link)     ln -sfn "$1" "$2" 2>/dev/null ;;
+        hardlink) ln -f "$1" "$2" 2>/dev/null || cp -L "$1" "$2" 2>/dev/null ;;
+        *)        cp -L "$1" "$2" 2>/dev/null ;;
+    esac
+}
+if [ "$N" -gt 1000 ] && [ "$ICONS_MODE" = copy ]; then
     warn "You have $N icon files — copying them all takes a few minutes on large icon sets. Please wait; do not interrupt the install."
 fi
-info "Copying icon files into $INSTALL_DIR/icons/ ..."
+case "$ICONS_MODE" in
+    link)     info "Linking icon files into $INSTALL_DIR/icons/ (symlinks to originals) ..." ;;
+    hardlink) info "Hardlinking icon files into $INSTALL_DIR/icons/ ..." ;;
+    *)        info "Copying icon files into $INSTALL_DIR/icons/ ..." ;;
+esac
 mkdir -p "$INSTALL_DIR/icons"
 COPIED=0
 : > "$INSTALL_DIR/$LIST_FILE.new"
@@ -572,7 +607,7 @@ while IFS= read -r p; do
         *)
             dest="$INSTALL_DIR/icons/$rel"
             mkdir -p "$(dirname "$dest")"
-            cp -L "$p" "$dest" 2>/dev/null || continue
+            store_file "$p" "$dest" || continue
             ;;
     esac
     # collision guard: same rel from different scan roots
@@ -583,7 +618,7 @@ while IFS= read -r p; do
         case "$p" in
             *.icns) sips -s format png --resampleHeight 256 "$p" --out "$INSTALL_DIR/icons/$rel" >/dev/null 2>&1 ;;
             *.xpm)  "$CONVERT_CMD" "$p" "$INSTALL_DIR/icons/$rel" >/dev/null 2>&1 ;;
-            *)      cp -L "$p" "$INSTALL_DIR/icons/$rel" 2>/dev/null ;;
+            *)      store_file "$p" "$INSTALL_DIR/icons/$rel" ;;
         esac
     fi
     # the list entry becomes the local png for converted formats, else the
@@ -594,6 +629,11 @@ while IFS= read -r p; do
     esac
     COPIED=$((COPIED + 1))
 done < "$INSTALL_DIR/$LIST_FILE" > "$INSTALL_DIR/$LIST_FILE.new"
+case "$ICONS_MODE" in
+    link)     ok "Icon tree linked: $COPIED symlinks under icons/ (targets untouched; removing the install removes only the links)" ;;
+    hardlink) ok "Icon tree hardlinked: $COPIED files share inodes with the originals (cross-device entries were copied)" ;;
+    *)        ok "Icon tree copied: $COPIED files self-contained under icons/" ;;
+esac
 mv "$INSTALL_DIR/$LIST_FILE.new" "$INSTALL_DIR/$LIST_FILE"
 SIZE=$(du -sh "$INSTALL_DIR/icons" | cut -f1)
 ok "$COPIED icon files prepared in icons/ ($SIZE)"
@@ -750,17 +790,27 @@ fi
 # http://127.0.0.1:8642/. The opt-in below only EXPOSES that server to the
 # local network; a later \`fengrid\` launch reuses whatever is running on
 # the port, so no restart is needed.
-printf "Also expose the showcase on your local network (QR code for phones)? [y/N]: "
-read -r answer
-case "$answer" in
-    [yY]|[yY][eE][sS])
+if [ "$WEB_SHARE" = ask ]; then
+    printf "Expose the showcase on your local network (QR code for phones)? [Y/n]: "
+    read -r answer
+    case "$answer" in
+        [nN]|[nN][oO]) WEB_SHARE=no ;;
+        *)             WEB_SHARE=yes ;;
+    esac
+fi
+case "$WEB_SHARE" in
+    yes)
         if command -v python3 >/dev/null 2>&1; then
             ( cd "$INSTALL_DIR/server" && nohup python3 serve.py --port 8642 >/dev/null 2>&1 & )
             sleep 1
-            LANIP=$(python3 -c "import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.connect(('203.0.113.1',80));print(s.getsockname()[0])" 2>/dev/null || echo "127.0.0.1")
-            ok "LAN webshare running — open http://$LANIP:8642/_connect and scan the QR with a phone."
-            ok "Only share on networks you trust; the server is bound to all interfaces."
-            ok "Stop it later with:  pkill -f 'serve.py --port 8642'"
+            if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8642/server-state.js', timeout=2)" 2>/dev/null; then
+                LANIP=$(python3 -c "import socket;s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);s.connect(('203.0.113.1',80));print(s.getsockname()[0])" 2>/dev/null || echo "127.0.0.1")
+                ok "LAN webshare running — open http://$LANIP:8642/_connect and scan the QR with a phone."
+                ok "Only share on networks you trust; the server is bound to all interfaces."
+                ok "Stop it later with:  pkill -f 'serve.py --port 8642'"
+            else
+                warn "LAN webshare did not come up on port 8642 (busy or blocked) — the launcher's local-only server is unaffected."
+            fi
         else
             warn "python3 not found — install it, then run:  cd $INSTALL_DIR/server && python3 serve.py"
         fi

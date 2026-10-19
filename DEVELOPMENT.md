@@ -161,8 +161,8 @@ Both installers default to the server: `install.sh` writes a bash
 launcher and `install.ps1` a `fengrid.cmd`, each starting `serve.py` on the
 loopback interface and opening `http://127.0.0.1:8642/` (reusing a server
 already up on the port; plain-file fallback without Python or via
-`--file`). The LAN webshare below (bind `0.0.0.0`) remains an explicit
-opt-in for phone access.
+`--file`). The LAN webshare below (bind `0.0.0.0`) is enabled by the
+install by default now (`--no-webshare` to skip).
 
 ## Versioning & releases
 
