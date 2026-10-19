@@ -25,6 +25,7 @@ import email
 import email.parser
 import functools
 import http.server
+import io
 import json
 import os
 import re
@@ -34,15 +35,19 @@ import socketserver
 import subprocess
 import sqlite3
 import sys
+import tarfile
 import tempfile
 import threading
 import time
+import uuid
+import zipfile
 import urllib.parse
 from urllib.parse import urlparse, parse_qs
 
 SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SERVER_DIR)
 import import_engine  # noqa: E402  (server/import_engine.py lives next to us)
+import snippet_import  # noqa: E402  (server/snippet_import.py lives next to us)
 # The served web root is the parent of server/ — the install dir holding
 # index.html, list.txt, fonts/ and icons/ (see install.sh layout).
 WEB_ROOT = os.path.dirname(SERVER_DIR)
@@ -449,7 +454,53 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             created TEXT NOT NULL DEFAULT (datetime('now')),
             updated TEXT NOT NULL DEFAULT (datetime('now'))
         )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS palettes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL DEFAULT 'Untitled palette',
+            colors TEXT NOT NULL DEFAULT '[]',
+            tags TEXT NOT NULL DEFAULT '',
+            created TEXT NOT NULL DEFAULT (datetime('now')),
+            updated TEXT NOT NULL DEFAULT (datetime('now'))
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            tags TEXT NOT NULL DEFAULT '',
+            settings TEXT NOT NULL DEFAULT '{}',
+            created TEXT NOT NULL DEFAULT (datetime('now')),
+            updated TEXT NOT NULL DEFAULT (datetime('now'))
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS project_assets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+            asset_type TEXT NOT NULL,
+            asset_key TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            UNIQUE(project_id, asset_type, asset_key)
+        )""")
         return conn
+
+    # ------------------------------------------------------------------
+    # Project asset resolution — maps an (asset_type, asset_key) pair to
+    # real files in the install tree for archive export. Icon/font keys
+    # are RELATIVE paths under icons/ or fonts/ (traversal-checked);
+    # snippet/palette keys are row ids resolved from the database.
+    # ------------------------------------------------------------------
+    def _resolve_asset(self, app_dir, atype, key):
+        if atype == "icon":
+            p = os.path.realpath(os.path.join(app_dir, "icons", key))
+            base = os.path.realpath(os.path.join(app_dir, "icons"))
+            if not p.startswith(base + os.sep) or not os.path.isfile(p):
+                return None
+            return ("assets/icons/" + key.replace(os.sep, "/"), p)
+        if atype == "font":
+            p = os.path.realpath(os.path.join(app_dir, "fonts", key))
+            base = os.path.realpath(os.path.join(app_dir, "fonts"))
+            if not p.startswith(base + os.sep) or not os.path.isfile(p):
+                return None
+            return ("assets/fonts/" + key.replace(os.sep, "/"), p)
+        return None
 
     def handle_api(self, method):
         path = urlparse(self.path).path
@@ -531,6 +582,273 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         return self._json_response(200, {"ok": True})
                     return self._json_response(405, {"ok": False, "error": "method not allowed"})
 
+                # ---------------- snippet import (VSCode / massCode) ------
+                # GET  /api/snippets/import?kind=vscode[&path=…]   (no path:
+                #      scans the editor's default snippets folders)
+                # GET  /api/snippets/import?kind=masscode[&path=…] (no path:
+                #      tries massCode's default db.sqlite locations)
+                # POST /api/snippets/import — multipart: kind + file upload
+                #      (.code-snippets/.json for vscode, .sqlite for masscode)
+                if path == "/api/snippets/import":
+                    kind = (qs.get("kind", ["vscode"])[0] or "vscode").strip().lower()
+                    src_path = (qs.get("path", [""])[0] or "").strip()
+                    if method == "POST":
+                        kind, src_path = self._snippet_import_post_parts(kind)
+                    try:
+                        if kind == "masscode":
+                            found = []
+                            if not src_path:
+                                found = snippet_import.masscode_default_paths()
+                                if not found:
+                                    return self._json_response(404, {
+                                        "ok": False,
+                                        "error": "no massCode database found — pass &path= to your db.sqlite"})
+                            paths = [src_path] if src_path else found
+                            for p in paths:
+                                if not os.path.isfile(p):
+                                    return self._json_response(400, {
+                                        "ok": False, "error": "not a file: " + p})
+                            incoming = []
+                            for p in paths:
+                                incoming.extend(snippet_import.parse_masscode_db(p))
+                        else:
+                            kind = "vscode"
+                            paths = [src_path] if src_path else snippet_import.vscode_default_paths()
+                            if not paths:
+                                return self._json_response(404, {
+                                    "ok": False,
+                                    "error": "no VSCode snippets folders found — pass &path= to a .code-snippets or .json file"})
+                            incoming = []
+                            for p in paths:
+                                if os.path.isdir(p):
+                                    for fn in sorted(os.listdir(p)):
+                                        if fn.endswith((".json", ".code-snippets")):
+                                            with open(os.path.join(p, fn), encoding="utf-8", errors="replace") as f:
+                                                incoming.extend(snippet_import.parse_vscode(f.read()))
+                                elif os.path.isfile(p):
+                                    with open(p, encoding="utf-8", errors="replace") as f:
+                                        text = f.read()
+                                    incoming.extend(snippet_import.parse_vscode(text))
+                                else:
+                                    return self._json_response(400, {
+                                        "ok": False, "error": "path not found: " + p})
+                    except (ValueError, json.JSONDecodeError) as exc:
+                        return self._json_response(400, {"ok": False, "error": str(exc)[:300]})
+                    except sqlite3.DatabaseError as exc:
+                        return self._json_response(400, {
+                            "ok": False, "error": "cannot read database: " + str(exc)[:200]})
+
+                    inserted, skipped, titles = 0, 0, []
+                    for sn in incoming:
+                        dup = conn.execute(
+                            "SELECT 1 FROM snippets WHERE title = ? AND html = ? "
+                            "AND css = ? AND js = ?",
+                            (sn["title"], sn["html"], sn["css"], sn["js"])).fetchone()
+                        if dup:
+                            skipped += 1
+                            continue
+                        conn.execute(
+                            "INSERT INTO snippets (title, description, language, html, css, js, tags) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            (sn["title"], sn["description"], sn["language"],
+                             sn["html"], sn["css"], sn["js"], sn["tags"]))
+                        inserted += 1
+                        titles.append(sn["title"])
+                    if inserted:
+                        conn.commit()
+                    return self._json_response(200, {
+                        "ok": True, "kind": kind, "imported": inserted,
+                        "skipped": skipped, "titles": titles[:50]})
+
+                # ---------------- palettes (colors.html) ----------------
+                if path == "/api/palettes":
+                    if method == "GET":
+                        q = (qs.get("q", [""])[0] or "").strip()
+                        tag = (qs.get("tag", [""])[0] or "").strip()
+                        sort = (qs.get("sort", ["updated"])[0] or "updated")
+                        sql = "SELECT id, name, colors, tags, created, updated FROM palettes"
+                        wh, args = [], []
+                        if q:
+                            wh.append("(name LIKE ? OR tags LIKE ?)")
+                            args += ["%" + q + "%"] * 2
+                        if tag:
+                            wh.append("(',' || tags || ',') LIKE ?")
+                            args.append("%," + tag + ",%")
+                        if wh:
+                            sql += " WHERE " + " AND ".join(wh)
+                        sql += " ORDER BY " + ("name COLLATE NOCASE" if sort == "name" else
+                                               "created" if sort == "created" else "updated DESC")
+                        rows = [dict(r) for r in conn.execute(sql, args).fetchall()]
+                        for r in rows:
+                            try:
+                                r["colors"] = json.loads(r["colors"])
+                            except Exception:
+                                r["colors"] = []
+                        return self._json_response(200, {"ok": True, "palettes": rows})
+                    if method == "POST":
+                        body = self._read_json()
+                        colors = body.get("colors", [])
+                        if not isinstance(colors, list) or not colors:
+                            return self._json_response(400, {"ok": False, "error": "colors must be a non-empty list"})
+                        cur = conn.execute("INSERT INTO palettes (name, colors, tags) VALUES (?,?,?)",
+                                           (body.get("name", "Untitled palette"),
+                                            json.dumps(colors), body.get("tags", "")))
+                        conn.commit()
+                        row = conn.execute("SELECT * FROM palettes WHERE id = ?", (cur.lastrowid,)).fetchone()
+                        d = dict(row)
+                        d["colors"] = json.loads(d["colors"])
+                        return self._json_response(201, {"ok": True, "palette": d})
+                    return self._json_response(405, {"ok": False, "error": "method not allowed"})
+
+                mp = re.match(r"^/api/palettes/(\d+)$", path)
+                if mp:
+                    pid = int(mp.group(1))
+                    if method == "GET":
+                        row = conn.execute("SELECT * FROM palettes WHERE id = ?", (pid,)).fetchone()
+                        if not row:
+                            return self._json_response(404, {"ok": False, "error": "not found"})
+                        d = dict(row)
+                        d["colors"] = json.loads(d["colors"])
+                        return self._json_response(200, {"ok": True, "palette": d})
+                    if method == "PUT":
+                        body = self._read_json()
+                        fields, args = [], []
+                        if "name" in body:
+                            fields.append("name = ?"); args.append(body["name"])
+                        if "colors" in body:
+                            fields.append("colors = ?"); args.append(json.dumps(body["colors"]))
+                        if "tags" in body:
+                            fields.append("tags = ?"); args.append(body["tags"])
+                        if not fields:
+                            return self._json_response(400, {"ok": False, "error": "nothing to update"})
+                        fields.append("updated = datetime('now')")
+                        args.append(pid)
+                        conn.execute("UPDATE palettes SET " + ", ".join(fields) + " WHERE id = ?", args)
+                        conn.commit()
+                        row = conn.execute("SELECT * FROM palettes WHERE id = ?", (pid,)).fetchone()
+                        d = dict(row)
+                        d["colors"] = json.loads(d["colors"])
+                        return self._json_response(200, {"ok": True, "palette": d})
+                    if method == "DELETE":
+                        conn.execute("DELETE FROM palettes WHERE id = ?", (pid,))
+                        conn.commit()
+                        return self._json_response(200, {"ok": True})
+                    return self._json_response(405, {"ok": False, "error": "method not allowed"})
+
+                # ---------------- projects (projects.html) ----------------
+                # Assets live in the join table project_assets — the same
+                # (type, key) pair may appear in any number of projects.
+                if path == "/api/projects":
+                    if method == "GET":
+                        q = (qs.get("q", [""])[0] or "").strip()
+                        tag = (qs.get("tag", [""])[0] or "").strip()
+                        sql = "SELECT id, name, description, tags, created, updated FROM projects"
+                        wh, args = [], []
+                        if q:
+                            wh.append("(name LIKE ? OR description LIKE ? OR tags LIKE ?)")
+                            args += ["%" + q + "%"] * 3
+                        if tag:
+                            wh.append("(',' || tags || ',') LIKE ?")
+                            args.append("%," + tag + ",%")
+                        if wh:
+                            sql += " WHERE " + " AND ".join(wh)
+                        sql += " ORDER BY updated DESC"
+                        rows = [dict(r) for r in conn.execute(sql, args).fetchall()]
+                        for r in rows:
+                            r["asset_count"] = conn.execute(
+                                "SELECT COUNT(*) c FROM project_assets WHERE project_id = ?",
+                                (r["id"],)).fetchone()["c"]
+                        return self._json_response(200, {"ok": True, "projects": rows})
+                    if method == "POST":
+                        body = self._read_json()
+                        name = (body.get("name") or "").strip()
+                        if not name:
+                            return self._json_response(400, {"ok": False, "error": "name required"})
+                        cur = conn.execute(
+                            "INSERT INTO projects (name, description, tags, settings) VALUES (?,?,?,?)",
+                            (name, body.get("description", ""), body.get("tags", ""),
+                             json.dumps(body.get("settings", {}))))
+                        conn.commit()
+                        row = conn.execute("SELECT * FROM projects WHERE id = ?", (cur.lastrowid,)).fetchone()
+                        d = dict(row)
+                        d["settings"] = json.loads(d["settings"])
+                        return self._json_response(201, {"ok": True, "project": d})
+                    return self._json_response(405, {"ok": False, "error": "method not allowed"})
+
+                mj = re.match(r"^/api/projects/(\d+)(/assets(/(\d+))?)?(/export)?$", path)
+                if mj:
+                    pid = int(mj.group(1))
+                    row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                    if not row:
+                        return self._json_response(404, {"ok": False, "error": "not found"})
+                    project = dict(row)
+                    project["settings"] = json.loads(project["settings"] or "{}")
+
+                    if mj.group(5):  # /export
+                        if method != "POST":
+                            return self._json_response(405, {"ok": False, "error": "POST required"})
+                        return self._export_project(conn, project, self._read_json() if int(
+                            self.headers.get("Content-Length") or 0) else {})
+
+                    if mj.group(2) is None:  # project itself
+                        if method == "GET":
+                            assets = [dict(a) for a in conn.execute(
+                                "SELECT id, asset_type, asset_key, label FROM project_assets "
+                                "WHERE project_id = ? ORDER BY asset_type, id", (pid,)).fetchall()]
+                            return self._json_response(200, {"ok": True, "project": project, "assets": assets})
+                        if method == "PUT":
+                            body = self._read_json()
+                            fields, args = [], []
+                            for k in ("name", "description", "tags"):
+                                if k in body:
+                                    fields.append(k + " = ?"); args.append(body[k])
+                            if "settings" in body:
+                                fields.append("settings = ?"); args.append(json.dumps(body["settings"]))
+                            if not fields:
+                                return self._json_response(400, {"ok": False, "error": "nothing to update"})
+                            fields.append("updated = datetime('now')")
+                            args.append(pid)
+                            conn.execute("UPDATE projects SET " + ", ".join(fields) + " WHERE id = ?", args)
+                            conn.commit()
+                            row = conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+                            d = dict(row); d["settings"] = json.loads(d["settings"] or "{}")
+                            return self._json_response(200, {"ok": True, "project": d})
+                        if method == "DELETE":
+                            conn.execute("DELETE FROM project_assets WHERE project_id = ?", (pid,))
+                            conn.execute("DELETE FROM projects WHERE id = ?", (pid,))
+                            conn.commit()
+                            return self._json_response(200, {"ok": True})
+                        return self._json_response(405, {"ok": False, "error": "method not allowed"})
+
+                    # /assets
+                    if method == "POST":
+                        body = self._read_json()
+                        atype = body.get("asset_type", "")
+                        akey = str(body.get("asset_key", "")).strip()
+                        if atype not in ("icon", "font", "snippet", "palette") or not akey:
+                            return self._json_response(400, {"ok": False, "error": "asset_type/asset_key required"})
+                        if atype in ("icon", "font") and not self._resolve_asset(
+                                self.server.app_dir, atype, akey):
+                            return self._json_response(400, {"ok": False, "error": "asset file not found: " + akey})
+                        conn.execute(
+                            "INSERT OR IGNORE INTO project_assets (project_id, asset_type, asset_key, label) "
+                            "VALUES (?,?,?,?)",
+                            (pid, atype, akey, body.get("label", "")))
+                        conn.execute("UPDATE projects SET updated = datetime('now') WHERE id = ?", (pid,))
+                        conn.commit()
+                        assets = [dict(a) for a in conn.execute(
+                            "SELECT id, asset_type, asset_key, label FROM project_assets "
+                            "WHERE project_id = ? ORDER BY asset_type, id", (pid,)).fetchall()]
+                        return self._json_response(201, {"ok": True, "assets": assets})
+                    return self._json_response(405, {"ok": False, "error": "method not allowed"})
+
+                ma = re.match(r"^/api/projects/(\d+)/assets/(\d+)$", path)
+                if ma and method == "DELETE":
+                    conn.execute("DELETE FROM project_assets WHERE id = ? AND project_id = ?",
+                                 (int(ma.group(2)), int(ma.group(1))))
+                    conn.commit()
+                    return self._json_response(200, {"ok": True})
+
                 return self._json_response(404, {"ok": False, "error": "unknown endpoint"})
             finally:
                 conn.close()
@@ -542,6 +860,249 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if length <= 0 or length > 4 * 1024 * 1024:
             raise ValueError("empty or oversized request body")
         return json.loads(self.rfile.read(length))
+
+    def _snippet_import_post_parts(self, default_kind):
+        """Parse the /api/snippets/import multipart POST.
+
+        Returns (kind, upload_path): `kind` from the kind field (upload
+        filename may override it), upload_path = a temp file holding the
+        uploaded .code-snippets/.json/.sqlite payload, or '' when the
+        request carried no file.
+        """
+        body = self._read_body()
+        msg = email.parser.BytesParser().parsebytes(
+            b"Content-Type: " + self.headers.get("Content-Type", "").encode()
+            + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+        kind = default_kind
+        upload = None
+        for part in msg.walk():
+            if part.is_multipart():
+                continue
+            name = part.get_param("name", header="content-disposition")
+            fname = part.get_filename()
+            if name == "kind" and not fname:
+                kind = bytes(part.get_payload(decode=True) or b"").decode(
+                    "utf-8", "replace").strip().lower() or default_kind
+            elif fname:
+                upload = (fname, part.get_payload(decode=True) or b"")
+        if not upload:
+            return kind, ""
+        fname, data = upload
+        if kind == "vscode" and fname.endswith((".sqlite", ".db")):
+            kind = "masscode"
+        elif kind == "masscode" and fname.endswith((".json", ".code-snippets")):
+            kind = "vscode"
+        suffix = os.path.splitext(fname)[1] or ".bin"
+        tmp = tempfile.NamedTemporaryFile(prefix="fengrid-snippet-import-", suffix=suffix, delete=False)
+        try:
+            tmp.write(bytes(data))
+        finally:
+            tmp.close()
+        return kind, tmp.name
+
+    # ------------------------------------------------------------------
+    # POST /api/projects/<id>/export — build a distributable archive
+    # (.zip or .tar.gz) containing the project's selected assets plus
+    # generated CSS/JS/template files. Everything is generated fresh from
+    # the DB + install tree; nothing is cached.
+    # ------------------------------------------------------------------
+    def _export_project(self, conn, project, opts):
+        app = self.server.app_dir
+        pid = project["id"]
+        assets = [dict(a) for a in conn.execute(
+            "SELECT id, asset_type, asset_key, label FROM project_assets "
+            "WHERE project_id = ? ORDER BY asset_type, id", (pid,)).fetchall()]
+        s = project.get("settings") or {}
+        prefix = re.sub(r"[^a-z0-9-]", "", str(s.get("prefix", "fg"))) or "fg"
+        icon_px = int(s.get("iconSize", 32) or 32)
+
+        palettes, snippets, icon_files, font_files = [], [], [], []
+        for a in assets:
+            if a["asset_type"] == "palette":
+                row = conn.execute("SELECT * FROM palettes WHERE id = ?",
+                                   (int(a["asset_key"]),)).fetchone()
+                if row:
+                    d = dict(row); d["colors"] = json.loads(d["colors"])
+                    palettes.append(d)
+            elif a["asset_type"] == "snippet":
+                row = conn.execute("SELECT * FROM snippets WHERE id = ?",
+                                   (int(a["asset_key"]),)).fetchone()
+                if row:
+                    snippets.append(dict(row))
+            elif a["asset_type"] in ("icon", "font"):
+                r = self._resolve_asset(app, a["asset_type"], a["asset_key"])
+                if r:
+                    (icon_files if a["asset_type"] == "icon" else font_files).append((a, r))
+
+        def cssvar_name(pal, i):
+            base = re.sub(r"[^a-z0-9]+", "-", (pal.get("name") or "palette").lower()).strip("-")
+            return "--%s-%s-%d" % (prefix, base or "palette", i + 1)
+
+        colors_css, fonts_css, icons_css, icons_js = [], [], [], []
+        for pal in palettes:
+            for i, c in enumerate(pal["colors"]):
+                colors_css.append("  %s: %s;" % (cssvar_name(pal, i), c))
+        if colors_css:
+            colors_css.insert(0, ":root {")
+            colors_css.append("}")
+        for a, (arcname, abspath) in font_files:
+            family = (a.get("label") or a["asset_key"].split("/")[0]).replace("_", " ")
+            rel = arcname.split("/", 2)[2] if arcname.count("/") >= 2 else arcname
+            ext = os.path.splitext(abspath)[1].lower()
+            fmt = {"ttf": "truetype", "otf": "opentype", "woff": "woff",
+                   ".woff2": "woff2"}.get(ext.lstrip("."), "truetype")
+            fonts_css.append(
+                "@font-face { font-family: '%s'; src: url('%s') format('%s'); }"
+                % (family, arcname, fmt))
+        for a, (arcname, abspath) in icon_files:
+            stem = os.path.splitext(os.path.basename(a["asset_key"]))[0]
+            cls = re.sub(r"[^a-z0-9-]", "-", (a.get("label") or stem).lower()).strip("-")
+            icons_css.append(".%s-%s { background-image: url('%s'); }" % (prefix, cls, arcname))
+            icons_js.append('  "%s": "%s"' % (stem, arcname))
+        icons_js_s = ("window.%sIcons = {\n  %s\n};\n" % (prefix, ",\n  ".join(icons_js))
+                      if icons_js else "window.%sIcons = {};\n" % prefix)
+
+        # Demo template — uses the chosen palette, fonts, and icons.
+        pal0 = palettes[0]["colors"] if palettes else []
+        bg = s.get("bgColor") or (pal0[0] if pal0 else "#101418")
+        fg = s.get("fgColor") or (pal0[-1] if pal0 else "#E7EDF2")
+        accent = s.get("accentColor") or (pal0[min(2, len(pal0) - 1)] if pal0 else "#39B8C4")
+        font_stack = ", ".join("'%s'" % (a.get("label") or a["asset_key"].split("/")[0]).replace("_", " ")
+                               for a, _ in font_files[:3]) or "system-ui, sans-serif"
+        icon_imgs = "\n".join(
+            '      <div class="icon" style="background-image:url(\'%s\')" title="%s"></div>'
+            % (arcname, os.path.splitext(os.path.basename(arcname))[0])
+            for a, (arcname, _) in icon_files[:48])
+        font_samples = "\n".join(
+            '    <p style="font-family:\'%s\'">The quick brown fox jumps over the lazy dog — %s</p>'
+            % ((a.get("label") or a["asset_key"].split("/")[0]).replace("_", " "),
+               (a.get("label") or a["asset_key"].split("/")[0]).replace("_", " "))
+            for a, _ in font_files[:8])
+        swatches = "\n".join(
+            '      <div class="swatch" style="background:%s"><span>%s</span></div>' % (c, c)
+            for pal in palettes for c in pal["colors"])
+        template = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>%s — generated by fengrid</title>
+<link rel="stylesheet" href="css/colors.css">
+<link rel="stylesheet" href="css/fonts.css">
+<link rel="stylesheet" href="css/icons.css">
+<style>
+  body { margin:0; padding:40px; background:%s; color:%s;
+         font-family:%s, system-ui, sans-serif; }
+  .icons { display:flex; flex-wrap:wrap; gap:12px; }
+  .icon { width:%dpx; height:%dpx; background-size:contain;
+          background-repeat:no-repeat; background-position:center; }
+  .swatches { display:flex; flex-wrap:wrap; gap:10px; margin:24px 0; }
+  .swatch { width:96px; height:64px; border-radius:10px; display:flex;
+            align-items:flex-end; justify-content:center; padding-bottom:6px;
+            font:11px/1 monospace; color:rgba(255,255,255,.85);
+            text-shadow:0 1px 2px rgba(0,0,0,.5); }
+  h1, h2 { font-weight:600; }
+</style>
+</head>
+<body>
+  <h1>%s</h1>
+  <p>%s</p>
+  <h2>Palette</h2>
+  <div class="swatches">
+%s
+  </div>
+  <h2>Icons</h2>
+  <div class="icons">
+%s
+  </div>
+  <h2>Type</h2>
+%s
+  <script src="js/icons.js"></script>
+</body>
+</html>
+""" % (project["name"], bg, fg, font_stack, icon_px, icon_px,
+            project["name"], project.get("description") or "", swatches or
+            '      <div class="swatch">no palette selected</div>', icon_imgs or
+            '      <div class="icon"></div>', font_samples or
+            "    <p>No fonts selected.</p>")
+
+        manifest = {
+            "name": project["name"], "description": project.get("description", ""),
+            "tags": project.get("tags", ""), "settings": s,
+            "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "generator": "fengrid",
+            "assets": [{"type": a["asset_type"], "key": a["asset_key"], "label": a.get("label", "")}
+                       for a in assets],
+            "palettes": [{"name": p.get("name"), "colors": p["colors"]} for p in palettes],
+        }
+        readme = "# %s\n\n%s\n\nGenerated by fengrid (%s).\n\n" % (
+            project["name"], project.get("description") or "", manifest["generated"])
+        readme += ("## Contents\n\n"
+                   "- `index.html` — demo template using the project's assets\n"
+                   "- `css/colors.css` — palette custom properties\n"
+                   "- `css/fonts.css` — @font-face rules\n"
+                   "- `css/icons.css` — icon classes\n"
+                   "- `js/icons.js` — icon name map\n"
+                   "- `assets/` — the selected files\n"
+                   "- `manifest.json` — project specification\n")
+
+        fmt = "targz" if str(opts.get("format", s.get("format", "zip"))) in ("targz", "tar.gz", "tgz") else "zip"
+        buf = io.BytesIO()
+        if fmt == "zip":
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                def put(name, data):
+                    z.writestr(name, data)
+                put("manifest.json", json.dumps(manifest, indent=2))
+                put("README.md", readme)
+                if colors_css: put("css/colors.css", "\n".join(colors_css) + "\n")
+                if fonts_css: put("css/fonts.css", "\n".join(fonts_css) + "\n")
+                if icons_css: put("css/icons.css", "\n".join(icons_css) + "\n")
+                put("js/icons.js", icons_js_s)
+                put("index.html", template)
+                if palettes: put("palettes.json", json.dumps(
+                    [{"name": p["name"], "colors": p["colors"]} for p in palettes], indent=2))
+                for i, sn in enumerate(snippets):
+                    put("snippets/%02d-%s.html" % (i + 1, re.sub(r"[^a-z0-9-]+", "-",
+                        sn["title"].lower()).strip("-") or "snippet"),
+                        "<!DOCTYPE html>\n<!-- %s\n%s -->\n%s" % (
+                            sn["title"], sn.get("description", ""), sn.get("html", "")))
+                for a, (arcname, abspath) in icon_files + font_files:
+                    with open(abspath, "rb") as f:
+                        z.writestr(arcname, f.read())
+        else:
+            with tarfile.open(fileobj=buf, mode="w:gz") as t:
+                def put(name, data):
+                    info = tarfile.TarInfo(name)
+                    raw = data.encode("utf-8")
+                    info.size = len(raw); info.mtime = int(time.time())
+                    t.addfile(info, io.BytesIO(raw))
+                put("manifest.json", json.dumps(manifest, indent=2))
+                put("README.md", readme)
+                if colors_css: put("css/colors.css", "\n".join(colors_css) + "\n")
+                if fonts_css: put("css/fonts.css", "\n".join(fonts_css) + "\n")
+                if icons_css: put("css/icons.css", "\n".join(icons_css) + "\n")
+                put("js/icons.js", icons_js_s)
+                put("index.html", template)
+                if palettes: put("palettes.json", json.dumps(
+                    [{"name": p["name"], "colors": p["colors"]} for p in palettes], indent=2))
+                for i, sn in enumerate(snippets):
+                    put("snippets/%02d-%s.html" % (i + 1, re.sub(r"[^a-z0-9-]+", "-",
+                        sn["title"].lower()).strip("-") or "snippet"),
+                        "<!DOCTYPE html>\n<!-- %s\n%s -->\n%s" % (
+                            sn["title"], sn.get("description", ""), sn.get("html", "")))
+                for a, (arcname, abspath) in icon_files + font_files:
+                    info = t.gettarinfo(abspath, arcname=arcname)
+                    t.addfile(info, open(abspath, "rb"))
+
+        data = buf.getvalue()
+        fname = re.sub(r"[^a-z0-9-]+", "-", project["name"].lower()).strip("-") or "project"
+        self.send_response(200)
+        self.send_header("Content-Type",
+                         "application/zip" if fmt == "zip" else "application/gzip")
+        self.send_header("Content-Disposition",
+                         'attachment; filename="%s.%s"' % (fname, "zip" if fmt == "zip" else "tar.gz"))
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def _finish_import(self, result, started):
         """Shared tail: refresh the list + metadata, then report."""

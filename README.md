@@ -57,6 +57,16 @@ page — no build step, no runtime, no server required.
   QR with a phone. Same-origin serving means no CORS issues, and directory
   listings are disabled
 - **Light & dark modes** — persisted between visits
+- **More panes** — the header switch opens siblings built on the same
+  design system, each with its own brand-derived accent: **Fonts**
+  (`fonts.html`, violet) showcases installed typefaces with live
+  previews and CSS/ZIP export, **Code** (`code.html`, coral) is a
+  JSFiddle-style snippet playground with a SQLite store, IDE bindings,
+  and VSCode/massCode import, **Colors** (`colors.html`, rose)
+  generates and exports palettes with WCAG readouts and board images,
+  and **Projects** (`projects.html`, green) coordinates assets from all
+  panes into exportable `.zip` / `.tar.gz` packs with generated CSS,
+  JS, and a demo template
 - **Fully self-contained** — self-hosted subset fonts, no CDN, no JS
   framework
 

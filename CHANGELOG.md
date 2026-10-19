@@ -8,28 +8,70 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Snippet import from VSCode and massCode** — the Code pane's new
+  **Import** button reads `.code-snippets` / per-language `.json`
+  snippet files (JSONC: comments and trailing commas tolerated) and
+  massCode's `db.sqlite`, translating both into fengrid's snippet
+  schema. VSCode `scope` and massCode fragment languages map onto the
+  HTML/CSS/JS fields (html/css/scss/less → CSS, js/ts/json → JS,
+  markdown → Markdown); unmapped languages land in the JS pane with a
+  `lang:<name>` tag. massCode's JSON fragment lists, JSON tag arrays,
+  and soft-deleted rows are all handled; empty paths scan the editors'
+  default locations, or a path/file upload can be given. Re-importing
+  skips snippets already present (title + body match). Endpoint:
+  `GET/POST /api/snippets/import?kind=vscode|masscode`.
+- **Project coordinator (`projects.html`)** — collect icons, fonts,
+  snippets, and palettes into named projects (SQLite-backed; assets can
+  belong to any number of projects). A spec panel tweaks the CSS class
+  prefix, icon size, and background/ink/accent colors with a live
+  preview rendering the chosen assets and settings. **Export .zip** or
+  **.tar.gz** produces a distributable archive: the selected files under
+  `assets/`, generated `css/colors.css` (palette custom properties),
+  `css/fonts.css` (@font-face rules), `css/icons.css`, `js/icons.js`,
+  a demo `index.html` template, `palettes.json`, `manifest.json`, and a
+  README. Endpoint: `POST /api/projects/<id>/export`.
+- **Colors pane (`colors.html`)** — a palette generator in the coolors
+  mold: five swatches with harmony rules (pleasing mix, analogous,
+  complementary, triadic, monochrome), spacebar to reroll unlocked
+  swatches, per-swatch lock/remove/reorder, an HSL/hex editor, and
+  WCAG contrast readouts against white and black. Palettes save to
+  SQLite with tags; the sidebar offers search, sorting, and a tag
+  cloud. Exports: CSS custom properties, JSON, and **palette board
+  images** (SVG + 2× PNG) in the palettd style — rounded swatch cards
+  with hex codes and automatically chosen color names, text ink picked
+  by WCAG contrast.
 - **Code playground (`code.html`)** — a JSFiddle-style pane for writing,
-  previewing, and organizing HTML/CSS/JS snippets. Tabbed editors with
-  lightweight syntax highlighting (no external dependencies — a
-  regex tokenizer with private-use-area placeholders), a live Result
-  iframe (Ctrl+Enter or Run ▸), and Save to a local SQLite database
-  (`snippets.db`, created on first save). The taxonomy sidebar lists
-  snippets with search, language filter, recent/title/created sorting,
-  and a clickable tag cloud (tags with counts); Ctrl+S saves, and
-  **Export HTML** downloads a standalone file. Served endpoints:
-  `GET/POST /api/snippets`, `GET/PUT/DELETE /api/snippets/<id>`,
-  `GET /api/tags`. Snippets persist across reinstalls only if
-  `snippets.db` is kept — the uninstaller treats it as data and asks
-  before deleting.
+  previewing, and organizing HTML/CSS/JS snippets. Tabbed editors, a
+  live Result iframe (Run ▸ / Ctrl+Enter), and Save to a local SQLite
+  database (`snippets.db`). The taxonomy sidebar lists snippets with
+  search, sorting, a tag cloud, and Export HTML for standalone files.
+  Endpoints: `GET/POST /api/snippets`, `GET/PUT/DELETE /api/snippets/<id>`,
+  `GET /api/tags`.
+- **IDE-grade editor bindings in the Code pane** — the syntax
+  highlighter now covers functions, pseudo-classes, doctype, JSON, and
+  Markdown; emacs-style commands (Ctrl-A/E/K/Y/D, Alt-B/F/D,
+  Ctrl-X Ctrl-S) work everywhere, and a VIM toggle (button or
+  Ctrl+Alt+V) adds modal normal/insert/visual editing with motions
+  (h j k l w b e 0 $ gg G), operators (d/c/y with motions, dd yy cc
+  x D C), paste (p P), undo, and `:w` save, with a mode/line status
+  readout.
 - **Color-coded modes** — each pane of the app now has its own accent
   derived from the brand palette: **Icons** stay teal (`#39B8C4` /
-  `#0E7C86`), **Fonts** turn violet (`#A78BFA` / `#6D4FC4`), and
-  **Code** is coral (`#F0885C` / `#C44A1E`). The wordmark, mode switch,
-  buttons, chips, and focus rings all follow the pane's accent; the
-  lit-pane amber remains the shared interaction accent everywhere.
+  `#0E7C86`), **Fonts** turn violet (`#A78BFA` / `#6D4FC4`), **Code**
+  is coral (`#F0885C` / `#C44A1E`), **Colors** rose (`#E879A6` /
+  `#B0306A`), and **Projects** green (`#63C48B` / `#1B7A4E`). The
+  wordmark, mode switch, buttons, chips, and focus rings all follow the
+  pane's accent; the lit-pane amber remains the shared interaction
+  accent everywhere.
 
 ### Fixed
 
+- **scan-fonts.sh corrupted font-meta.js on multi-face `.ttc` files** —
+  `fc-scan` concatenates every face in a collection when the format
+  lacks a trailing newline, so one WenQuanYi entry emitted invalid
+  JavaScript that took down the whole metadata file (fonts.html showed
+  nothing). The format now ends in `\n`, and family/style are
+  JSON-escaped while weight/slant are stripped to digits.
 - **Windows paths were dropped by the page's list parser** — `parseLine`
   rejected any `list.txt` line not starting with `/`, so Windows drive
   paths (`D:/Library/.../icon.png`) yielded zero icons. It now accepts

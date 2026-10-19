@@ -151,9 +151,49 @@ recent/title/created sorting, and a clickable tag cloud; click a snippet
 to reopen it. **Export HTML** downloads the current snippet as a
 standalone file.
 
+The editor speaks IDE: emacs-style commands (Ctrl-A/E line home/end,
+Ctrl-K kill line, Ctrl-Y yank, Alt-B/F word motion, Ctrl-X Ctrl-S save)
+work everywhere, and the **VIM** toggle (or Ctrl+Alt+V) enables modal
+editing — motions `h j k l w b e 0 $ gg G`, operators `d c y` with
+motions (`dd yy cc dw x D C`), `p P` paste, and `:w` to save, with the
+current mode shown in the pane label.
+
+The **Import** button brings snippets in from other tools: VSCode
+`.code-snippets` / `.json` files (comments and trailing commas are
+fine) and massCode's `db.sqlite`. Both are translated into fengrid's
+snippet store — languages map onto the HTML/CSS/JS fields, tags carry
+over, and re-importing skips what is already present. Leave the path
+empty to scan the editors' default locations, or pick a file to upload.
+
+## Colors
+
+The **Colors** tab opens `colors.html` — a palette generator: five
+swatches, a harmony selector (pleasing mix, analogous, complementary,
+triadic, monochrome), and the spacebar to roll new colors (locked
+swatches stay put). Click a swatch to edit it with HSL sliders or a hex
+value; every swatch shows its contrast ratio against white and black
+with WCAG badges. **Save palette** stores it in SQLite with a name and
+tags; the sidebar lists saved palettes with search, sorting, and a tag
+cloud. Exports: CSS custom properties, JSON, and palette board images
+(SVG and 2× PNG) — rounded swatch cards with hex codes and
+auto-generated color names, ready for READMEs and style guides.
+
+## Projects
+
+The **Projects** tab opens `projects.html` — collect anything the other
+panes hold into a coordinated, exportable pack. Create a project, then
+pick assets from the Icons / Fonts / Snippets / Palettes tabs (an asset
+can live in any number of projects). The spec row tweaks the generated
+output — CSS class prefix, icon size, background/ink/accent colors —
+and the live preview updates as you type. **Save project** (Ctrl+S)
+persists everything; **Export .zip** or **.tar.gz** builds an archive
+with the selected files, generated `css/colors.css`, `css/fonts.css`,
+`css/icons.css`, `js/icons.js`, a demo `index.html`, `palettes.json`,
+`manifest.json`, and a README.
+
 Each pane has its own brand-derived accent — Icons are teal, Fonts are
-violet, Code is coral — while the lit-pane amber stays the shared
-interaction accent everywhere.
+violet, Code is coral, Colors are rose, Projects are green — while the
+lit-pane amber stays the shared interaction accent everywhere.
 
 ## Add your own icons
 

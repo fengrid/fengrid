@@ -155,10 +155,11 @@ while IFS= read -r src; do
     ext="${base##*.}"
     ext_lower=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
 
-    # ask fontconfig for family + style + weight + slant
+    # ask fontconfig for family + style + weight + slant (trailing \n keeps
+    # multi-face .ttc collections from concatenating into one garbage line)
     META=""
     if command -v fc-scan >/dev/null 2>&1; then
-        META=$(fc-scan --format '%{family}|%{style}|%{weight}|%{slant}' "$src" 2>/dev/null | head -1)
+        META=$(fc-scan --format '%{family}|%{style}|%{weight}|%{slant}\n' "$src" 2>/dev/null | head -1)
     fi
     family="$(printf '%s' "$META" | cut -d'|' -f1 | sed 's/:.*//' )"
     style="$(printf '%s' "$META" | cut -d'|' -f2)"
@@ -190,10 +191,16 @@ while IFS= read -r src; do
 
     echo "$dest" >> "$LIST_OUT"
 
-    # append metadata to font-meta.js (built up in a temp then assembled)
+    # append metadata to font-meta.js (built up in a temp then assembled).
+    # family/style are JSON-escaped — some families contain quotes or
+    # backslashes, and one malformed literal kills the whole data file.
     rel="fonts/$dir_name/$base"
+    family_js=$(printf '%s' "$family" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+    style_js=$(printf '%s' "$style" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+    weight_js=$(printf '%s' "${weight:-0}" | tr -cd '0123456789')
+    slant_js=$(printf '%s' "${slant:-0}" | tr -cd '0123456789')
     printf 'window.FONT_META[%s]={f:%s,s:%s,w:%s,l:%s};\n' \
-        "\"$rel\"" "\"$family\"" "\"$style\"" "${weight:-0}" "${slant:-0}" \
+        "\"$rel\"" "\"$family_js\"" "\"$style_js\"" "${weight_js:-0}" "${slant_js:-0}" \
         >> "$META_OUT.tmp"
     COPIED=$((COPIED + 1))
 done < "$TMP_LIST"
