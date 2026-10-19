@@ -8,6 +8,10 @@ Rectangle {
     id: rail
     color: theme.tokens.surface
 
+    // pane switching: 0 = icons, 1 = fonts (Main owns the state)
+    property int pane: 0
+    signal panePicked(int idx)
+
     // `library !== null` guards: context properties are nulled during app
     // teardown while lingering bindings re-evaluate — without the guard the
     // exit path spams TypeErrors (seen in the first offscreen QA run).
@@ -89,6 +93,18 @@ Rectangle {
             id: railCol
             width: rail.width
             spacing: 2
+
+            SectionLabel { text: qsTr("Panes") }
+            RailItem {
+                label: qsTr("Icons")
+                active: rail.pane === 0
+                onPicked: rail.panePicked(0)
+            }
+            RailItem {
+                label: qsTr("Fonts")
+                active: rail.pane === 1
+                onPicked: rail.panePicked(1)
+            }
 
             SectionLabel { text: qsTr("Library") }
             RailItem {

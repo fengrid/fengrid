@@ -37,9 +37,14 @@ try:
 except ImportError:  # pragma: no cover - Pillow is a build requirement
     Image = None
 
+from . import fonts as fonts_mod
 from . import scanner
 
 _MAX_SVG_PARSE_BYTES = 4 * 1024 * 1024
+
+
+class ScanAborted(Exception):
+    """Raised via a should_stop() callback to end a scan early (app quit)."""
 
 
 def fingerprint(path: str) -> str:
@@ -163,8 +168,11 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                     progress(counts["total"], path)
 
             # prune assets + fingerprints that vanished from this source
+            # (kind-scoped: a source row is single-purpose, but belt-and-
+            # suspenders so an icon scan can never delete font rows)
             rows = con.execute(
-                "SELECT path FROM asset WHERE source_id = ?", (source_id,)
+                "SELECT path FROM asset WHERE source_id = ? AND kind = 'icon'",
+                (source_id,),
             ).fetchall()
             for (path,) in rows:
                 if path not in seen:
@@ -183,13 +191,101 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
     return counts
 
 
-def ensure_sources(con: sqlite3.Connection,
-                   roots: list[Path]) -> list[tuple[int, str]]:
+def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
+               progress=None, should_stop=None) -> dict:
+    """Incrementally index font sources (kind='font' rows).
+
+    Same fingerprint/incremental scheme as scan(); one row per FILE with the
+    first face's metadata (core/fonts.identify_font documents the .ttc
+    scope note). should_stop() is checked per file so an app quit ends the
+    scan cleanly instead of leaving a QThread running (qa-gate tripwire).
+    """
+    counts = {"total": 0, "new": 0, "changed": 0, "unchanged": 0,
+              "pruned": 0, "errors": 0}
+    now = time.time()
+
+    con.execute("BEGIN")
+    try:
+        for source_id, root in sources:
+            seen: set[str] = set()
+            for path in fonts_mod.iter_font_files(root):
+                if should_stop is not None and should_stop():
+                    raise ScanAborted
+                seen.add(path)
+                counts["total"] += 1
+                fp = fingerprint(path)
+                prev = con.execute(
+                    "SELECT fingerprint FROM scan_state WHERE path = ?",
+                    (path,),
+                ).fetchone()
+                if prev is not None and prev[0] == fp:
+                    con.execute(
+                        "UPDATE scan_state SET last_seen = ? WHERE path = ?",
+                        (now, path),
+                    )
+                    counts["unchanged"] += 1
+                else:
+                    meta = fonts_mod.identify_font(path)
+                    rel = os.path.relpath(path, root)
+                    parts = rel.split(os.sep)
+                    theme = (parts[0] if len(parts) > 1
+                             else os.path.basename(root))
+                    name = os.path.splitext(os.path.basename(path))[0]
+                    ext = os.path.splitext(path)[1].lower().lstrip(".")
+                    con.execute("DELETE FROM asset WHERE path = ?", (path,))
+                    con.execute(
+                        "INSERT INTO asset(source_id, kind, path, name, theme,"
+                        " ext, bytes, family, style, weight, italic, mtime)"
+                        " VALUES (?, 'font', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (source_id, path, name, theme, ext,
+                         os.path.getsize(path),
+                         meta["family"] if meta else None,
+                         meta["style"] if meta else None,
+                         meta["weight"] if meta else None,
+                         meta["italic"] if meta else None,
+                         os.path.getmtime(path)),
+                    )
+                    con.execute(
+                        "INSERT INTO scan_state(path, fingerprint, last_seen)"
+                        " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
+                        " fingerprint=excluded.fingerprint,"
+                        " last_seen=excluded.last_seen",
+                        (path, fp, now),
+                    )
+                    counts["changed" if prev is not None else "new"] += 1
+                if progress:
+                    progress(counts["total"], path)
+
+            # prune font rows that vanished from this source
+            rows = con.execute(
+                "SELECT path FROM asset WHERE source_id = ? AND kind = 'font'",
+                (source_id,),
+            ).fetchall()
+            for (path,) in rows:
+                if path not in seen:
+                    con.execute("DELETE FROM asset WHERE path = ?", (path,))
+                    con.execute("DELETE FROM scan_state WHERE path = ?", (path,))
+                    counts["pruned"] += 1
+        con.commit()
+    except ScanAborted:
+        con.rollback()
+        counts["aborted"] = True
+        return counts
+    except Exception:
+        con.rollback()
+        raise
+    return counts
+
+
+def ensure_sources(con: sqlite3.Connection, roots: list[Path],
+                   kinds: tuple[str, ...] = ("system",)) -> list[tuple[int, str]]:
     """Insert missing source rows, disable stale ones, return enabled set.
 
-    Sources previously added by the user (kind='folder') are always kept
-    even when their root no longer exists — pruning then removes the
-    missing files on the next scan, which mirrors the 0.x --merge-list flow.
+    kinds scopes which source rows this scan owns: icon scans pass
+    ("system", "folder"), font scans pass ("fontroot",). Sources previously
+    added by the user (kind='folder') are always kept even when their root
+    no longer exists — pruning then removes the missing files on the next
+    scan, which mirrors the 0.x --merge-list flow.
     """
     known = {r["path"]: r for r in
              con.execute("SELECT id, path, kind, enabled FROM source")}
@@ -199,13 +295,15 @@ def ensure_sources(con: sqlite3.Connection,
             label = Path(path_str).name or path_str
             cur = con.execute(
                 "INSERT INTO source(kind, path, label, enabled)"
-                " VALUES ('system', ?, ?, 1)",
-                (path_str, label),
+                " VALUES (?, ?, ?, 1)",
+                (kinds[0], path_str, label),
             )
             known[path_str] = {"id": cur.lastrowid, "path": path_str,
-                               "kind": "system", "enabled": 1}
+                               "kind": kinds[0], "enabled": 1}
     enabled: list[tuple[int, str]] = []
     for path_str, row in known.items():
+        if row["kind"] not in kinds:
+            continue
         exists = os.path.isdir(path_str)
         should_enable = 1 if (exists and path_str in root_strs) else row["enabled"]
         if row["kind"] == "folder":

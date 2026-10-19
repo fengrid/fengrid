@@ -95,6 +95,29 @@ END;
 """
 
 
+# Column migrations for databases created before the font metadata landed
+# (M1 schemas lack these). Each statement is idempotent-by-tolerance: a
+# "duplicate column" error means the column already exists. Kept OUT of
+# SCHEMA — executescript is all-or-nothing, and one duplicate ALTER would
+# abort every connect() on an M1-era database.
+_FONT_COLUMNS = (
+    "ALTER TABLE asset ADD COLUMN family TEXT",
+    "ALTER TABLE asset ADD COLUMN style  TEXT",
+    "ALTER TABLE asset ADD COLUMN weight INTEGER",
+    "ALTER TABLE asset ADD COLUMN italic INTEGER",
+)
+
+
+def _migrate(con: sqlite3.Connection) -> None:
+    for stmt in _FONT_COLUMNS:
+        try:
+            con.execute(stmt)
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+    con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     """Open (and initialise) the library database. WAL + foreign keys on."""
     con = sqlite3.connect(str(path))
@@ -102,6 +125,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
+    _migrate(con)
     has_fts = True
     try:
         con.executescript(FTS_SCHEMA)

@@ -205,3 +205,115 @@ def test_export_svg_rejected_in_core(tmp_path):
     make_svg(svg)
     with pytest.raises(ExportError):
         fx.export(svg, tmp_path / "out", "s", "png")
+
+
+# ----------------------------------------------------------------------- fonts
+
+import shutil
+import zipfile
+from pathlib import Path
+
+from fengrid.core import fonts as ffx
+
+REPO_FONT = (Path(__file__).resolve().parents[2] / "fonts"
+             / "BebasNeue-Regular.ttf")
+
+
+@pytest.fixture()
+def fontroot(tmp_path, lib):
+    if not REPO_FONT.exists():
+        pytest.skip("bundled font missing from this checkout")
+    root = tmp_path / "fnt"
+    (root / "Bebas").mkdir(parents=True)  # shutil.copy does not mkdir
+    shutil.copy(REPO_FONT, root / "Bebas" / "BebasNeue-Regular.ttf")
+    sources = indexer.ensure_sources(lib, [root], kinds=("fontroot",))
+    return root, sources
+
+
+def test_font_columns_migrated(lib):
+    cols = {r[1] for r in lib.execute("PRAGMA table_info(asset)")}
+    assert {"family", "style", "weight", "italic"} <= cols
+
+
+def test_font_columns_migrate_from_m1_schema(tmp_path):
+    """An M1-era db (no font columns) must migrate on connect, not crash."""
+    old = tmp_path / "old.db"
+    con = db.connect(old)
+    # simulate the M1 schema: drop the family index first (SQLite refuses to
+    # drop a column an index depends on), then the columns _migrate added
+    con.execute("DROP INDEX IF EXISTS idx_asset_family")
+    for col in ("family", "style", "weight", "italic"):
+        con.execute(f"ALTER TABLE asset DROP COLUMN {col}")
+    con.commit()
+    con.close()
+    con2 = db.connect(old)  # reconnect: migration must restore the columns
+    cols = {r[1] for r in con2.execute("PRAGMA table_info(asset)")}
+    assert {"family", "style", "weight", "italic"} <= cols
+    con2.close()
+
+
+def test_identify_font():
+    if not REPO_FONT.exists():
+        pytest.skip("bundled font missing from this checkout")
+    meta = ffx.identify_font(str(REPO_FONT))
+    assert meta is not None
+    assert meta["family"] == "Bebas Neue"
+    assert meta["weight"] == 400
+    assert meta["italic"] == 0
+
+
+def test_identify_font_garbage(tmp_path):
+    p = tmp_path / "x.ttf"
+    p.write_bytes(b"definitely not a font file")
+    assert ffx.identify_font(str(p)) is None
+
+
+def test_scan_fonts_incremental(fontroot, lib):
+    root, sources = fontroot
+    r1 = indexer.scan_fonts(lib, sources)
+    assert r1["new"] == 1 and r1["total"] == 1
+    row = lib.execute(
+        "SELECT family, weight, italic, ext, theme FROM asset"
+        " WHERE kind = 'font'").fetchone()
+    assert row["family"] == "Bebas Neue"
+    assert row["weight"] == 400 and row["italic"] == 0
+    assert row["ext"] == "ttf" and row["theme"] == "Bebas"
+    r2 = indexer.scan_fonts(lib, sources)
+    assert r2["unchanged"] == 1 and r2["new"] == 0 and r2["changed"] == 0
+
+
+def test_scan_fonts_prune(fontroot, lib):
+    root, sources = fontroot
+    indexer.scan_fonts(lib, sources)
+    (root / "Bebas" / "BebasNeue-Regular.ttf").unlink()
+    r = indexer.scan_fonts(lib, sources)
+    assert r["pruned"] == 1
+    assert lib.execute(
+        "SELECT COUNT(*) FROM asset WHERE kind = 'font'").fetchone()[0] == 0
+
+
+def test_font_export_css(fontroot, lib, tmp_path):
+    _, sources = fontroot
+    indexer.scan_fonts(lib, sources)
+    out = ffx.export_family_css(lib, "Bebas Neue", tmp_path / "out")
+    text = out.read_text(encoding="utf-8")
+    assert "@font-face" in text and "Bebas Neue" in text
+    assert "font-weight: 400" in text
+
+
+def test_font_export_zip(fontroot, lib, tmp_path):
+    _, sources = fontroot
+    indexer.scan_fonts(lib, sources)
+    out = ffx.export_family_zip(lib, "Bebas Neue", tmp_path / "out")
+    with zipfile.ZipFile(out) as zf:
+        names = zf.namelist()
+    assert "css/fonts.css" in names
+    assert any(n.startswith("fonts/") for n in names)
+    assert "README.txt" in names
+
+
+def test_font_export_unknown_family(lib, tmp_path):
+    with pytest.raises(ValueError):
+        ffx.export_family_css(lib, "Nope Sans", tmp_path)
+    with pytest.raises(ValueError):
+        ffx.export_family_zip(lib, "Nope Sans", tmp_path)

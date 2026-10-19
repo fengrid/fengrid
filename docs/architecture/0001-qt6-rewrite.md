@@ -310,6 +310,28 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-19, M2 increment (fonts + WebEngine scaffold): fonts pane at parity
+  for scan/family-grouping/filter/export — fontTools metadata (family, style,
+  weight, italic; OS/2 + name tables, no fc-scan and thus no .ttc trailing-
+  newline trap), incremental `indexer.scan_fonts` with per-file cancellation,
+  `Fonts` bridge + `Fonts.qml` (family grid, filter, CSS/ZIP export), font
+  columns via idempotent `_migrate` (M1-era DBs upgrade on connect, tested).
+  WebEngine scaffold landed per §8/§9: `web/` with the `fengrid-asset://`
+  path-allowlist scheme handler, blocking request interceptor, and the
+  off-the-record `make_preview_profile` factory; scheme registered before
+  QGuiApplication, `QtWebEngineQuick.initialize()` deliberately deferred to
+  the first surface that shows a view (keeps the qa_render QThread tripwire
+  quiet). `PreviewPane.qml` ships unused by the shell until M3. QA gate: 21
+  tests + clean dark/light renders.
+- 2026-10-19, containerized linux-x64 prod: first Docker pipeline run green
+  end-to-end via `build/scripts/build-docker-linux.sh` (buildx, arch-native)
+  — bundle + tarball artifact, sha256 recorded, container-side offscreen
+  smoke test (`FENGRID_SMOKE=1`) passed. Findings folded back: the runtime
+  mark ships from tracked `qt/resources/branding/` (branding/ stays
+  gitignored), the spec is regenerated per run into
+  `build/pyinstaller/<target>-<variant>/` (never committed), a root
+  `.dockerignore` shrinks the context, and the artifact stage lands the full
+  `dist/` tree.
 - 2026-10-19, linux-x64 prod: `build/scripts/build-linux.sh linux-x64` green
   end-to-end — PyInstaller onedir + `fengrid-prod-linux-x64.tar.gz`; the
   frozen binary smoke-tested offscreen (`--screenshot`, full first scan of

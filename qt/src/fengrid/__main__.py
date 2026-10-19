@@ -20,9 +20,11 @@ from PySide6.QtQuickControls2 import QQuickStyle
 
 from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
+from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.theme import Theme
 from fengrid.core import db as core_db
+from fengrid.web import register_asset_scheme
 
 
 def _asset_dir(*parts: str) -> str:
@@ -63,6 +65,13 @@ def main(argv=None) -> int:
                         version=f"fengrid {__version__}")
     args = parser.parse_args(argv)
 
+    # scheme registration must precede QGuiApplication (flags are read at
+    # Chromium start); it spawns no threads, so it is always safe. QtWebEngine
+    # itself initializes lazily in the first surface that shows a view.
+    if not register_asset_scheme():
+        print("warning: QtWebEngineCore unavailable — preview surfaces"
+              " disabled", file=sys.stderr)
+
     # must precede QGuiApplication — controls are token-driven from QML
     QQuickStyle.setStyle("Basic")
 
@@ -87,11 +96,13 @@ def main(argv=None) -> int:
     if args.theme:
         theme.set_theme(args.theme)
     library = Library(con, db_path, no_scan=args.no_scan)
+    fonts = Fonts(con, db_path)
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
     ctx.setContextProperty("theme", theme)
     ctx.setContextProperty("library", library)
+    ctx.setContextProperty("fonts", fonts)
     ctx.setContextProperty("appVersion", __version__)
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
     if not engine.rootObjects():
@@ -101,6 +112,10 @@ def main(argv=None) -> int:
     if not args.no_scan and library.totalAssets == 0:
         # first run: index the platform icon roots automatically
         QTimer.singleShot(0, library.rescan)
+    if not args.no_scan and fonts.totalFonts == 0:
+        # first run: index the platform font dirs automatically (own thread
+        # + own connection, cancellable at quit — see bridges/fonts.py)
+        QTimer.singleShot(0, fonts.rescan)
 
     if args.screenshot:
         def _grab():

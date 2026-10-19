@@ -16,31 +16,7 @@ ApplicationWindow {
     font.pixelSize: 13
 
     property int iconSize: sizeSlider.value
-
-    // tinted Feather-style icon button (content is token-driven, no emoji)
-    component IconButton: ToolButton {
-        id: btn
-        property string icon_name: ""
-        property int icon_px: 16
-        icon.width: 0
-        icon.height: 0
-        implicitWidth: 30
-        implicitHeight: 30
-        contentItem: IconImage {
-            name: btn.icon_name
-            tint: btn.hovered || btn.pressed ? theme.tokens.text
-                                             : theme.tokens.textMuted
-            px: btn.icon_px
-            anchors.centerIn: parent
-        }
-        background: Rectangle {
-            radius: 6
-            color: btn.pressed ? theme.tokens.surface2
-                               : (btn.hovered ? theme.tokens.surface2 : "transparent")
-        }
-        ToolTip.visible: hovered && ToolTip.text.length > 0
-        ToolTip.delay: 400
-    }
+    property int pane: 0   // 0 = icons, 1 = fonts (see SideRail's Panes list)
 
     header: Rectangle {
         height: 52
@@ -199,6 +175,8 @@ ApplicationWindow {
         SideRail {
             Layout.preferredWidth: 210
             Layout.fillHeight: true
+            pane: root.pane
+            onPanePicked: idx => root.pane = idx
         }
         Rectangle {
             width: 1
@@ -206,11 +184,16 @@ ApplicationWindow {
             color: theme.tokens.border
         }
 
-        AssetGrid {
-            id: grid
+        StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            iconPx: root.iconSize
+            currentIndex: root.pane
+
+            AssetGrid {
+                id: grid
+                iconPx: root.iconSize
+            }
+            Fonts {}
         }
 
         Rectangle {
@@ -225,7 +208,7 @@ ApplicationWindow {
             Layout.fillHeight: true
             gridView: grid
             index: grid.currentIndex
-            visible: grid.currentIndex >= 0
+            visible: root.pane === 0 && grid.currentIndex >= 0
         }
     }
 
@@ -282,6 +265,12 @@ ApplicationWindow {
 
     Connections {
         target: library
+        function onMessage(msg) { toast.show(msg) }
+        function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
+        function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
+    }
+    Connections {
+        target: fonts
         function onMessage(msg) { toast.show(msg) }
         function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
         function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
