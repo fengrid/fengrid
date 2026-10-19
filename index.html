@@ -203,6 +203,9 @@
   .mode-switch { display: flex; gap: 0; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); align-self: center; }
   .mode-switch a { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; padding: 0 14px; line-height: 36px; text-decoration: none; color: var(--ink-muted); background: var(--surface); }
   .mode-switch a.active { background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  /* Projects is the aggregator pane — visually set apart from the feature tabs */
+  .mode-div { width: 1px; margin: 5px 3px; background: var(--border-strong); }
+  .mode-switch a.projects:not(.active) { background: transparent; }
   .mode-switch a:hover:not(.active) { color: var(--ink); }
 
   /* version badge -> GitHub releases */
@@ -493,7 +496,8 @@
       <a href="fonts.html">Fonts</a>
       <a href="code.html">Code</a>
       <a href="colors.html">Colors</a>
-      <a href="projects.html">Projects</a>
+      <span class="mode-div" aria-hidden="true"></span>
+      <a href="projects.html" class="projects">Projects</a>
     </div>
     <h1 class="wordmark">fen<span class="wm-grid">grid</span></h1>
     <span class="count" id="count-line"></span>
