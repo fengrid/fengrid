@@ -129,3 +129,17 @@ Each item: finding, evidence, and disposition — **quick-win** (worth fixing in
 3. **IDE bindings** (Code pane, `CHANGELOG.md:50+`) — full parity in the Qt editor, or read-only highlight first?
 4. **Windows ARM64** — acceptable to defer if PySide6 wheels remain unavailable (the drafted pipeline fails fast with an explanation)?
 5. **Heading font** — `IDEA.md` specified Bebas Neue; the brand identity uses Inter. Confirm Inter for QML headings so the original brief is formally superseded.
+
+### 4.1 Resolutions (2026-10-19)
+
+1. **QR LAN webshare** — dropped from the Qt v1 scope (user decision). The
+   0.x `serve.py` webshare remains the phone path; revisit after parity.
+2. **`.xpm`** — kept as an optional ImageMagick argv fallback in the Qt
+   bridge (already implemented; used only when a converter is present).
+3. **IDE bindings** — flexible by user decision; the parity contract and
+   deferral notes live in `docs/architecture/0002-editor-bindings.md`.
+4. **Windows ARM64** — deferred; the drafted pipeline fails fast (PySide6
+   publishes no windows-arm64 wheels as of 2026-10-18).
+5. **Heading font** — the user confirmed KEEP Bebas Neue for headings
+   (reversing the 0.x retirement): bundled as TTF with its OFL license and
+   wired to `theme.headingFont`. The landing page keeps Inter.

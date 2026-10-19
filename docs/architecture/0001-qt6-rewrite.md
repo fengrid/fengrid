@@ -1,6 +1,7 @@
 # ADR-0001 — Qt 6 bottom-up rewrite of Fengrid
 
-- **Status:** proposed (drafted 2026-10-18; implementation not started)
+- **Status:** accepted — M0/M1 implemented and validated on `dev-qt`
+  (2026-10-19; see §17 validation record)
 - **Supersedes:** nothing (this is the first architecture ADR)
 - **Companion review:** `docs/review/2026-current-state-review.md`
 - **Branch:** `dev-qt`
@@ -242,7 +243,7 @@ original Bebas Neue brief is superseded — open question #5 in the review).
 | Code playground | embedded WebEngine + CodeMirror 6 | P3 |
 | Snippet import (VSCode/massCode) | core importer (port of `snippet_import.py`) | P3 |
 | Projects coordinator + token export | core exporter (port of import_engine) | P4 |
-| QR LAN webshare | embedded read-only HTTP server (port of serve.py static core) | P5 |
+| QR LAN webshare | embedded read-only HTTP server (port of serve.py static core) — **dropped from Qt v1** (2026-10-19): the 0.x `serve.py` webshare stays the phone path | P5 |
 | Weekly update check | in-app check, `git ls-remote` probe kept | P5 |
 | Three-OS install | packaging (Flatpak/NSIS/dmg) | P6 |
 | Help guides | QML help overlay per pane | with each pane |
@@ -296,10 +297,28 @@ original Bebas Neue brief is superseded — open question #5 in the review).
 | M2 | Native export + fonts pane parity | Export without the server; fonts browser at parity |
 | M3 | Colors + snippets + code playground | Colors/code panes retired |
 | M4 | Projects coordinator + component composer (Figma pillar) | 0.x projects export reproduced; composer live-preview works |
-| M5 | Webshare + in-app updater | QR share from the native app; update check in-app |
+| M5 | In-app updater (webshare dropped from v1 — see §16) | update check in-app |
 | M6 | Packaging (12-target pipelines live), signing, docs, parity cutover | 0.x frontends frozen with a pointer to the Qt app |
 
 ## 16. Open questions
 
-Carried from the review (§4 of the review doc): webshare-in-v1, `.xpm`,
-IDE-binding parity depth, Windows ARM64 deferral, heading font confirmation.
+RESOLVED 2026-10-19 (details in `docs/review/2026-current-state-review.md`
+§4.1): webshare-in-v1 → dropped from Qt v1; `.xpm` → kept via the optional
+ImageMagick fallback; IDE-binding parity → flexible, recorded in
+`0002-editor-bindings.md`; Windows ARM64 → deferred (fail-fast stub stands);
+heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
+
+## 17. Validation record
+
+- 2026-10-19, linux-x64 prod: `build/scripts/build-linux.sh linux-x64` green
+  end-to-end — PyInstaller onedir + `fengrid-prod-linux-x64.tar.gz`; the
+  frozen binary smoke-tested offscreen (`--screenshot`, full first scan of
+  926 assets, zero QML/thread errors; bundled Bebas Neue/Inter/Iosevka all
+  render — no font fallback in the frozen app).
+- Headless QA gate: `qt/tests/qa_render.sh` (pytest + dark/light offscreen
+  renders; hard-fails on any TypeError / QColor-assignment / QThread noise).
+  Green at commit time.
+- Known warnings: PyInstaller cannot resolve `libxcb-cursor.so.0` for the
+  xcb platform plugin on this headless build host — that library ships with
+  normal desktop installs, and offscreen/software rendering is unaffected.
+  linux-arm64 remains DRAFT (no arm64 runtime exercised yet).

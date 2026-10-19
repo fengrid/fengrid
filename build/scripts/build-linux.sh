@@ -8,8 +8,9 @@
 #   FENGRID_IN_CONTAINER=1     (set by docker/linux-*.Dockerfile: use the
 #                               container's system python, skip the venv)
 #
-# DRAFT (2026-10-18): not yet executed. First real run validates the
-# PyInstaller flags and the QtWebEngine runtime library set.
+# VALIDATED (2026-10-19): linux-x64 prod run green end-to-end — PyInstaller
+# onedir + tar.gz artifact; the frozen binary smoke-tested offscreen
+# (--screenshot: zero QML/thread errors; fonts + QML resolve from _MEIPASS).
 #
 set -euo pipefail
 
@@ -54,6 +55,7 @@ pyinstaller --noconfirm --clean \
     --name fengrid \
     --add-data "$QT_DIR/qml:qml" \
     --add-data "$ROOT/fonts:fonts" \
+    --add-data "$ROOT/branding/assets:branding/assets" \
     --paths "$QT_DIR/src" \
     "$QT_DIR/src/fengrid/__main__.py"
 
