@@ -123,7 +123,13 @@ folded back into the pipeline:
 
 The Linux Dockerfiles pre-install the shared libraries QtWebEngine needs at
 launch (`libnss3`, `libgbm1`, `libxkbcommon0`, `libasound2`, `libegl1`,
-`libfontconfig1`, …). The list was drafted from the Qt deployment docs;
-the container-side smoke test validates the practical set on every run —
-trim or extend it as the first WebEngine-bearing builds identify the real
-requirements.
+`libfontconfig1`, …). **Validated 2026-10-19 on the second container run:**
+PyInstaller's unresolved-library warnings named exactly
+`libxkbfile.so.1`, `libXtst.so.6`, `libpulse.so.0`, the `libxcb-*` family
+and `libxkbcommon-x11.so.0` — those packages are now installed in the
+builder image so PyInstaller bundles them into the artifact (self-contained
+on minimal hosts). `libgtk-3` is intentionally absent: only the optional
+gtk3 platform theme wants it and Qt falls back when the plugin can't load.
+The container-side smoke test (`FENGRID_SMOKE=1`, default in the wrapper)
+exercises the frozen binary offscreen on every run; the remaining
+unresolved-lib warnings in the build log (gtk3 theme only) are expected.

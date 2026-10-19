@@ -26,13 +26,21 @@ ENV DEBIAN_FRONTEND=noninteractive \
     FENGRID_VARIANT=${VARIANT} \
     FENGRID_IN_CONTAINER=1
 
-# Qt WebEngine runtime dependencies + build tooling. Trim/extend after the
-# first real run identifies what the bundled binary actually loads.
+# Qt WebEngine runtime dependencies + build tooling. Validated on the first
+# two container runs (2026-10-19): PyInstaller's "Library not found" list
+# named the xcb family, libxkbcommon-x11, libxkbfile/libXtst (WebEngine) and
+# libpulse (Multimedia/TextToSpeech) — they are installed here so PyInstaller
+# bundles them and the artifact is self-contained on minimal hosts. libgtk-3
+# was deliberately left out: only the optional gtk3 platform theme needs it,
+# and Qt falls back gracefully when the plugin cannot load.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
-      libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
-      libgbm1 libasound2 libpango-1.0-0 libcairo2 libfontconfig1 \
-      libdbus-1-3 libegl1 libgl1 libglib2.0-0 \
+      libxkbcommon0 libxkbcommon-x11-0 libxcomposite1 libxdamage1 \
+      libxfixes3 libxrandr2 libxtst6 libxkbfile1 \
+      libxcb-keysyms1 libxcb-render-util0 libxcb-image0 libxcb-xkb1 \
+      libxcb-shape0 libxcb-cursor0 libxcb-icccm4 libxcb-util1 \
+      libgbm1 libasound2 libpulse0 libpango-1.0-0 libcairo2 \
+      libfontconfig1 libdbus-1-3 libegl1 libgl1 libglib2.0-0 \
       build-essential file patchelf git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
