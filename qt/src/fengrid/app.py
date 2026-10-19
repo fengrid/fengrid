@@ -21,6 +21,7 @@ DARK = {
     "text_muted": "#6E7B86",
     "accent": "#39B8C4",   # teal — pane outlines, active states
     "lit_pane": "#F5C25C",  # amber — the lit asset, selection highlights
+    "success": "#5BB98B",
 }
 
 # Light theme (secondary); surface2 derived from the brand palette sheet.
@@ -33,4 +34,5 @@ LIGHT = {
     "text_muted": "#6B7A88",
     "accent": "#0E7C86",
     "lit_pane": "#F5B841",
+    "success": "#2E7D4F",
 }
