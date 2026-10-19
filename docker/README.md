@@ -1,18 +1,18 @@
-# docker/ — Fengrid build pipelines (DRAFT — none executed yet)
+# docker/ — Fengrid build pipelines
 
-Status as of 2026-10-18: these Dockerfiles and the workflow in
-`.github/workflows/build.yml` were drafted per the `dev-qt` task and have
-**not** been run. First real runs validate image tags, PyInstaller flags, and
-the QtWebEngine runtime library list. The workflow only triggers on `main`
-(prod) and `dev` (dev); pushes to `dev-qt` fire nothing — use
-`workflow_dispatch` to exercise the pipelines when testing begins.
+Status as of 2026-10-19: the linux pipelines have run for real (see "First
+run results"); windows/macos remain drafted and their first runs validate
+image tags, PyInstaller flags, and the QtWebEngine runtime library list. The
+workflow only triggers on `main` (prod) and `dev` (dev); pushes to `dev-qt`
+fire nothing — use `workflow_dispatch` to exercise the pipelines when
+testing begins.
 
 ## Target → builder matrix
 
 | Target | Dockerfile | How it builds | CI runner label |
 |---|---|---|---|
-| linux-x64 | `docker/linux-x64.Dockerfile` | Docker (arch-native, no QEMU) | `["self-hosted","docker","linux-x64"]` |
-| linux-arm64 | `docker/linux-arm64.Dockerfile` | Docker (arch-native, no QEMU) | `["self-hosted","docker","linux-arm64"]` |
+| linux-x64 | `docker/linux-x64.Dockerfile` | Docker (arch-native, no QEMU), via `build/scripts/build-docker-linux.sh` | `["self-hosted","docker","linux-x64"]` |
+| linux-arm64 | `docker/linux-arm64.Dockerfile` | Docker (arch-native, no QEMU), via `build/scripts/build-docker-linux.sh` | `["self-hosted","docker","linux-arm64"]` |
 | windows-x64 | `docker/windows-x64.Dockerfile` (draft) — **default CI path is the native script** | Windows host w/ Windows containers, or native `build-windows.ps1` | `["self-hosted","docker","windows-x64"]` |
 | windows-arm64 | `docker/windows-arm64.Dockerfile` — **intentional fail-fast stub** | fails at the PySide6 wheel probe (see below) | `["self-hosted","docker","windows-arm64"]` |
 | macos-x64 | `docker/macos-x64.Dockerfile` — **fail-fast stub** | native `build-macos.sh` (Docker cannot host macOS) | `["self-hosted","docker","macos-x64"]` |
@@ -44,19 +44,33 @@ the QtWebEngine runtime library list. The workflow only triggers on `main`
   wheel availability before enabling the target; options are documented in
   `docs/architecture/0001-qt6-rewrite.md` (risks).
 
-## Local builds
+## The buildx wrapper (`build/scripts/build-docker-linux.sh`)
+
+Both local builds and the CI linux rows go through one script so the two
+paths cannot drift:
 
 ```sh
-# linux-x64 (prod)
-docker buildx build --platform linux/amd64 \
-  -f docker/linux-x64.Dockerfile \
-  --output type=local,dest=dist/linux-x64 .
+# linux-x64 prod, artifacts -> build/linux-x64/ (bind-mount extraction)
+bash build/scripts/build-docker-linux.sh linux-x64
 
-# linux-arm64 (dev)
-docker buildx build --platform linux/arm64 \
-  -f docker/linux-arm64.Dockerfile --build-arg VARIANT=dev \
-  --output type=local,dest=dist/linux-arm64 .
+# linux-arm64 dev variant, artifacts -> build/linux-arm64/
+FENGRID_VARIANT=dev bash build/scripts/build-docker-linux.sh linux-arm64
+
+# build straight to files without loading an image (what CI uses)
+OUTPUT=local bash build/scripts/build-docker-linux.sh linux-x64
+
+# tag + push the builder image
+PUSH=1 PUSH_REF=ghcr.io/fengrid/fengrid-builder:linux-x64 \
+  bash build/scripts/build-docker-linux.sh linux-x64
 ```
+
+Knobs: `FENGRID_VARIANT` (prod|dev), `IMAGE` (default
+`fengrid-builder:<target>`), `PUSH`/`PUSH_REF`, `OUTPUT=bind|local`,
+`BUILD_DIR` (default `<repo>/build/<target>`), `FENGRID_SMOKE` (default 1 —
+runs the frozen binary offscreen inside the container with
+`QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu"`; set 0 to skip).
+All output is teed to `$BUILD_DIR/build.log`; the script fails if the
+tarball did not appear, and prints its sha256.
 
 Native (no Docker) equivalents:
 
@@ -69,18 +83,47 @@ bash build/scripts/build-macos.sh macos-arm64              # on macOS only
 
 ## Artifacts
 
-- `dist/fengrid-<variant>-<target>.tar.gz` (linux, native scripts)
-- `qt/dist/fengrid-<variant>-<target>.tar.gz` (linux, docker build via the
-  script inside the container; `--output` lands the bundle under `dist/`)
+- `build/<target>/fengrid-<variant>-<target>.tar.gz` plus the unpacked
+  onedir bundle in `build/<target>/fengrid/` (wrapper + CI)
+- `qt/dist/fengrid-<variant>-<target>.tar.gz` (native linux script)
 - `qt/dist/fengrid-<variant>-<target>.zip` (windows, macos)
 
-CI uploads `fengrid-<variant>-<target>-<sha>` via `actions/upload-artifact@v4`.
+CI uploads `fengrid-<variant>-<target>-<sha>` via `actions/upload-artifact@v4`
+(the linux rows upload the tarball only, not the unpacked tree).
+
+## First run results (2026-10-19, linux-x64 prod)
+
+The first real container run failed at PyInstaller's datas step with
+`Unable to find '/work/branding/assets'` — and could not be fixed by adding a
+`COPY branding/` line, because `branding/` is gitignored by design (internal
+candidate branding docs) and would never exist in a CI checkout. Findings
+folded back into the pipeline:
+
+- The runtime needs exactly one file from the brand tree —
+  `fengrid-mark.svg` (window icon). It now ships from the tracked
+  `qt/resources/branding/` (provenance note inside), and the app falls back
+  to the legacy `branding/assets` path when present. The spec no longer
+  references `branding/` at all.
+- `qt/fengrid.spec` was a stale build byproduct with host-absolute paths
+  inside `COPY qt/`'s context. Removed; `build-linux.sh` now regenerates the
+  spec per run into `build/pyinstaller/<target>-<variant>/` (gitignored) and
+  invokes `python -m PyInstaller` so PATH can never bite in slim images.
+- Added a root `.dockerignore` (context drops from ~200 MB to a few MB and
+  no stale `qt/dist` tarball can enter an image).
+- The artifact stage now lands `dist/` in full — the earlier form silently
+  dropped the tarball it claimed to produce.
+- The build script's `--add-data` entries are checked for existence and
+  skipped with a warning instead of aborting the build.
+- The container-side smoke test (`FENGRID_SMOKE=1`, default on in the
+  wrapper) launches the frozen binary offscreen and captures a screenshot —
+  this is the guard that catches the next class of failure (missing runtime
+  libs, WebEngine sandbox) before CI does.
 
 ## QtWebEngine runtime note (Linux)
 
 The Linux Dockerfiles pre-install the shared libraries QtWebEngine needs at
 launch (`libnss3`, `libgbm1`, `libxkbcommon0`, `libasound2`, `libegl1`,
-`libfontconfig1`, …). The list was drafted from the Qt deployment docs and
-**not yet validated by running the bundle** — expect to trim or extend it on
-the first real run. This is also flagged in
-`docs/architecture/0001-qt6-rewrite.md` (packaging).
+`libfontconfig1`, …). The list was drafted from the Qt deployment docs;
+the container-side smoke test validates the practical set on every run —
+trim or extend it as the first WebEngine-bearing builds identify the real
+requirements.

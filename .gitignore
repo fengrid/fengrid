@@ -5,7 +5,9 @@ meta.js
 meta-state.tsv
 
 # internal candidate branding docs — not for distribution
-branding/
+# (root-anchored: the runtime mark ships from the tracked
+#  qt/resources/branding/, which must NOT be caught by this rule)
+/branding/
 
 # Dev-only symlink to system icons
 icons
@@ -23,6 +25,17 @@ Thumbs.db
 # python bytecode caches
 __pycache__/
 *.pyc
+
+# local build outputs — build/scripts/build-docker-linux.sh lands artifacts in
+# build/<target>/; build/pyinstaller/ holds regenerated spec files (never
+# commit host-absolute specs). build/scripts + requirements stay tracked.
+build/*
+!build/scripts/
+!build/requirements-*.txt
+dist/
+
+# pytest cache
+.pytest_cache/
 
 # runtime state written by server/serve.py at startup (removed at shutdown)
 server-state.js

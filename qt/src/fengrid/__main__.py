@@ -71,9 +71,14 @@ def main(argv=None) -> int:
     QGuiApplication.setApplicationVersion(__version__)
     app = QGuiApplication(sys.argv)
 
-    icon_path = os.path.join(_asset_dir("branding", "assets"), "fengrid-mark.svg")
-    if os.path.isfile(icon_path):
-        app.setWindowIcon(QIcon(icon_path))
+    # the shipped mark lives in qt/resources (tracked); the legacy
+    # branding/assets tree is a gitignored design source — try both, and
+    # degrade silently to no icon if neither exists
+    for icon_rel in (("resources", "branding"), ("branding", "assets")):
+        icon_path = os.path.join(_asset_dir(*icon_rel), "fengrid-mark.svg")
+        if os.path.isfile(icon_path):
+            app.setWindowIcon(QIcon(icon_path))
+            break
 
     db_path = args.db or os.path.join(_user_data_dir(), "library.db")
     con = core_db.connect(db_path)

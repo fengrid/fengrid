@@ -48,4 +48,7 @@ COPY fonts/ fonts/
 RUN bash build/scripts/build-linux.sh linux-arm64
 
 FROM scratch AS artifact
-COPY --from=build /work/qt/dist/fengrid /fengrid
+# land both the onedir bundle and the tar.gz the build script produces —
+# the earlier form (dist/fengrid only) silently dropped the tarball that
+# docker/README.md documents as the artifact (twin of linux-x64.Dockerfile)
+COPY --from=build /work/qt/dist/ /

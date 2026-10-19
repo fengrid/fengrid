@@ -49,10 +49,10 @@ jobs:
         include:
           - target: linux-x64
             runs-on: ["self-hosted", "docker", "linux-x64"]
-            artifact-path: dist/
+            artifact-path: build/linux-x64/fengrid-*.tar.gz
           - target: linux-arm64
             runs-on: ["self-hosted", "docker", "linux-arm64"]
-            artifact-path: dist/
+            artifact-path: build/linux-arm64/fengrid-*.tar.gz
           - target: windows-x64
             runs-on: ["self-hosted", "docker", "windows-x64"]
             artifact-path: qt/dist/
@@ -68,14 +68,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: build (docker — arch-native, no QEMU)
+      - name: build (docker — via buildx wrapper, arch-native, no QEMU)
         if: startsWith(matrix.target, 'linux')
-        run: |
-          docker buildx build \
-            --platform linux/${{ contains(matrix.target, 'arm64') && 'arm64' || 'amd64' }} \
-            -f docker/${{ matrix.target }}.Dockerfile \
-            --output type=local,dest=dist \
-            .
+        env:
+          FENGRID_VARIANT: prod
+          OUTPUT: local
+        run: bash build/scripts/build-docker-linux.sh ${{ matrix.target }}
 
       - name: build (native — windows)
         if: startsWith(matrix.target, 'windows')
@@ -107,10 +105,10 @@ jobs:
         include:
           - target: linux-x64
             runs-on: ["self-hosted", "docker", "linux-x64"]
-            artifact-path: dist/
+            artifact-path: build/linux-x64/fengrid-*.tar.gz
           - target: linux-arm64
             runs-on: ["self-hosted", "docker", "linux-arm64"]
-            artifact-path: dist/
+            artifact-path: build/linux-arm64/fengrid-*.tar.gz
           - target: windows-x64
             runs-on: ["self-hosted", "docker", "windows-x64"]
             artifact-path: qt/dist/
@@ -126,15 +124,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: build (docker — arch-native, no QEMU)
+      - name: build (docker — via buildx wrapper, arch-native, no QEMU)
         if: startsWith(matrix.target, 'linux')
-        run: |
-          docker buildx build \
-            --platform linux/${{ contains(matrix.target, 'arm64') && 'arm64' || 'amd64' }} \
-            -f docker/${{ matrix.target }}.Dockerfile \
-            --build-arg VARIANT=dev \
-            --output type=local,dest=dist \
-            .
+        env:
+          FENGRID_VARIANT: dev
+          OUTPUT: local
+        run: bash build/scripts/build-docker-linux.sh ${{ matrix.target }}
 
       - name: build (native — windows)
         if: startsWith(matrix.target, 'windows')
