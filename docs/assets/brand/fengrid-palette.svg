@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+  <!-- Fengrid palette reference: dark-theme row on dark, light-theme row on light. -->
+  <rect width="1200" height="620" fill="#101418"/>
+  <text x="60" y="80" font-family="Inter" font-weight="600" font-size="40" fill="#E7EDF2">Fengrid — brand palette</text>
+  <text x="60" y="122" font-family="Inter" font-weight="400" font-size="24" fill="#6E7B86">Dark theme (primary) shown on #101418 · Light theme (secondary) shown on #F7F8F9</text>
+
+  <!-- dark theme row -->
+  <g font-family="Noto Sans Mono" font-weight="bold" font-size="22" fill="#A7B3BD">
+    <rect x="60"  y="170" width="240" height="160" rx="20" fill="#101418" stroke="#39B8C4" stroke-width="3"/>
+    <rect x="340" y="170" width="240" height="160" rx="20" fill="#E7EDF2"/>
+    <rect x="620" y="170" width="240" height="160" rx="20" fill="#39B8C4"/>
+    <rect x="900" y="170" width="240" height="160" rx="20" fill="#93A3B0"/>
+    <text x="60"  y="368">bg #101418</text>
+    <text x="340" y="368">text #E7EDF2</text>
+    <text x="620" y="368">accent #39B8C4</text>
+    <text x="900" y="368">frame #93A3B0</text>
+    <rect x="60"  y="410" width="240" height="160" rx="20" fill="#F5C25C"/>
+    <text x="60" y="608" fill="#F5C25C">lit-pane #F5C25C</text>
+  </g>
+
+  <!-- light theme row -->
+  <rect x="620" y="410" width="520" height="160" rx="20" fill="#F7F8F9"/>
+  <g font-family="Noto Sans Mono" font-weight="bold" font-size="22" fill="#16202B">
+    <rect x="660" y="440" width="120" height="100" rx="14" fill="#0E7C86"/>
+    <rect x="800" y="440" width="120" height="100" rx="14" fill="#F5B841"/>
+    <rect x="940" y="440" width="120" height="100" rx="14" fill="#6B7A88"/>
+    <text x="660" y="576" font-size="18">#0E7C86 accent</text>
+    <text x="800" y="576" font-size="18">#F5B841 lit</text>
+    <text x="940" y="576" font-size="18">#6B7A88 frame</text>
+  </g>
+</svg>

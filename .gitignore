@@ -4,9 +4,6 @@ list.js
 meta.js
 meta-state.tsv
 
-# internal candidate branding docs — not for distribution
-branding/
-
 # Dev-only symlink to system icons
 icons
 

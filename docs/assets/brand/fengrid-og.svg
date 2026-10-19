@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!-- Fengrid social/OG banner, 1200x630. Dark theme.
+       Ghost pane kept to the top-right corner, clear of all text. -->
+  <defs>
+    <radialGradient id="ogGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0"    stop-color="#F5C25C" stop-opacity="0.5"/>
+      <stop offset="0.45" stop-color="#F5C25C" stop-opacity="0.26"/>
+      <stop offset="0.72" stop-color="#F5C25C" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#F5C25C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ogAmber" x1="0" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#F8D47C"/>
+      <stop offset="1" stop-color="#E88A2D"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#101418"/>
+
+  <!-- single ghost pane bleeding off the top-right corner (no text up there) -->
+  <rect x="1010" y="-96" width="300" height="300" rx="40" fill="none" stroke="#1C232B" stroke-width="12"/>
+  <line x1="1052" y1="162" x2="1160" y2="54" stroke="#1C232B" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- mark -->
+  <g transform="translate(80,196) scale(0.47)">
+    <circle cx="372" cy="372" r="130" fill="url(#ogGlow)"/>
+    <g fill="none" stroke="#39B8C4" stroke-width="26">
+      <rect x="40" y="40" width="200" height="200" rx="36"/>
+      <rect x="272" y="40" width="200" height="200" rx="36"/>
+      <rect x="40" y="272" width="200" height="200" rx="36"/>
+    </g>
+    <g stroke="#BFE9ED" stroke-opacity="0.42" stroke-width="18" stroke-linecap="round">
+      <line x1="72"  y1="182" x2="180" y2="74"/>
+      <line x1="304" y1="182" x2="412" y2="74"/>
+      <line x1="72"  y1="414" x2="180" y2="306"/>
+    </g>
+    <rect x="272" y="272" width="200" height="200" rx="36" fill="url(#ogAmber)"/>
+    <circle cx="328" cy="328" r="15" fill="#FBE7B4" fill-opacity="0.95"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="392" y="330" font-family="Inter" font-weight="600" font-size="112" fill="#E7EDF2">fen</text>
+  <text x="556" y="325" font-family="Noto Sans Mono" font-weight="bold" font-size="102" fill="#39B8C4">grid</text>
+
+  <!-- tagline -->
+  <text x="394" y="402" font-family="Inter" font-weight="400" font-size="42" fill="#A7B3BD">Every asset on your machine, on one grid.</text>
+  <text x="394" y="458" font-family="Inter" font-weight="400" font-size="27" fill="#6E7B86">Icons · fonts · styles — local-first, zero-dependency, works offline.</text>
+
+  <!-- footer -->
+  <text x="80" y="586" font-family="Noto Sans Mono" font-weight="bold" font-size="22" fill="#4A5560">nativeit</text>
+  <text x="196" y="586" font-family="Inter" font-weight="400" font-size="22" fill="#4A5560">· Fengrid — the UI asset explorer</text>
+</svg>
