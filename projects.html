@@ -77,17 +77,36 @@
   .proj-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .proj-meta input { font-family: var(--font-mono); font-size: 10.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--ink-muted); padding: 4px 8px; outline: none; width: 240px; }
 
-  .work { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
-  .picker-pane { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
-  .preview-pane { display: flex; flex-direction: column; min-height: 0; }
+  .work { flex: 1; display: grid; grid-template-columns: 370px 1fr; min-height: 0; }
+  .config-pane { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
+  .cfg-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 8px; flex: none; }
+  .cfg-tabs button { font-family: var(--font-mono); font-size: 11.5px; padding: 9px 14px 7px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--ink-faint); cursor: pointer; }
+  .cfg-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .cfg-scroll { flex: 1; overflow-y: auto; padding: 12px 14px 20px; }
+  .cfg-sec[hidden] { display: none; }
+  .cfg-h { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); margin: 16px 0 8px; font-weight: 500; }
+  .cfg-sec .cfg-h:first-child { margin-top: 0; }
+  .cfg-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .cfg-row select, .cfg-row input[type=number], .cfg-row input[type=text] { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; color: var(--ink); font-family: var(--font-mono); font-size: 11px; padding: 4px 6px; outline: none; }
+  .cfg-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .cfg-row .rv { color: var(--accent); min-width: 34px; text-align: right; }
+  .cfg-note { font-size: 11.5px; color: var(--ink-faint); line-height: 1.5; margin: 10px 0 0; }
+  .pal-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pal-card { border: 1px solid var(--border); border-radius: 8px; padding: 6px; cursor: pointer; background: var(--surface-2); }
+  .pal-card:hover { border-color: var(--border-strong); }
+  .pal-card.active { border-color: var(--accent); background: var(--accent-soft); }
+  .pal-card .strip { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin-bottom: 4px; }
+  .pal-card .strip div { flex: 1; }
+  .pal-card .nm { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .role-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .role-row label { flex: 1; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .role-row input[type=color] { width: 36px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 5px; background: none; cursor: pointer; }
+  .role-row .hex { width: 86px; font-family: var(--font-mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); color: var(--ink); border-radius: 5px; padding: 3px 6px; outline: none; }
+  .role-row .hex:focus { border-color: var(--accent); }
 
-  .asset-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 8px; }
-  .asset-tabs button { font-family: var(--font-mono); font-size: 11.5px; padding: 8px 14px 7px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--ink-faint); cursor: pointer; }
-  .asset-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
-
-  .picker-tools { display: flex; gap: 6px; padding: 8px 12px; }
+  .picker-tools { display: flex; gap: 6px; padding: 0 0 8px; }
   .picker-tools input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; color: var(--ink); font-family: var(--font-mono); font-size: 11.5px; padding: 5px 9px; outline: none; }
-  .asset-scroll { flex: 1; overflow-y: auto; padding: 0 12px 12px; }
+  .asset-scroll { max-height: 300px; overflow-y: auto; padding: 0 0 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 8px; }
   .asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
   .a-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px; cursor: pointer; text-align: center; position: relative; }
   .a-card:hover { border-color: var(--border-strong); }
@@ -176,23 +195,53 @@
     </div>
 
     <div class="work">
-      <div class="picker-pane">
-        <div class="asset-tabs" id="asset-tabs">
-          <button class="active" data-t="icon">Icons</button>
-          <button data-t="font">Fonts</button>
-          <button data-t="snippet">Snippets</button>
-          <button data-t="palette">Palettes</button>
+      <div class="config-pane">
+        <div class="cfg-tabs" id="cfg-tabs">
+          <button class="active" data-cfg="colors">Colors</button>
+          <button data-cfg="type">Type</button>
+          <button data-cfg="icons">Icons</button>
+          <button data-cfg="preview">Preview</button>
         </div>
-        <div class="picker-tools">
-          <input type="text" id="asset-search" placeholder="filter assets…">
-        </div>
-        <div class="asset-scroll" id="asset-scroll"></div>
-        <div class="spec">
-          <label>CSS prefix <input type="text" id="s-prefix" value="fg"></label>
-          <label>Icon px <input type="number" id="s-iconsize" value="32" min="8" max="256"></label>
-          <label>bg <input type="color" id="s-bg" value="#101418"></label>
-          <label>ink <input type="color" id="s-fg" value="#E7EDF2"></label>
-          <label>accent <input type="color" id="s-accent" value="#39B8C4"></label>
+        <div class="cfg-scroll">
+          <section class="cfg-sec" id="cfg-colors">
+            <h3 class="cfg-h">Palette</h3>
+            <div class="pal-cards" id="cfg-palettes"></div>
+            <h3 class="cfg-h">Color roles</h3>
+            <div id="cfg-roles"></div>
+            <h3 class="cfg-h">Shape &amp; naming</h3>
+            <label class="cfg-row">Corner radius <input type="range" id="c-radius" min="0" max="24" value="10"><span class="rv" id="c-radius-v">10px</span></label>
+            <label class="cfg-row">CSS prefix <input type="text" id="c-prefix" value="fg" style="width:80px"></label>
+          </section>
+          <section class="cfg-sec" id="cfg-type" hidden>
+            <h3 class="cfg-h">Typefaces</h3>
+            <label class="cfg-row">Body <select id="t-body" style="flex:1"></select></label>
+            <label class="cfg-row">Headings <select id="t-head" style="flex:1"></select></label>
+            <h3 class="cfg-h">Scale</h3>
+            <label class="cfg-row">Base size <input type="number" id="t-base" value="16" min="10" max="24" style="width:64px"> px</label>
+            <label class="cfg-row">Ratio
+              <select id="t-scale" style="flex:1">
+                <option value="1.125">1.125 — minor second</option>
+                <option value="1.2">1.2 — minor third</option>
+                <option value="1.25">1.25 — major third</option>
+                <option value="1.333">1.333 — perfect fourth</option>
+                <option value="1.5">1.5 — perfect fifth</option>
+              </select>
+            </label>
+            <p class="cfg-note">Choosing a family adds all of its installed styles to the project, so exports carry the complete set with correct weights.</p>
+          </section>
+          <section class="cfg-sec" id="cfg-icons" hidden>
+            <h3 class="cfg-h">Icon pack</h3>
+            <div class="picker-tools"><input type="text" id="asset-search" placeholder="filter icons…"></div>
+            <div class="asset-scroll" id="asset-scroll"></div>
+            <label class="cfg-row" style="margin-top:10px">Icon size <input type="number" id="c-iconsize" value="24" min="12" max="96" style="width:64px"> px</label>
+          </section>
+          <section class="cfg-sec" id="cfg-preview" hidden>
+            <h3 class="cfg-h">Preview source</h3>
+            <label class="cfg-row"><input type="radio" name="pv-mode" value="boilerplate" checked> Boilerplate website</label>
+            <label class="cfg-row"><input type="radio" name="pv-mode" value="snippet"> HTML snippet</label>
+            <select id="pv-snippet" style="width:100%;margin-top:6px" disabled></select>
+            <p class="cfg-note">The snippet's HTML/CSS/JS renders inside the token environment — your configured colors, typefaces, and icons apply to it, and it ships in the archive as a ready page.</p>
+          </section>
         </div>
       </div>
       <div class="preview-pane">
@@ -234,11 +283,48 @@
   var projects = [];
   var currentId = null;
   var assets = [];               // selected assets of the open project
-  var assetType = 'icon';
   var iconIndex = [];            // from list.txt
   var fontIndex = [];            // from font-meta.js
   var snipIndex = [], palIndex = [];
   var toastTimer;
+  var famMap = {};               // family name -> [fontIndex entries]
+
+  // the configurator model — persisted verbatim as project settings
+  function defaultCfg() {
+    return {
+      prefix: 'fg', iconSize: 24,
+      colors: { bg: '#101418', surface: '#161B21', ink: '#E7EDF2',
+                muted: '#93A3B0', accent: '#39B8C4', border: '#2A333B', radius: 10 },
+      paletteId: null,
+      type: { body: '', heading: '', baseSize: 16, scale: 1.25 },
+      preview: { mode: 'boilerplate', snippetId: null }
+    };
+  }
+  var cfg = defaultCfg();
+  function settings() { return JSON.parse(JSON.stringify(cfg)); }
+  function hydrateCfg(s) {
+    var c = defaultCfg();
+    if (s.colors) {
+      Object.keys(c.colors).forEach(function (k) {
+        if (s.colors[k] !== undefined) c.colors[k] = s.colors[k];
+      });
+    } else {  // legacy flat keys from the first projects build
+      if (s.bgColor) c.colors.bg = s.bgColor;
+      if (s.fgColor) c.colors.ink = s.fgColor;
+      if (s.accentColor) c.colors.accent = s.accentColor;
+      c.colors.radius = 10;
+    }
+    if (s.type) Object.keys(c.type).forEach(function (k) {
+      if (s.type[k] !== undefined) c.type[k] = s.type[k];
+    });
+    if (s.preview) Object.keys(c.preview).forEach(function (k) {
+      if (s.preview[k] !== undefined) c.preview[k] = s.preview[k];
+    });
+    if (s.prefix) c.prefix = s.prefix;
+    if (s.iconSize) c.iconSize = +s.iconSize || 24;
+    if (s.paletteId) c.paletteId = s.paletteId;
+    return c;
+  }
 
   function toast(msg) {
     var t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -271,7 +357,7 @@
   function loadIndexes() {
     fetch('list.txt?cb=' + Date.now()).then(function (r) { return r.text(); }).then(function (text) {
       iconIndex = text.split('\n').map(parseIconLine).filter(Boolean);
-      renderPicker();
+      renderIconPicker();
     }).catch(function () { iconIndex = []; });
     var poll = 0;
     (function loadFonts() {
@@ -280,7 +366,7 @@
           var m = window.FONT_META[k];
           return { rel: k, family: m.f || k.split('/')[0], style: m.s || '', weight: m.w || 400 };
         });
-        renderPicker();
+        buildFamMap(); fillTypeSelects();
       } else if (poll++ < 20) setTimeout(loadFonts, 150);
     })();
   }
@@ -291,7 +377,7 @@
     fetch('/api/projects' + (q ? '?q=' + encodeURIComponent(q) : '')).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) return;
       projects = d.projects;
-      $('proj-count').textContent = projects.length + ' projects';
+      $('proj-count').textContent = projects.length + ' project' + (projects.length === 1 ? '' : 's');
       $('proj-list').innerHTML = projects.map(function (p) {
         return '<div class="proj-item' + (p.id === currentId ? ' active' : '') + '" data-id="' + p.id + '">' +
           '<div class="t">' + esc(p.name) + '</div>' +
@@ -315,19 +401,12 @@
       $('p-desc').value = d.project.description || '';
       $('p-tags').value = d.project.tags || '';
       var s = d.project.settings || {};
-      $('s-prefix').value = s.prefix || 'fg';
-      $('s-iconsize').value = s.iconSize || 32;
-      $('s-bg').value = s.bgColor || '#101418';
-      $('s-fg').value = s.fgColor || '#E7EDF2';
-      $('s-accent').value = s.accentColor || '#39B8C4';
+      cfg = hydrateCfg(s);
+      renderControls();
+      refreshPickers();
       assets = d.assets || [];
-      loadList(); renderPicker(); runPreview();
+      loadList(); renderIconPicker(); runPreview();
     });
-  }
-  function settings() {
-    return { prefix: $('s-prefix').value.trim() || 'fg',
-      iconSize: +$('s-iconsize').value || 32,
-      bgColor: $('s-bg').value, fgColor: $('s-fg').value, accentColor: $('s-accent').value };
   }
   $('btn-save').addEventListener('click', function () {
     if (!currentId) return toast('Open or create a project first');
@@ -341,7 +420,7 @@
   $('btn-delete').addEventListener('click', function () {
     if (!currentId || !confirm('Delete this project? Assets themselves are kept.')) return;
     fetch('/api/projects/' + currentId, { method: 'DELETE' }).then(function (r) { return r.json(); }).then(function (d) {
-      if (d.ok) { currentId = null; $('proj-head').hidden = true; assets = []; toast('Deleted'); loadList(); renderPicker(); runPreview(); }
+      if (d.ok) { currentId = null; $('proj-head').hidden = true; assets = []; toast('Deleted'); loadList(); renderIconPicker(); runPreview(); }
     });
   });
   $('btn-new').addEventListener('click', function () { $('new-modal').hidden = false; $('new-name').focus(); });
@@ -359,138 +438,309 @@
   $('new-cancel').addEventListener('click', function () { $('new-modal').hidden = true; });
   $('new-close').addEventListener('click', function () { $('new-modal').hidden = true; });
 
-  /* ---------- asset picker ---------- */
-  document.getElementById('asset-tabs').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-t]'); if (!b) return;
-    assetType = b.dataset.t;
-    document.querySelectorAll('#asset-tabs button').forEach(function (x) {
+  /* ---------- configurator ---------- */
+  function isSel(t, k) { return assets.some(function (a) { return a.asset_type === t && String(a.asset_key) === String(k); }); }
+  function famOf(a) { return (a.label || a.asset_key.split('/')[0]).replace(/_/g, ' '); }
+  function buildFamMap() {
+    famMap = {};
+    fontIndex.forEach(function (f) { (famMap[f.family] = famMap[f.family] || []).push(f); });
+  }
+  function addAsset(type, key, label) {
+    if (!currentId) { toast('Open or create a project first'); return Promise.resolve(); }
+    if (isSel(type, key)) return Promise.resolve();
+    var body = { asset_type: type, asset_key: String(key) };
+    if (label) body.label = label;
+    return fetch('/api/projects/' + currentId + '/assets', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.ok) { assets = d.assets; } else toast(d.error || 'Add failed');
+    });
+  }
+
+  /* tabs */
+  document.getElementById('cfg-tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-cfg]'); if (!b) return;
+    document.querySelectorAll('#cfg-tabs button').forEach(function (x) {
       x.classList.toggle('active', x === b);
     });
-    renderPicker();
+    document.querySelectorAll('.cfg-sec').forEach(function (s) {
+      s.hidden = s.id !== 'cfg-' + b.dataset.cfg;
+    });
   });
-  $('asset-search').addEventListener('input', renderPicker);
 
-  function isSel(t, k) { return assets.some(function (a) { return a.asset_type === t && String(a.asset_key) === String(k); }); }
-
-  function renderPicker() {
-    var q = $('asset-search').value.trim().toLowerCase();
-    var scroll = $('asset-scroll');
-    var t = assetType;
-    if (t === 'icon') {
-      var src = iconIndex.filter(function (i) {
-        return !q || (i.name + ' ' + i.theme).toLowerCase().indexOf(q) !== -1;
-      }).slice(0, 400);
-      scroll.innerHTML = '<div class="asset-grid">' + src.map(function (i) {
-        var sel = isSel('icon', i.rel);
-        return '<div class="a-card' + (sel ? ' selected' : '') + '" data-k="' + esc(i.rel) + '">' +
-          '<div class="thumb"><img loading="lazy" src="icons/' + esc(i.rel) + '" alt=""></div>' +
-          '<div class="nm">' + esc(i.name) + '</div><div class="badge">✓</div></div>';
-      }).join('') + '</div>';
-    } else if (t === 'font') {
-      var src2 = fontIndex.filter(function (f) {
-        return !q || f.family.toLowerCase().indexOf(q) !== -1;
-      }).slice(0, 300);
-      scroll.innerHTML = '<div class="asset-grid">' + src2.map(function (f) {
-        var sel = isSel('font', f.rel);
-        return '<div class="a-card' + (sel ? ' selected' : '') + '" data-k="' + esc(f.rel) + '">' +
-          '<div class="thumb"><span class="ft" style="font-family:\'' + esc(f.family) + '\'">Ag</span></div>' +
-          '<div class="nm">' + esc(f.family) + '</div><div class="badge">✓</div></div>';
-      }).join('') + '</div>';
-    } else if (t === 'snippet') {
-      fetch('/api/snippets').then(function (r) { return r.json(); }).then(function (d) {
-        snipIndex = d.ok ? d.snippets : [];
-        var src3 = snipIndex.filter(function (s) {
-          return !q || s.title.toLowerCase().indexOf(q) !== -1;
-        });
-        scroll.innerHTML = src3.map(function (s) {
-          var sel = isSel('snippet', s.id);
-          return '<div class="strip-row' + (sel ? ' selected' : '') + '" data-k="' + s.id + '" style="' + (sel ? 'border-color:var(--accent);background:var(--accent-soft);' : '') + '">' +
-            '<span style="font-family:var(--font-mono);font-size:10px;color:var(--ink-faint);">JS</span>' +
-            '<span class="nm">' + esc(s.title) + '</span><button class="rm">' + (sel ? '✓' : '+') + '</button></div>';
-        }).join('') || '<div class="proj-item"><div class="m">No snippets yet — create them in Code.</div></div>';
-      });
-    } else {
-      fetch('/api/palettes').then(function (r) { return r.json(); }).then(function (d) {
-        palIndex = d.ok ? d.palettes : [];
-        var src4 = palIndex.filter(function (p) {
-          return !q || p.name.toLowerCase().indexOf(q) !== -1;
-        });
-        scroll.innerHTML = src4.map(function (p) {
-          var sel = isSel('palette', p.id);
-          return '<div class="a-card' + (sel ? ' selected' : '') + '" data-k="' + p.id + '" style="padding:8px;">' +
-            '<div class="strip" style="display:flex;height:30px;border-radius:5px;overflow:hidden;">' +
-            (p.colors || []).map(function (c) { return '<div style="flex:1;background:' + c + '"></div>'; }).join('') +
-            '</div><div class="nm">' + esc(p.name) + '</div><div class="badge">✓</div></div>';
-        }).join('') || '<div class="proj-item"><div class="m">No palettes yet — create them in Colors.</div></div>';
-      });
-    }
+  /* controls <- cfg */
+  function renderControls() {
+    $('c-prefix').value = cfg.prefix;
+    $('c-iconsize').value = cfg.iconSize;
+    $('c-radius').value = cfg.colors.radius;
+    $('c-radius-v').textContent = cfg.colors.radius + 'px';
+    $('t-base').value = cfg.type.baseSize;
+    $('t-scale').value = String(cfg.type.scale);
+    renderRoles();
+    fillTypeSelects();
+    fillSnippetSelect();
+    document.querySelectorAll('[name="pv-mode"]').forEach(function (r) {
+      r.checked = r.value === cfg.preview.mode;
+    });
+    $('pv-snippet').disabled = cfg.preview.mode !== 'snippet';
+  }
+  function refreshPickers() {
+    loadPalettes(); buildFamMap(); fillTypeSelects(); fillSnippetSelect(); renderIconPicker();
   }
 
-  $('asset-scroll').addEventListener('click', function (e) {
-    var card = e.target.closest('[data-k]'); if (!card || !currentId) {
-      if (card && !currentId) toast('Open or create a project first');
-      return;
+  /* colors */
+  var ROLES = [['bg', 'Background'], ['surface', 'Surface'], ['ink', 'Ink / text'],
+               ['muted', 'Muted text'], ['accent', 'Accent'], ['border', 'Border']];
+  function renderRoles() {
+    $('cfg-roles').innerHTML = ROLES.map(function (r) {
+      return '<div class="role-row"><label>' + r[1] + '</label>' +
+        '<input type="color" data-role="' + r[0] + '" value="' + cfg.colors[r[0]] + '">' +
+        '<input type="text" class="hex" data-role="' + r[0] + '" value="' + cfg.colors[r[0]] + '"></div>';
+    }).join('');
+  }
+  $('cfg-roles').addEventListener('input', function (e) {
+    var role = e.target.dataset.role; if (!role) return;
+    var v = e.target.value;
+    if (e.target.type === 'text') {
+      if (!/^#?[0-9a-fA-F]{6}$/.test(v) && !/^#?[0-9a-fA-F]{3}$/.test(v)) return;
+      if (v[0] !== '#') v = '#' + v;
     }
+    cfg.colors[role] = v;
+    document.querySelectorAll('#cfg-roles [data-role="' + role + '"]').forEach(function (i) {
+      if (i !== e.target) i.value = v;
+    });
+    runPreview();
+  });
+  function loadPalettes() {
+    fetch('/api/palettes').then(function (r) { return r.json(); }).then(function (d) {
+      palIndex = d.ok ? d.palettes : [];
+      $('cfg-palettes').innerHTML = palIndex.map(function (p) {
+        return '<div class="pal-card' + (String(cfg.paletteId) === String(p.id) ? ' active' : '') +
+          '" data-id="' + p.id + '" title="Apply palette: ' + esc(p.name) + '">' +
+          '<div class="strip">' + (p.colors || []).map(function (c) {
+            return '<div style="background:' + c + '"></div>'; }).join('') + '</div>' +
+          '<span class="nm">' + esc(p.name) + '</span></div>';
+      }).join('') || '<div class="cfg-note">No palettes yet — create them in the Colors pane.</div>';
+    });
+  }
+  $('cfg-palettes').addEventListener('click', function (e) {
+    var card = e.target.closest('.pal-card');
+    if (!card || !currentId) { if (card && !currentId) toast('Open or create a project first'); return; }
+    var p = palIndex.find(function (x) { return String(x.id) === card.dataset.id; });
+    if (!p) return;
+    cfg.paletteId = p.id;
+    var c = p.colors || [];
+    // positional role assignment — bg, surface, accent, muted, ink, border
+    if (c[0]) cfg.colors.bg = c[0];
+    if (c[1]) cfg.colors.surface = c[1];
+    if (c[2]) cfg.colors.accent = c[2];
+    if (c[3]) cfg.colors.muted = c[3];
+    if (c[4]) cfg.colors.ink = c[4];
+    if (c[5]) cfg.colors.border = c[5];
+    addAsset('palette', p.id).then(function () { renderControls(); runPreview(); loadPalettes(); });
+  });
+  $('c-radius').addEventListener('input', function () {
+    cfg.colors.radius = +this.value;
+    $('c-radius-v').textContent = this.value + 'px';
+    runPreview();
+  });
+  $('c-prefix').addEventListener('input', function () { cfg.prefix = this.value.trim() || 'fg'; });
+  $('c-iconsize').addEventListener('input', function () { cfg.iconSize = +this.value || 24; runPreview(); });
+
+  /* type */
+  function fillTypeSelects() {
+    buildFamMap();
+    var fams = Object.keys(famMap).sort();
+    var base = '<option value="">(system default)</option>';
+    $('t-body').innerHTML = base + fams.map(function (f) {
+      return '<option value="' + esc(f) + '"' + (cfg.type.body === f ? ' selected' : '') + '>' + esc(f) + '</option>';
+    }).join('');
+    $('t-head').innerHTML = base + fams.map(function (f) {
+      return '<option value="' + esc(f) + '"' + (cfg.type.heading === f ? ' selected' : '') + '>' + esc(f) + '</option>';
+    }).join('');
+  }
+  function pickFamily(role, fam) {
+    cfg.type[role] = fam;
+    if (!fam || !currentId) { runPreview(); return; }
+    // add every installed style of the family so exports carry the full set;
+    // keys are relative to fonts/ (no prefix) and the family name rides as
+    // the label so the export's font stacks match the configured roles
+    var files = (famMap[fam] || []).filter(function (f) { return !isSel('font', f.rel.replace(/^fonts\//, '')); });
+    var chain = Promise.resolve();
+    files.forEach(function (f) {
+      chain = chain.then(function () { return addAsset('font', f.rel.replace(/^fonts\//, ''), fam); });
+    });
+    chain.then(function () { runPreview(); });
+  }
+  $('t-body').addEventListener('change', function () { pickFamily('body', this.value); });
+  $('t-head').addEventListener('change', function () { pickFamily('heading', this.value); });
+  $('t-base').addEventListener('input', function () { cfg.type.baseSize = +this.value || 16; runPreview(); });
+  $('t-scale').addEventListener('change', function () { cfg.type.scale = +this.value || 1.25; runPreview(); });
+
+  /* icons */
+  function renderIconPicker() {
+    var q = $('asset-search').value.trim().toLowerCase();
+    var src = iconIndex.filter(function (i) {
+      return !q || (i.name + ' ' + i.theme).toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 400);
+    $('asset-scroll').innerHTML = '<div class="asset-grid">' + src.map(function (i) {
+      var sel = isSel('icon', i.rel);
+      return '<div class="a-card' + (sel ? ' selected' : '') + '" data-k="' + esc(i.rel) + '">' +
+        '<div class="thumb"><img loading="lazy" src="icons/' + esc(i.rel) + '" alt=""></div>' +
+        '<div class="nm">' + esc(i.name) + '</div><div class="badge">✓</div></div>';
+    }).join('') + '</div>';
+  }
+  $('asset-search').addEventListener('input', renderIconPicker);
+  $('asset-scroll').addEventListener('click', function (e) {
+    var card = e.target.closest('[data-k]'); if (!card) return;
     var k = card.dataset.k;
-    if (isSel(assetType, k)) {
-      var a = assets.find(function (x) { return x.asset_type === assetType && String(x.asset_key) === String(k); });
+    if (isSel('icon', k)) {
+      var a = assets.find(function (x) { return x.asset_type === 'icon' && String(x.asset_key) === String(k); });
       fetch('/api/projects/' + currentId + '/assets/' + a.id, { method: 'DELETE' })
         .then(function (r) { return r.json(); })
-        .then(function () { assets = assets.filter(function (x) { return x !== a; }); renderPicker(); runPreview(); });
+        .then(function () { assets = assets.filter(function (x) { return x !== a; }); renderIconPicker(); runPreview(); });
     } else {
-      fetch('/api/projects/' + currentId + '/assets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset_type: assetType, asset_key: k })
-      }).then(function (r) { return r.json(); }).then(function (d) {
-        if (d.ok) { assets = d.assets; renderPicker(); runPreview(); }
-        else toast(d.error || 'Add failed');
-      });
+      addAsset('icon', k).then(function () { renderIconPicker(); runPreview(); });
     }
   });
 
-  /* ---------- live preview (client-side mirror of the export template) ---------- */
-  function runPreview() {
-    var s = settings();
-    var palAssets = assets.filter(function (a) { return a.asset_type === 'palette'; });
-    var pal = palIndex.find(function (p) { return palAssets.length && String(p.id) === String(palAssets[0].asset_key); });
-    var cols = pal ? pal.colors : [];
-    var iconAssets = assets.filter(function (a) { return a.asset_type === 'icon'; });
-    var fontAssets = assets.filter(function (a) { return a.asset_type === 'font'; });
-    var fontFace = fontAssets.map(function (a) {
-      var fam = (a.label || a.asset_key.split('/')[0]).replace(/_/g, ' ');
+  /* preview source */
+  function fillSnippetSelect() {
+    fetch('/api/snippets').then(function (r) { return r.json(); }).then(function (d) {
+      snipIndex = d.ok ? d.snippets : [];
+      $('pv-snippet').innerHTML = '<option value="">(choose a snippet)</option>' +
+        snipIndex.map(function (s) {
+          return '<option value="' + s.id + '"' +
+            (String(cfg.preview.snippetId) === String(s.id) ? ' selected' : '') + '>' +
+            esc(s.title) + '</option>';
+        }).join('');
+    });
+  }
+  document.querySelectorAll('[name="pv-mode"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      cfg.preview.mode = this.value;
+      $('pv-snippet').disabled = this.value !== 'snippet';
+      runPreview();
+    });
+  });
+  $('pv-snippet').addEventListener('change', function () {
+    cfg.preview.snippetId = this.value ? +this.value : null;
+    runPreview();
+  });
+
+  /* ---------- live preview (client-side mirror of the export templates) ---------- */
+  function tokenCss() {
+    var p = cfg.prefix.replace(/[^a-z0-9-]/g, '') || 'fg';
+    var bodyStack = cfg.type.body ? "'" + cfg.type.body + "', system-ui, sans-serif" : 'system-ui, sans-serif';
+    var headStack = cfg.type.heading ? "'" + cfg.type.heading + "', system-ui, sans-serif" : bodyStack;
+    var b = cfg.type.baseSize, r = cfg.type.scale;
+    function step(n) { return Math.round(b * Math.pow(r, n) * 10) / 10; }
+    var lines = [
+      '--' + p + '-bg: ' + cfg.colors.bg + ';', '--' + p + '-surface: ' + cfg.colors.surface + ';',
+      '--' + p + '-ink: ' + cfg.colors.ink + ';', '--' + p + '-muted: ' + cfg.colors.muted + ';',
+      '--' + p + '-accent: ' + cfg.colors.accent + ';', '--' + p + '-border: ' + cfg.colors.border + ';',
+      '--' + p + '-radius: ' + cfg.colors.radius + 'px;',
+      '--' + p + '-font-body: ' + bodyStack + ';', '--' + p + '-font-head: ' + headStack + ';',
+      '--' + p + '-fs-small: ' + step(-0.25) + 'px;', '--' + p + '-fs-base: ' + step(0) + 'px;',
+      '--' + p + '-fs-h3: ' + step(1) + 'px;', '--' + p + '-fs-h2: ' + step(2) + 'px;',
+      '--' + p + '-fs-h1: ' + step(3) + 'px;', '--' + p + '-fs-hero: ' + step(4) + 'px;'
+    ];
+    return ':root{' + lines.join('') + '}';
+  }
+  function fontFaceCss() {
+    return assets.filter(function (a) { return a.asset_type === 'font'; }).map(function (a) {
       var ext = a.asset_key.split('.').pop().toLowerCase();
       var fmt = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' }[ext] || 'truetype';
-      return "@font-face{font-family:'" + fam + "';src:url('fonts/" + a.asset_key + "') format('" + fmt + "');}";
+      return "@font-face{font-family:'" + famOf(a) + "';src:url('fonts/" + a.asset_key + "') format('" + fmt + "');}";
     }).join('\n');
-    var stack = fontAssets.slice(0, 3).map(function (a) {
-      return "'" + (a.label || a.asset_key.split('/')[0]).replace(/_/g, ' ') + "'"; }).join(', ') || 'system-ui';
-    var icons = iconAssets.slice(0, 48).map(function (a) {
-      return '<div class="icon" style="background-image:url(\'icons/' + a.asset_key + '\')" title="' +
-        a.asset_key.split('/').pop() + '"></div>'; }).join('');
+  }
+  function iconCss() {
+    return assets.filter(function (a) { return a.asset_type === 'icon'; }).map(function (a) {
+      var stem = a.asset_key.split('/').pop().replace(/\.[^.]+$/, '');
+      var cls = (a.label || stem).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+      return '.' + cfg.prefix + '-' + cls + "{background-image:url('icons/" + a.asset_key + "');}";
+    }).join('\n');
+  }
+  function demoCss() {
+    var p = cfg.prefix.replace(/[^a-z0-9-]/g, '') || 'fg';
+    return '*{box-sizing:border-box}' +
+      'body{margin:0;background:var(--' + p + '-bg);color:var(--' + p + '-ink);' +
+      'font-family:var(--' + p + '-font-body);font-size:var(--' + p + '-fs-base);line-height:1.6}' +
+      'h1,h2,h3{font-family:var(--' + p + '-font-head);line-height:1.2;margin:0 0 .5em}' +
+      '.wrap{max-width:860px;margin:0 auto;padding:0 22px}' +
+      '.site-head{display:flex;align-items:center;gap:18px;padding:14px 0;border-bottom:1px solid var(--' + p + '-border)}' +
+      '.brand{font-weight:700;font-size:var(--' + p + '-fs-h3)}' +
+      '.site-head nav{display:flex;gap:14px;margin-left:auto;color:var(--' + p + '-muted);font-size:var(--' + p + '-fs-small)}' +
+      '.btn{display:inline-block;padding:9px 20px;border-radius:var(--' + p + '-radius);' +
+      'font-size:var(--' + p + '-fs-small);text-decoration:none;border:1px solid transparent}' +
+      '.btn-primary{background:var(--' + p + '-accent);color:var(--' + p + '-bg)}' +
+      '.btn-ghost{border-color:var(--' + p + '-border);color:var(--' + p + '-ink)}' +
+      '.hero{padding:48px 0 36px}.hero h1{font-size:var(--' + p + '-fs-hero)}' +
+      '.hero p{color:var(--' + p + '-muted);max-width:52ch;font-size:var(--' + p + '-fs-h3)}' +
+      '.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;padding:16px 0 36px}' +
+      '.card{background:var(--' + p + '-surface);border:1px solid var(--' + p + '-border);' +
+      'border-radius:var(--' + p + '-radius);padding:18px}' +
+      '.card h3{font-size:var(--' + p + '-fs-h3)}.card p{color:var(--' + p + '-muted);margin:0}' +
+      '.icon{width:' + cfg.iconSize + 'px;height:' + cfg.iconSize + 'px;background-size:contain;' +
+      'background-repeat:no-repeat;background-position:center;margin-bottom:10px}' +
+      '.type-spec{padding:24px 0;border-top:1px solid var(--' + p + '-border)}' +
+      '.type-spec h1{font-size:var(--' + p + '-fs-h1)}.type-spec h2{font-size:var(--' + p + '-fs-h2)}' +
+      '.type-spec h3{font-size:var(--' + p + '-fs-h3)}' +
+      '.type-spec .small{font-size:var(--' + p + '-fs-small);color:var(--' + p + '-muted)}' +
+      '.pal{padding:24px 0;border-top:1px solid var(--' + p + '-border)}' +
+      '.swatches{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}' +
+      '.swatch{width:84px;height:56px;border-radius:var(--' + p + '-radius);display:flex;' +
+      'align-items:flex-end;justify-content:center;padding-bottom:5px;font:10px/1 monospace;' +
+      'color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(0,0,0,.5)}' +
+      'footer{border-top:1px solid var(--' + p + '-border);padding:16px 0 32px;' +
+      'color:var(--' + p + '-muted);font-size:var(--' + p + '-fs-small)}';
+  }
+  function runPreview() {
+    var name = esc($('p-name').value || 'Untitled project');
+    var head = '<meta charset="UTF-8"><style>' + tokenCss() + '\n' + fontFaceCss() +
+      '\n' + iconCss() + '\n' + demoCss() + '</style>';
+    var pal = palIndex.find(function (x) { return String(x.id) === String(cfg.paletteId); });
+    var cols = pal ? (pal.colors || []) : [];
     var swatches = cols.map(function (c) {
       return '<div class="swatch" style="background:' + c + '"><span>' + c + '</span></div>'; }).join('');
-    var bg = s.bgColor || (cols[0] || '#101418');
-    var fg = s.fgColor || (cols[cols.length - 1] || '#E7EDF2');
-    var doc = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' + fontFace +
-      'body{margin:0;padding:28px;background:' + bg + ';color:' + fg + ';font-family:' + stack + ',system-ui,sans-serif;}' +
-      '.icons{display:flex;flex-wrap:wrap;gap:10px;}.icon{width:' + s.iconSize + 'px;height:' + s.iconSize +
-      'px;background-size:contain;background-repeat:no-repeat;background-position:center;}' +
-      '.swatches{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0;}' +
-      '.swatch{width:84px;height:56px;border-radius:9px;display:flex;align-items:flex-end;justify-content:center;' +
-      'padding-bottom:5px;font:10px/1 monospace;color:rgba(255,255,255,.85);text-shadow:0 1px 2px rgba(0,0,0,.5);}' +
-      'h1,h2{font-weight:600;}h1{font-size:20px;margin:0 0 4px;}h2{font-size:13px;margin:18px 0 8px;opacity:.8;}' +
-      '</style></head><body><h1>' + esc($('p-name').value || 'Untitled project') + '</h1>' +
-      '<h2>Palette</h2><div class="swatches">' + (swatches || '<em style="opacity:.5">no palette selected</em>') + '</div>' +
-      '<h2>Icons</h2><div class="icons">' + (icons || '<em style="opacity:.5">no icons selected</em>') + '</div>' +
-      '<h2>Type</h2>' + fontAssets.slice(0, 8).map(function (a) {
-        var fam = (a.label || a.asset_key.split('/')[0]).replace(/_/g, ' ');
-        return '<p style="font-family:\'' + fam + '\'">The quick brown fox jumps over the lazy dog — ' + esc(fam) + '</p>';
-      }).join('') + '</body></html>';
-    $('preview').srcdoc = doc;
+    var icons = assets.filter(function (a) { return a.asset_type === 'icon'; }).slice(0, 6).map(function (a) {
+      return '<div class="icon" style="background-image:url(\'icons/' + a.asset_key + '\')" title="' +
+        esc(a.asset_key.split('/').pop()) + '"></div>'; }).join('');
+    var desc = esc($('p-desc').value || 'A starter site generated from this project\u2019s design tokens.');
+    var body =
+      '<div class="wrap">' +
+      '<header class="site-head"><span class="brand">' + name + '</span>' +
+      '<nav><span>Overview</span><span>Components</span><span>Type</span></nav>' +
+      '<a class="btn btn-primary" href="#">Get started</a></header>' +
+      '<section class="hero"><h1>' + name + '</h1><p>' + desc + '</p>' +
+      '<p><a class="btn btn-primary" href="#">Primary action</a> <a class="btn btn-ghost" href="#">Secondary</a></p></section>' +
+      '<section class="cards">' +
+      '<div class="card">' + (icons || '<div class="icon"></div>') + '<h3>Components</h3><p>Cards, buttons, and forms styled by the tokens.</p></div>' +
+      '<div class="card"><h3>Typography</h3><p>Type on a ' + cfg.type.scale + ' modular scale from a ' + cfg.type.baseSize + 'px base.</p></div>' +
+      '<div class="card"><h3>Palette</h3><p>' + cols.length + ' palette colors as custom properties.</p></div>' +
+      '</section>' +
+      '<section class="type-spec"><h1>Heading one</h1><h2>Heading two</h2><h3>Heading three</h3>' +
+      '<p>Body copy renders in the body family at the base size. The quick brown fox jumps over the lazy dog.</p>' +
+      '<p class="small">Small text for captions and metadata.</p></section>' +
+      '<section class="pal"><h2>Palette</h2><div class="swatches">' +
+      (swatches || '<div class="swatch">no palette</div>') + '</div></section>' +
+      '<footer>Generated by fengrid</footer></div>';
+    if (cfg.preview.mode === 'snippet' && cfg.preview.snippetId) {
+      var sn = snipIndex.find(function (s) { return String(s.id) === String(cfg.preview.snippetId); });
+      if (sn) {
+        // full content needs the detail endpoint
+        fetch('/api/snippets/' + sn.id).then(function (r) { return r.json(); }).then(function (d) {
+          if (!d.ok) return;
+          var s = d.snippet;
+          $('preview').srcdoc = '<!DOCTYPE html><html><head>' + head + '</head><body>' +
+            s.html + '<style>' + s.css + '</style><script>' + s.js + '<\/script></body></html>';
+        });
+        return;
+      }
+    }
+    $('preview').srcdoc = '<!DOCTYPE html><html><head>' + head + '</head><body>' + body + '</body></html>';
   }
-  ['s-prefix', 's-iconsize', 's-bg', 's-fg', 's-accent'].forEach(function (id) {
-    $(id).addEventListener('input', runPreview);
-    $(id).addEventListener('change', runPreview);
-  });
   $('btn-refresh-preview').addEventListener('click', runPreview);
 
   /* ---------- export ---------- */

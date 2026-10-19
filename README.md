@@ -64,9 +64,9 @@ page — no build step, no runtime, no server required.
   JSFiddle-style snippet playground with a SQLite store, IDE bindings,
   and VSCode/massCode import, **Colors** (`colors.html`, rose)
   generates and exports palettes with WCAG readouts and board images,
-  and **Projects** (`projects.html`, green) coordinates assets from all
-  panes into exportable `.zip` / `.tar.gz` packs with generated CSS,
-  JS, and a demo template
+  and **Projects** (`projects.html`, green) is a CSS configurator that
+  turns chosen assets and parameters into exportable token-based
+  template packs (`css/tokens.css`, boilerplate site, fonts, icons)
 - **Fully self-contained** — self-hosted subset fonts, no CDN, no JS
   framework
 

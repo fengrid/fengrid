@@ -136,6 +136,8 @@ Scan font folders with:
 bash scan-fonts.sh                     # scan the default folders
 bash scan-fonts.sh --add ~/my/fonts    # add a folder to the list
 bash scan-fonts.sh ~/custom/fonts      # scan a one-off folder
+bash scan-fonts.sh --link              # symlink instead of copy (persists)
+bash scan-fonts.sh --copy              # go back to copying
 ```
 
 Supported: `.ttf`, `.otf`, `.woff`, `.woff2`, `.ttc`, `.eot`. Metadata
@@ -182,16 +184,33 @@ auto-generated color names, ready for READMEs and style guides.
 
 ## Projects
 
-The **Projects** tab opens `projects.html` — collect anything the other
-panes hold into a coordinated, exportable pack. Create a project, then
-pick assets from the Icons / Fonts / Snippets / Palettes tabs (an asset
-can live in any number of projects). The spec row tweaks the generated
-output — CSS class prefix, icon size, background/ink/accent colors —
-and the live preview updates as you type. **Save project** (Ctrl+S)
-persists everything; **Export .zip** or **.tar.gz** builds an archive
-with the selected files, generated `css/colors.css`, `css/fonts.css`,
-`css/icons.css`, `js/icons.js`, a demo `index.html`, `palettes.json`,
-`manifest.json`, and a README.
+The **Projects** tab opens `projects.html` — a CSS configurator where
+you define the design assets for a project, tune the parameters, and
+generate a ready-to-use starter kit. Four parameter areas:
+
+- **Colors** — apply one of your saved palettes (roles are assigned
+  automatically), then tweak each color role — background, surface,
+  ink, muted, accent, border — with the pickers, set the corner radius,
+  and choose the CSS custom-property prefix.
+- **Type** — pick the body and heading families from your installed
+  fonts (choosing a family adds every installed style to the project),
+  set the base size and a modular scale ratio; the type ramp
+  (small → base → h3 → h2 → h1 → hero) is generated from them.
+- **Icons** — pick icons for the pack and set their size.
+- **Preview** — render the live preview as the built-in boilerplate
+  website, or pick one of your snippets: the snippet's HTML/CSS/JS
+  renders inside the token environment, and ships in the archive as a
+  ready page.
+
+The live preview on the right renders a full boilerplate site — header,
+hero, cards with icons, type specimen, palette strip, footer — and
+updates as you tweak. **Save project** (Ctrl+S) persists everything;
+**Export .zip** or **.tar.gz** generates the template files:
+`css/tokens.css` (color roles, radius, font stacks, type scale),
+`css/fonts.css`, `css/icons.css`, `js/icons.js`, the boilerplate
+`index.html`, `palettes.json`, `manifest.json`, and a README — a small
+custom frontend framework starter you can drop into any project. Assets
+can live in any number of projects.
 
 Each pane has its own brand-derived accent — Icons are teal, Fonts are
 violet, Code is coral, Colors are rose, Projects are green — while the

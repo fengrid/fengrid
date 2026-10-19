@@ -6,10 +6,14 @@
 #   bash scan-fonts.sh [--dir <install>] [folder1 folder2 ...]
 #   bash scan-fonts.sh --add <folder>       (add a folder to the saved list)
 #   bash scan-fonts.sh --list              (show the saved folder list)
+#   bash scan-fonts.sh --link | --copy     (symlink instead of copy; persists)
 #
-# Fonts are copied into fonts/<Family>/<file> next to fonts.html so previews
-# work over file:// and http alike. Metadata (family, style, weight, slant)
-# comes from fc-scan; files fc-scan can't read fall back to the filename.
+# Fonts are materialized into fonts/<Family>/<file> next to fonts.html so
+# previews work over file:// and http alike — copied by default, or
+# symlinked back to the scanned original with --link (no duplicate data on
+# disk; originals stay put when uninstalling). Metadata (family, style,
+# weight, slant) comes from fc-scan; files fc-scan can't read fall back to
+# the filename.
 
 set -u
 APP_DIR="${FG_DIR:-$(cd "$(dirname "$0")" && pwd)}"
@@ -78,11 +82,14 @@ add_dir() {
 
 MODE="scan"
 CUSTOM_DIRS=()
+LINK_MODE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --dir)   APP_DIR="$2"; shift 2 ;;
         --add)   MODE="add"; add_dir "$2"; shift 2 ;;
         --list)  MODE="list" ;;
+        --link)  LINK_MODE="link" ;;
+        --copy)  LINK_MODE="copy" ;;
         --help|-h)
             sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
@@ -90,6 +97,17 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+# link mode persists in the state dir so rescans keep the same behavior;
+# explicit --link/--copy wins and updates the saved preference
+MODE_FILE="$STATE_DIR/font-scan-mode.conf"
+if [ -n "$LINK_MODE" ]; then
+    mkdir -p "$STATE_DIR"
+    printf '%s\n' "$LINK_MODE" > "$MODE_FILE"
+else
+    [ -f "$MODE_FILE" ] && LINK_MODE=$(cat "$MODE_FILE")
+fi
+LINK_MODE="${LINK_MODE:-copy}"
 
 if [ "$MODE" = "list" ]; then
     echo "Configured font folders:"
@@ -182,11 +200,30 @@ while IFS= read -r src; do
     mkdir -p "$dest_dir"
     dest="$dest_dir/$base"
 
-    # skip if the identical file is already there
-    if [ -f "$dest" ] && cmp -s "$src" "$dest" 2>/dev/null; then
-        :  # already copied
+    if [ "$LINK_MODE" = link ]; then
+        # symlink back to the scanned original — no duplicate data on disk,
+        # edits to the source show up immediately; the uninstaller removes
+        # only the links, the originals stay put
+        relsrc=$(realpath --relative-to="$dest_dir" "$src" 2>/dev/null) || relsrc="$src"
+        if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$relsrc" ]; then
+            :  # already linked correctly
+        elif [ -e "$dest" ] && [ ! -L "$dest" ] && cmp -s "$src" "$dest" 2>/dev/null; then
+            rm -f "$dest" && ln -s "$relsrc" "$dest" || { warn "link failed: $src"; continue; }
+        elif [ -e "$dest" ] && [ ! -L "$dest" ]; then
+            warn "differs from a previous copy — leaving it, not linking: $src"
+        elif [ -e "$dest" ]; then
+            :  # already a link (possibly stale target) — refresh it
+            ln -sfn "$relsrc" "$dest" || { warn "link failed: $src"; continue; }
+        else
+            ln -s "$relsrc" "$dest" || { warn "link failed: $src"; continue; }
+        fi
     else
-        cp -L "$src" "$dest" 2>/dev/null || { warn "copy failed: $src"; continue; }
+        # skip if the identical file is already there
+        if [ -f "$dest" ] && cmp -s "$src" "$dest" 2>/dev/null; then
+            :  # already copied
+        else
+            cp -L "$src" "$dest" 2>/dev/null || { warn "copy failed: $src"; continue; }
+        fi
     fi
 
     echo "$dest" >> "$LIST_OUT"

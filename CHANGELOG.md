@@ -78,6 +78,32 @@ adheres to [Semantic Versioning](https://semver.org/).
   extended preview: all installed variants of the family, switchable,
   at multiple sizes with a glyph specimen.
 
+- **Projects pane redesigned as a CSS configurator** — the pane where
+  frontend design assets are defined, tuned, and generated. Four
+  parameter areas: **Colors** (apply a saved palette with positional
+  role assignment, then tweak six color roles — background, surface,
+  ink, muted, accent, border — plus corner radius and the CSS prefix),
+  **Type** (body and heading family pickers over the installed fonts;
+  picking a family pulls in all of its installed styles, and a base
+  size + modular scale ratio generate the type ramp), **Icons** (pack
+  picker with size), and **Preview** (a boilerplate website by default,
+  or an HTML snippet rendered inside the token environment). The live
+  preview renders a full boilerplate site — header, hero, cards with
+  icons, type specimen, palette strip, footer — driven entirely by the
+  configuration. **Export** generates a token-based starter kit:
+  `css/tokens.css` (color roles, radius, font stacks, type scale),
+  `css/fonts.css`, `css/icons.css`, `js/icons.js`, the boilerplate
+  `index.html`, the preview snippet as a ready page when snippet mode is
+  selected, `palettes.json`, and `manifest.json` — as `.zip` or
+  `.tar.gz`. Old flat settings migrate automatically on first open.
+- **Link mode for scanned fonts** — `scan-fonts.sh --link` materializes
+  `fonts/<Family>/<file>` as symlinks back to the scanned originals
+  instead of copies: no duplicate data on disk, edits to the source
+  show up immediately, and uninstalling removes only the links. The
+  choice persists in the state dir so rescans keep it; `--copy` reverts.
+  (Icons already had `--icons copy|link|hardlink`.) Project export
+  resolves symlinked assets correctly.
+
 ### Fixed
 
 - **scan-fonts.sh corrupted font-meta.js on multi-face `.ttc` files** —

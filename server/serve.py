@@ -496,15 +496,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # snippet/palette keys are row ids resolved from the database.
     # ------------------------------------------------------------------
     def _resolve_asset(self, app_dir, atype, key):
+        # normpath, NOT realpath: in --icons link / --fonts link mode the
+        # installed files are symlinks pointing back at the scanned system
+        # folders, and realpath would resolve them OUTSIDE the app tree and
+        # reject valid assets. The prefix check still blocks ../ traversal.
         if atype == "icon":
-            p = os.path.realpath(os.path.join(app_dir, "icons", key))
-            base = os.path.realpath(os.path.join(app_dir, "icons"))
+            p = os.path.normpath(os.path.join(app_dir, "icons", key))
+            base = os.path.normpath(os.path.join(app_dir, "icons"))
             if not p.startswith(base + os.sep) or not os.path.isfile(p):
                 return None
             return ("assets/icons/" + key.replace(os.sep, "/"), p)
         if atype == "font":
-            p = os.path.realpath(os.path.join(app_dir, "fonts", key))
-            base = os.path.realpath(os.path.join(app_dir, "fonts"))
+            p = os.path.normpath(os.path.join(app_dir, "fonts", key))
+            base = os.path.normpath(os.path.join(app_dir, "fonts"))
             if not p.startswith(base + os.sep) or not os.path.isfile(p):
                 return None
             return ("assets/fonts/" + key.replace(os.sep, "/"), p)
@@ -946,22 +950,77 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             base = re.sub(r"[^a-z0-9]+", "-", (pal.get("name") or "palette").lower()).strip("-")
             return "--%s-%s-%d" % (prefix, base or "palette", i + 1)
 
-        colors_css, fonts_css, icons_css, icons_js = [], [], [], []
-        for pal in palettes:
-            for i, c in enumerate(pal["colors"]):
-                colors_css.append("  %s: %s;" % (cssvar_name(pal, i), c))
-        if colors_css:
-            colors_css.insert(0, ":root {")
-            colors_css.append("}")
+        # ---- design tokens from the configurator settings -----------------
+        cols = s.get("colors") or {}
+        typ = s.get("type") or {}
+        pv = s.get("preview") or {}
+        pal0 = palettes[0]["colors"] if palettes else []
+
+        def role(role_key, pal_idx, default):
+            v = cols.get(role_key)
+            if v:
+                return v
+            return pal0[pal_idx] if pal_idx < len(pal0) else default
+
+        c_bg = role("bg", 0, "#101418")
+        c_surface = role("surface", 1, "#161B21")
+        c_accent = role("accent", 2, "#39B8C4")
+        c_muted = role("muted", 3, "#93A3B0")
+        c_ink = role("ink", 4, "#E7EDF2")
+        c_border = role("border", 1, "#2A333B")
+        radius = int(cols.get("radius", 10) or 10)
+        base_px = int(typ.get("baseSize", 16) or 16)
+        try:
+            ratio = float(typ.get("scale", 1.25) or 1.25)
+        except (TypeError, ValueError):
+            ratio = 1.25
+
+        def step(n):
+            return round(base_px * (ratio ** n), 1)
+
+        # family -> [(archive path, format)] for the @font-face set and the
+        # body/heading font stacks
+        fam_files = {}
+        fonts_css = []
         for a, (arcname, abspath) in font_files:
             family = (a.get("label") or a["asset_key"].split("/")[0]).replace("_", " ")
-            rel = arcname.split("/", 2)[2] if arcname.count("/") >= 2 else arcname
             ext = os.path.splitext(abspath)[1].lower()
             fmt = {"ttf": "truetype", "otf": "opentype", "woff": "woff",
-                   ".woff2": "woff2"}.get(ext.lstrip("."), "truetype")
+                   "woff2": "woff2"}.get(ext.lstrip("."), "truetype")
+            fam_files.setdefault(family, []).append((arcname, fmt))
             fonts_css.append(
                 "@font-face { font-family: '%s'; src: url('%s') format('%s'); }"
-                % (family, arcname, fmt))
+                % (family.replace("'", "\\'"), arcname, fmt))
+
+        def stack_for(fam, fallback):
+            if fam and fam in fam_files:
+                return "'%s', %s" % (fam.replace("'", "\\'"), fallback)
+            if fam:  # named but its files are missing — still emit the intent
+                return "'%s', %s" % (fam.replace("'", "\\'"), fallback)
+            return fallback
+
+        body_fam = typ.get("body") or (sorted(fam_files)[0] if fam_files else "")
+        head_fam = typ.get("heading") or body_fam
+        body_stack = stack_for(body_fam, "system-ui, sans-serif")
+        head_stack = stack_for(head_fam, body_stack) if head_fam != body_fam else body_stack
+
+        tokens_css = [":root {"]
+        for name, val in (("bg", c_bg), ("surface", c_surface), ("ink", c_ink),
+                          ("muted", c_muted), ("accent", c_accent), ("border", c_border)):
+            tokens_css.append("  --%s-%s: %s;" % (prefix, name, val))
+        tokens_css.append("  --%s-radius: %dpx;" % (prefix, radius))
+        tokens_css.append("  --%s-font-body: %s;" % (prefix, body_stack))
+        tokens_css.append("  --%s-font-head: %s;" % (prefix, head_stack))
+        for step_name, mult in (("fs-small", -0.25), ("fs-base", 0), ("fs-h3", 1),
+                                ("fs-h2", 2), ("fs-h1", 3), ("fs-hero", 4)):
+            tokens_css.append("  --%s-%s: %spx;" % (prefix, step_name, step(mult)))
+        for pal in palettes:
+            for i, c in enumerate(pal["colors"]):
+                tokens_css.append("  %s: %s;" % (cssvar_name(pal, i), c))
+        tokens_css.append("}")
+        colors_css = tokens_css
+
+        icons_css, icons_js = [], []
         for a, (arcname, abspath) in icon_files:
             stem = os.path.splitext(os.path.basename(a["asset_key"]))[0]
             cls = re.sub(r"[^a-z0-9-]", "-", (a.get("label") or stem).lower()).strip("-")
@@ -970,68 +1029,140 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         icons_js_s = ("window.%sIcons = {\n  %s\n};\n" % (prefix, ",\n  ".join(icons_js))
                       if icons_js else "window.%sIcons = {};\n" % prefix)
 
-        # Demo template — uses the chosen palette, fonts, and icons.
-        pal0 = palettes[0]["colors"] if palettes else []
-        bg = s.get("bgColor") or (pal0[0] if pal0 else "#101418")
-        fg = s.get("fgColor") or (pal0[-1] if pal0 else "#E7EDF2")
-        accent = s.get("accentColor") or (pal0[min(2, len(pal0) - 1)] if pal0 else "#39B8C4")
-        font_stack = ", ".join("'%s'" % (a.get("label") or a["asset_key"].split("/")[0]).replace("_", " ")
-                               for a, _ in font_files[:3]) or "system-ui, sans-serif"
+        # Boilerplate website — the configurator's live preview and the
+        # exported index.html render the same structure, driven entirely by
+        # the design tokens in css/tokens.css.
         icon_imgs = "\n".join(
-            '      <div class="icon" style="background-image:url(\'%s\')" title="%s"></div>'
+            '        <div class="icon" style="background-image:url(\'%s\')" title="%s"></div>'
             % (arcname, os.path.splitext(os.path.basename(arcname))[0])
-            for a, (arcname, _) in icon_files[:48])
-        font_samples = "\n".join(
-            '    <p style="font-family:\'%s\'">The quick brown fox jumps over the lazy dog — %s</p>'
-            % ((a.get("label") or a["asset_key"].split("/")[0]).replace("_", " "),
-               (a.get("label") or a["asset_key"].split("/")[0]).replace("_", " "))
-            for a, _ in font_files[:8])
+            for a, (arcname, _) in icon_files[:6])
         swatches = "\n".join(
             '      <div class="swatch" style="background:%s"><span>%s</span></div>' % (c, c)
             for pal in palettes for c in pal["colors"])
-        template = """<!DOCTYPE html>
+        desc = (project.get("description") or
+                "A starter site generated from this project's design tokens.")
+        template = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>%s — generated by fengrid</title>
-<link rel="stylesheet" href="css/colors.css">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{project["name"]} — generated by fengrid</title>
+<link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/fonts.css">
 <link rel="stylesheet" href="css/icons.css">
 <style>
-  body { margin:0; padding:40px; background:%s; color:%s;
-         font-family:%s, system-ui, sans-serif; }
-  .icons { display:flex; flex-wrap:wrap; gap:12px; }
-  .icon { width:%dpx; height:%dpx; background-size:contain;
-          background-repeat:no-repeat; background-position:center; }
-  .swatches { display:flex; flex-wrap:wrap; gap:10px; margin:24px 0; }
-  .swatch { width:96px; height:64px; border-radius:10px; display:flex;
-            align-items:flex-end; justify-content:center; padding-bottom:6px;
-            font:11px/1 monospace; color:rgba(255,255,255,.85);
-            text-shadow:0 1px 2px rgba(0,0,0,.5); }
-  h1, h2 { font-weight:600; }
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; background:var(--{prefix}-bg); color:var(--{prefix}-ink);
+         font-family:var(--{prefix}-font-body); font-size:var(--{prefix}-fs-base); line-height:1.6; }}
+  h1, h2, h3 {{ font-family:var(--{prefix}-font-head); line-height:1.2; margin:0 0 .5em; }}
+  .wrap {{ max-width: 960px; margin: 0 auto; padding: 0 24px; }}
+  .site-head {{ display:flex; align-items:center; gap:20px; padding:16px 0;
+                border-bottom:1px solid var(--{prefix}-border); }}
+  .brand {{ font-weight:700; font-size:var(--{prefix}-fs-h3); }}
+  .site-head nav {{ display:flex; gap:16px; margin-left:auto; color:var(--{prefix}-muted); }}
+  .btn {{ display:inline-block; padding:10px 22px; border-radius:var(--{prefix}-radius);
+          font-size:var(--{prefix}-fs-small); text-decoration:none; cursor:pointer; border:1px solid transparent; }}
+  .btn-primary {{ background:var(--{prefix}-accent); color:var(--{prefix}-bg); }}
+  .btn-ghost {{ border-color:var(--{prefix}-border); color:var(--{prefix}-ink); }}
+  .hero {{ padding:64px 0 48px; }}
+  .hero h1 {{ font-size:var(--{prefix}-fs-hero); }}
+  .hero p {{ color:var(--{prefix}-muted); max-width:52ch; font-size:var(--{prefix}-fs-h3); }}
+  .cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+            gap:16px; padding:24px 0 48px; }}
+  .card {{ background:var(--{prefix}-surface); border:1px solid var(--{prefix}-border);
+           border-radius:var(--{prefix}-radius); padding:20px; }}
+  .card h3 {{ font-size:var(--{prefix}-fs-h3); }}
+  .card p {{ color:var(--{prefix}-muted); margin:0; }}
+  .icon {{ width:{icon_px}px; height:{icon_px}px; background-size:contain;
+           background-repeat:no-repeat; background-position:center; margin-bottom:10px; }}
+  .type-spec {{ padding:32px 0; border-top:1px solid var(--{prefix}-border); }}
+  .type-spec h1 {{ font-size:var(--{prefix}-fs-h1); }}
+  .type-spec h2 {{ font-size:var(--{prefix}-fs-h2); }}
+  .type-spec h3 {{ font-size:var(--{prefix}-fs-h3); }}
+  .type-spec .small {{ font-size:var(--{prefix}-fs-small); color:var(--{prefix}-muted); }}
+  .pal {{ padding:32px 0; border-top:1px solid var(--{prefix}-border); }}
+  .swatches {{ display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }}
+  .swatch {{ width:96px; height:64px; border-radius:var(--{prefix}-radius); display:flex;
+             align-items:flex-end; justify-content:center; padding-bottom:6px;
+             font:11px/1 monospace; color:rgba(255,255,255,.85);
+             text-shadow:0 1px 2px rgba(0,0,0,.5); }}
+  footer {{ border-top:1px solid var(--{prefix}-border); padding:20px 0 40px;
+            color:var(--{prefix}-muted); font-size:var(--{prefix}-fs-small); }}
 </style>
 </head>
 <body>
-  <h1>%s</h1>
-  <p>%s</p>
-  <h2>Palette</h2>
-  <div class="swatches">
-%s
+  <div class="wrap">
+    <header class="site-head">
+      <span class="brand">{project["name"]}</span>
+      <nav><span>Overview</span><span>Components</span><span>Type</span></nav>
+      <a class="btn btn-primary" href="#">Get started</a>
+    </header>
+    <section class="hero">
+      <h1>{project["name"]}</h1>
+      <p>{desc}</p>
+      <p><a class="btn btn-primary" href="#">Primary action</a>
+         <a class="btn btn-ghost" href="#">Secondary</a></p>
+    </section>
+    <section class="cards">
+      <div class="card">
+{icon_imgs or '        <div class="icon"></div>'}
+        <h3>Components</h3>
+        <p>Cards, buttons, and forms styled by the tokens above.</p>
+      </div>
+      <div class="card">
+        <h3>Typography</h3>
+        <p>Type set on a {ratio:g} modular scale from a {base_px}px base.</p>
+      </div>
+      <div class="card">
+        <h3>Palette</h3>
+        <p>{len(palettes[0]["colors"]) if palettes else 0} palette colors available as custom properties.</p>
+      </div>
+    </section>
+    <section class="type-spec">
+      <h1>Heading one</h1>
+      <h2>Heading two</h2>
+      <h3>Heading three</h3>
+      <p>Body copy renders in the body family at the base size. The quick
+         brown fox jumps over the lazy dog.</p>
+      <p class="small">Small text for captions and metadata.</p>
+    </section>
+    <section class="pal">
+      <h2>Palette</h2>
+      <div class="swatches">
+{swatches or '      <div class="swatch">no palette</div>'}
+      </div>
+    </section>
+    <footer>Generated by fengrid — {time.strftime("%Y-%m-%d")}</footer>
   </div>
-  <h2>Icons</h2>
-  <div class="icons">
-%s
-  </div>
-  <h2>Type</h2>
-%s
   <script src="js/icons.js"></script>
 </body>
 </html>
-""" % (project["name"], bg, fg, font_stack, icon_px, icon_px,
-            project["name"], project.get("description") or "", swatches or
-            '      <div class="swatch">no palette selected</div>', icon_imgs or
-            '      <div class="icon"></div>', font_samples or
-            "    <p>No fonts selected.</p>")
+"""
+
+        # optional snippet-driven preview page
+        snippet_entry = None
+        if str(pv.get("mode") or "") == "snippet" and pv.get("snippetId"):
+            try:
+                srow = conn.execute("SELECT * FROM snippets WHERE id = ?",
+                                    (int(pv["snippetId"]),)).fetchone()
+            except (TypeError, ValueError):
+                srow = None
+            if srow:
+                sn = dict(srow)
+                slug = re.sub(r"[^a-z0-9-]+", "-",
+                              (sn["title"] or "preview").lower()).strip("-") or "preview-snippet"
+                snippet_entry = ("snippets/%s.html" % slug,
+                    "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n"
+                    "<title>%s — fengrid preview</title>\n"
+                    "<link rel=\"stylesheet\" href=\"../css/tokens.css\">\n"
+                    "<link rel=\"stylesheet\" href=\"../css/fonts.css\">\n"
+                    "<link rel=\"stylesheet\" href=\"../css/icons.css\">\n"
+                    "<style>body{margin:0;padding:32px;background:var(--%s-bg);"
+                    "color:var(--%s-ink);font-family:var(--%s-font-body);}</style>\n"
+                    "</head>\n<body>\n%s\n<style>\n%s\n</style>\n<script>\n%s\n</script>\n"
+                    "</body>\n</html>\n"
+                    % (sn["title"], prefix, prefix, prefix, sn.get("html", ""),
+                       sn.get("css", ""), sn.get("js", "")))
 
         manifest = {
             "name": project["name"], "description": project.get("description", ""),
@@ -1045,13 +1176,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         readme = "# %s\n\n%s\n\nGenerated by fengrid (%s).\n\n" % (
             project["name"], project.get("description") or "", manifest["generated"])
         readme += ("## Contents\n\n"
-                   "- `index.html` — demo template using the project's assets\n"
-                   "- `css/colors.css` — palette custom properties\n"
-                   "- `css/fonts.css` — @font-face rules\n"
+                   "- `index.html` — boilerplate site driven by the design tokens\n"
+                   "- `css/tokens.css` — design tokens: color roles, radius, type scale, font stacks\n"
+                   "- `css/fonts.css` — @font-face rules for the selected families\n"
                    "- `css/icons.css` — icon classes\n"
                    "- `js/icons.js` — icon name map\n"
                    "- `assets/` — the selected files\n"
-                   "- `manifest.json` — project specification\n")
+                   "- `manifest.json` — project specification and configuration\n")
+        if snippet_entry:
+            readme += "- `%s` — the snippet chosen as the preview source, wrapped in the tokens\n" % snippet_entry[0]
 
         fmt = "targz" if str(opts.get("format", s.get("format", "zip"))) in ("targz", "tar.gz", "tgz") else "zip"
         buf = io.BytesIO()
@@ -1061,11 +1194,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     z.writestr(name, data)
                 put("manifest.json", json.dumps(manifest, indent=2))
                 put("README.md", readme)
-                if colors_css: put("css/colors.css", "\n".join(colors_css) + "\n")
+                if colors_css: put("css/tokens.css", "\n".join(colors_css) + "\n")
                 if fonts_css: put("css/fonts.css", "\n".join(fonts_css) + "\n")
                 if icons_css: put("css/icons.css", "\n".join(icons_css) + "\n")
                 put("js/icons.js", icons_js_s)
                 put("index.html", template)
+                if snippet_entry: put(snippet_entry[0], snippet_entry[1])
                 if palettes: put("palettes.json", json.dumps(
                     [{"name": p["name"], "colors": p["colors"]} for p in palettes], indent=2))
                 for i, sn in enumerate(snippets):
@@ -1085,11 +1219,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     t.addfile(info, io.BytesIO(raw))
                 put("manifest.json", json.dumps(manifest, indent=2))
                 put("README.md", readme)
-                if colors_css: put("css/colors.css", "\n".join(colors_css) + "\n")
+                if colors_css: put("css/tokens.css", "\n".join(colors_css) + "\n")
                 if fonts_css: put("css/fonts.css", "\n".join(fonts_css) + "\n")
                 if icons_css: put("css/icons.css", "\n".join(icons_css) + "\n")
                 put("js/icons.js", icons_js_s)
                 put("index.html", template)
+                if snippet_entry: put(snippet_entry[0], snippet_entry[1])
                 if palettes: put("palettes.json", json.dumps(
                     [{"name": p["name"], "colors": p["colors"]} for p in palettes], indent=2))
                 for i, sn in enumerate(snippets):
