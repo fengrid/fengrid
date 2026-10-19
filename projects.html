@@ -140,6 +140,14 @@
   .modal-field { margin-bottom: 10px; }
   .modal-field label { display: block; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-faint); margin-bottom: 4px; }
   .modal-field input { width: 100%; background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; color: var(--ink); font-family: var(--font-mono); font-size: 12.5px; padding: 7px 10px; outline: none; }
+  .modal-card.wide { max-width: 640px; }
+  .help-scroll { max-height: 72vh; overflow-y: auto; padding-right: 6px; }
+  .help-scroll h3 { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 16px 0 4px; font-weight: 500; }
+  .help-scroll h3:first-child { margin-top: 0; }
+  .help-scroll p, .help-scroll li { font-size: 13px; color: var(--ink-muted); margin: 4px 0; line-height: 1.55; }
+  .help-scroll ul { margin: 4px 0 10px 18px; padding: 0; }
+  .help-scroll code { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
+  .help-scroll kbd { font-family: var(--font-mono); font-size: 11px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 4px; padding: 1px 5px; }
   #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(16px); z-index: 70; background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong); border-radius: 8px; padding: 8px 18px; font-family: var(--font-mono); font-size: 12.5px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: all 0.2s ease; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -174,6 +182,9 @@
     <button class="icon-btn" id="mode-btn" title="Toggle light / dark">
       <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+    <button class="icon-btn" id="help-btn" title="Help &amp; guide" aria-label="Help and guide">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     </button>
   </header>
 
@@ -273,6 +284,56 @@
 </div>
 
 <div id="toast"></div>
+
+<!-- help modal -->
+<div id="help-modal" class="modal-overlay" hidden>
+  <div class="modal-card wide" role="dialog" aria-modal="true" aria-label="Projects guide">
+    <div class="modal-head">
+      <span class="label">Guide</span>
+      <button class="icon-btn" id="help-close" title="Close" aria-label="Close help">✕</button>
+    </div>
+    <div class="help-scroll">
+      <h3>What a project is</h3>
+      <p>A project bundles design assets — a color scheme, typefaces, an
+      icon pack, optionally a preview snippet — into one configured package.
+      The same asset can belong to any number of projects.</p>
+      <h3>The four parameter areas</h3>
+      <ul>
+        <li><b>Colors</b> — apply one of your saved palettes (roles are
+        assigned automatically), then fine-tune each color role: background,
+        surface, ink, muted text, accent, border. Set the corner radius and
+        the CSS custom-property prefix.</li>
+        <li><b>Type</b> — pick the body and heading families from your
+        installed fonts; choosing a family adds <i>every installed style</i>
+        of it to the project, so exports carry the complete set. A base size
+        and modular scale ratio generate the type ramp.</li>
+        <li><b>Icons</b> — pick icons for the pack and set their size.</li>
+        <li><b>Preview</b> — render the live preview as the built-in
+        boilerplate website, or pick a snippet: its HTML/CSS/JS renders
+        inside the token environment (your colors, fonts, and icons apply).</li>
+      </ul>
+      <h3>Live preview</h3>
+      <p>The right pane renders a full boilerplate site — header, hero,
+      cards with icons, a type specimen, the palette strip, and a footer —
+      redrawing as you tweak. Everything is driven by the design tokens you
+      configured.</p>
+      <h3>Exporting</h3>
+      <p><b>Save project</b> (<kbd>Ctrl+S</kbd>) persists the configuration;
+      <b>Export .zip</b> / <b>.tar.gz</b> generates the template files:
+      <code>css/tokens.css</code> (design tokens — color roles, radius, font
+      stacks, type scale), <code>css/fonts.css</code>, <code>css/icons.css</code>,
+      <code>js/icons.js</code>, the boilerplate <code>index.html</code>, the
+      preview snippet as a ready page, <code>palettes.json</code>,
+      <code>manifest.json</code>, and a README — a small custom frontend
+      framework starter you can drop into any project.</p>
+      <h3>Keyboard</h3>
+      <ul>
+        <li><kbd>Ctrl+S</kbd> — save project</li>
+        <li><kbd>Esc</kbd> — close dialogs</li>
+      </ul>
+    </div>
+  </div>
+</div>
 
 <!-- generated data (font scan output; gitignored) -->
 <script src="font-meta.js"></script>
@@ -762,6 +823,12 @@
   }
   $('btn-export').addEventListener('click', function () { doExport('zip'); });
   $('btn-export-tgz').addEventListener('click', function () { doExport('targz'); });
+
+  /* help modal */
+  var helpModal = document.getElementById('help-modal');
+  document.getElementById('help-btn').addEventListener('click', function () { helpModal.hidden = false; });
+  document.getElementById('help-close').addEventListener('click', function () { helpModal.hidden = true; });
+  helpModal.addEventListener('click', function (e) { if (e.target === helpModal) helpModal.hidden = true; });
 
   /* ---------- theme ---------- */
   document.getElementById('mode-btn').addEventListener('click', function () {
