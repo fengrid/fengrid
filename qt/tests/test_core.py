@@ -317,3 +317,92 @@ def test_font_export_unknown_family(lib, tmp_path):
         ffx.export_family_css(lib, "Nope Sans", tmp_path)
     with pytest.raises(ValueError):
         ffx.export_family_zip(lib, "Nope Sans", tmp_path)
+
+
+# ---------------------------------------------------------------------- colors
+
+import json as _json
+
+from fengrid.core import colors as fcx
+
+
+def test_hex_hsl_conversions():
+    assert fcx.rgb2hex(255, 0, 0) == "#ff0000"
+    assert fcx.hex2rgb("#FF0000") == (255, 0, 0)
+    assert fcx.hex2rgb("#F00") == (255, 0, 0)
+    h, s, l = fcx.rgb2hsl(255, 0, 0)
+    assert (round(h), round(s), round(l)) == (0, 100, 50)
+    assert fcx.hsl2rgb(0, 100, 50) == (255, 0, 0)
+
+
+def test_contrast_and_wcag_labels():
+    assert abs(fcx.contrast((255, 255, 255), (0, 0, 0)) - 21.0) < 0.01
+    assert fcx.wcag_label(21) == "AAA"
+    assert fcx.wcag_label(4.6) == "AA"
+    assert fcx.wcag_label(3.1) == "AA·lg"
+    assert fcx.wcag_label(2.9) == "fail"
+    # best_ink picks white on the dark brand bg
+    assert fcx.best_ink((16, 20, 24)) == "#FFFFFF"
+
+
+def test_generate_deterministic_locked_passthrough():
+    sw = [{"hex": "#123456", "locked": True}]
+    r1 = fcx.generate("triadic", sw, base_hue=100)
+    r2 = fcx.generate("triadic", sw, base_hue=100)
+    assert r1 == r2                                  # fixed seed = fixed roll
+    assert r1[0] == {"hex": "#123456", "locked": True}   # locked passes through
+    assert len(r1) == 5
+    with pytest.raises(ValueError):
+        fcx.generate("nope", [], base_hue=1)
+
+
+def test_generate_all_rules_valid_hexes():
+    for rule in fcx.HARMONIES:
+        out = fcx.generate(rule, [], base_hue=50)
+        assert len(out) == 5
+        for s in out:
+            assert s["hex"].startswith("#") and len(s["hex"]) == 7
+
+
+def test_palette_crud_roundtrip(lib):
+    pid = fcx.save_palette(lib, "Midnight Garden",
+                           ["#101418", "#39B8C4", "#F5C25C"], "dark, brand")
+    rows = fcx.list_palettes(lib)
+    assert rows[0]["id"] == pid
+    assert rows[0]["name"] == "Midnight Garden"
+    assert rows[0]["colors"] == ["#101418", "#39B8C4", "#F5C25C"]
+    # update path (same id)
+    fcx.save_palette(lib, "Renamed", ["#FFFFFF"], "", palette_id=pid)
+    rows = fcx.list_palettes(lib)
+    assert rows[0]["name"] == "Renamed" and rows[0]["colors"] == ["#FFFFFF"]
+    assert fcx.palette_colors(lib, pid) == [{"hex": "#FFFFFF", "locked": False}]
+    # search + delete + unknown id
+    assert fcx.list_palettes(lib, q="rename")[0]["id"] == pid
+    assert fcx.list_palettes(lib, q="zzz") == []
+    fcx.delete_palette(lib, pid)
+    assert fcx.list_palettes(lib) == []
+    with pytest.raises(ValueError):
+        fcx.save_palette(lib, "x", ["#000000"], palette_id=999)
+
+
+def test_color_name_anchors():
+    assert fcx.color_name("#39B8C4") == "Pane Teal"
+    assert fcx.color_name("#FFFFFF") == "White"
+    assert fcx.color_name("#101418") == "Night Glass"
+
+
+def test_color_exports(lib, tmp_path):
+    hexes = ["#101418", "#39B8C4", "#F5C25C"]
+    css = fcx.export_css("Midnight Garden", hexes)
+    assert "--midnight-garden-1: #101418;" in css
+    data = _json.loads(fcx.export_json("Midnight Garden", hexes))
+    assert data["colors"] == hexes
+    svg = fcx.board_svg("Midnight Garden", hexes)
+    assert "<svg" in svg and "#101418" in svg and "fengrid" in svg
+    assert fcx.write_exports("Midnight Garden", hexes, tmp_path, "css").exists()
+    assert fcx.write_exports("Midnight Garden", hexes, tmp_path, "json").exists()
+    assert fcx.write_exports("Midnight Garden", hexes, tmp_path, "svg").exists()
+    png = fcx.write_exports("Midnight Garden", hexes, tmp_path, "png")
+    assert png.exists() and png.stat().st_size > 5000  # 2x board render
+    with pytest.raises(ValueError):
+        fcx.write_exports("x", hexes, tmp_path, "exe")

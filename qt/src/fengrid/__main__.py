@@ -20,6 +20,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 
 from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
+from fengrid.bridges.colors import Colors
 from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.theme import Theme
@@ -97,12 +98,14 @@ def main(argv=None) -> int:
         theme.set_theme(args.theme)
     library = Library(con, db_path, no_scan=args.no_scan)
     fonts = Fonts(con, db_path)
+    colors_bridge = Colors(con)
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
     ctx.setContextProperty("theme", theme)
     ctx.setContextProperty("library", library)
     ctx.setContextProperty("fonts", fonts)
+    ctx.setContextProperty("colors", colors_bridge)
     ctx.setContextProperty("appVersion", __version__)
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
     if not engine.rootObjects():

@@ -61,6 +61,20 @@ CREATE TABLE IF NOT EXISTS collection_item (
     position      INTEGER,
     PRIMARY KEY (collection_id, asset_id)
 );
+CREATE TABLE IF NOT EXISTS palette (
+    id      INTEGER PRIMARY KEY,
+    name    TEXT NOT NULL,
+    tags    TEXT,
+    created REAL,
+    updated REAL
+);
+CREATE TABLE IF NOT EXISTS palette_color (
+    palette_id INTEGER NOT NULL REFERENCES palette(id) ON DELETE CASCADE,
+    position   INTEGER NOT NULL,
+    hex        TEXT NOT NULL,
+    locked     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (palette_id, position)
+);
 CREATE TABLE IF NOT EXISTS setting (
     key   TEXT PRIMARY KEY,
     value TEXT

@@ -16,7 +16,8 @@ ApplicationWindow {
     font.pixelSize: 13
 
     property int iconSize: sizeSlider.value
-    property int pane: 0   // 0 = icons, 1 = fonts (see SideRail's Panes list)
+    // 0 = icons, 1 = fonts, 2 = colors (see SideRail's Panes list)
+    property int pane: 0
 
     header: Rectangle {
         height: 52
@@ -194,6 +195,7 @@ ApplicationWindow {
                 iconPx: root.iconSize
             }
             Fonts {}
+            Colors {}
         }
 
         Rectangle {
@@ -271,6 +273,12 @@ ApplicationWindow {
     }
     Connections {
         target: fonts
+        function onMessage(msg) { toast.show(msg) }
+        function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
+        function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
+    }
+    Connections {
+        target: colors
         function onMessage(msg) { toast.show(msg) }
         function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
         function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }

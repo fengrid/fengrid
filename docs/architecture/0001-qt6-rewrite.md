@@ -310,6 +310,16 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-19, M3 colors pane: full port of colors.html — harmony generator
+  (exact hue offsets + fract(sin(seed)) jitter, deterministic for tests),
+  HSL/hex editor with WCAG AAA/AA/AA·lg/fail readouts, deterministic color
+  naming (same anchor set), lock/remove/reorder, space-to-reroll, palette
+  CRUD in the library DB (palette/palette_color tables via CREATE IF NOT
+  EXISTS — no migration needed), and the four exports (CSS vars, JSON,
+  board SVG, 2x PNG drawn with Pillow). QML: Colors.qml with imperative
+  slider sync (dragged sliders lose `val` bindings) and hex fields that
+  only follow selection changes (0.x anti-fight-typing behavior).
+  QA gate: 28 tests + clean dark/light renders.
 - 2026-10-19, M2 increment (fonts + WebEngine scaffold): fonts pane at parity
   for scan/family-grouping/filter/export — fontTools metadata (family, style,
   weight, italic; OS/2 + name tables, no fc-scan and thus no .ttc trailing-

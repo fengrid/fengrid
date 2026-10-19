@@ -105,6 +105,11 @@ Rectangle {
                 active: rail.pane === 1
                 onPicked: rail.panePicked(1)
             }
+            RailItem {
+                label: qsTr("Colors")
+                active: rail.pane === 2
+                onPicked: rail.panePicked(2)
+            }
 
             SectionLabel { text: qsTr("Library") }
             RailItem {
