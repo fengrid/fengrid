@@ -17,6 +17,10 @@ fengrid/                 # repo name; originally gtk4-icon-browser
 ├── index.html                # the entire application (HTML + CSS + JS, inline)
 ├── install.sh                # installer / uninstaller / launcher (Linux + macOS)
 ├── install.ps1               # installer / uninstaller / launcher (Windows)
+├── installer/                # NSIS Windows installer binary (see installer/README.md)
+│   ├── fengrid.nsi           # installer script: config GUI, portable mode
+│   └── win-setup-helper.ps1  # install-time scan / uninstall helper
+├── .github/workflows/        # build-windows: NSIS build on windows-latest
 ├── server/                   # optional LAN webshare
 │   ├── serve.py              # small http server (python3, stdlib only)
 │   ├── connect.html          # QR connect page (vendored QR lib)
@@ -130,6 +134,12 @@ Both are deliberately conservative:
   resolve page-relative assets under the launcher folder and break. It
   reuses a server that is already up on the port and falls back to the
   plain file when Python is missing (`--file` forces that)
+- **`installer/`** additionally builds a single-file Windows installer
+  binary (`fengrid-win64-setup.exe`, NSIS) whose GUI collects the
+  configuration up front: portable/thumbdrive mode (relative launcher,
+  no registry/PATH/shortcuts), an optional PATH entry, and the icon
+  folders to scan. See `installer/README.md`; `.github/workflows/
+  build-windows.yml` builds it on `windows-latest`
 - `--uninstall` / `-Uninstall` asks per location, knows all historical
   install locations, removes only launchers it created, refuses dirs that
   don't look like an install, and protects the running repository
@@ -279,7 +289,8 @@ design, so a `file://`-opened page still cannot drive the server.
 
 No test framework — verification is manual, and the minimum bar is:
 
-1. `bash -n install.sh` passes
+1. `bash -n install.sh` passes; `makensis installer/fengrid.nsi`
+   compiles warning-free (see `installer/README.md` for the toolchain)
 2. Full install run completes; `index.html` renders 0 console errors,
    0 broken images (check in both a Chromium-family and a Firefox browser —
    their `file://` policies differ, and that difference drove several

@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Windows installer binary (`installer/`)** — NSIS-built
+  `fengrid-win64-setup.exe` with a configuration GUI: portable-install
+  toggle (thumbdrive-friendly — no registry, PATH or Start Menu entries;
+  launcher resolves itself via `%~dp0` so the folder can be moved or run
+  from any drive), optional launcher PATH entry, and an editable
+  icon-folder list for the initial scan. Scanning/uninstall share
+  `win-setup-helper.ps1` (same layout and collision rules as
+  `install.ps1`; the uninstaller stops the web server and removes only
+  its own launcher/PATH entry). Build with `installer/build.sh`
+  (makensis cross-compiles from Linux/macOS/WSL) or the new
+  `build-windows` GitHub workflow.
+
 ### Fixed
 
 - **Windows paths were dropped by the page's list parser** — `parseLine`
@@ -25,7 +39,6 @@ adheres to [Semantic Versioning](https://semver.org/).
   generated launcher had `APP_DIR` split across three lines; the
   server-launch path could never work. The expression is now
   parenthesized.
-
 - **Windows installer (`install.ps1`) rejects pasted paths** — entering
   `"D:\Library\Design Library\Icons"` (as produced by Explorer's *Copy as
   path* or PowerShell tab completion) failed the directory check even when
@@ -63,17 +76,6 @@ The project formerly known as GTK4 Icon Browser / Icon Browser is now
 
 ### Added
 
-- **Windows installer binary (`installer/`)** — NSIS-built
-  `fengrid-win64-setup.exe` with a configuration GUI: portable-install
-  toggle (thumbdrive-friendly — no registry, PATH or Start Menu entries;
-  launcher resolves itself via `%~dp0` so the folder can be moved or run
-  from any drive), optional launcher PATH entry, and an editable
-  icon-folder list for the initial scan. Scanning/uninstall share
-  `win-setup-helper.ps1` (same layout and collision rules as
-  `install.ps1`; the uninstaller stops the web server and removes only
-  its own launcher/PATH entry). Build with `installer/build.sh`
-  (makensis cross-compiles from Linux/macOS/WSL) or the new
-  `build-windows` GitHub workflow.
 - New split-screen **light/dark brand screenshot** (thin pane-teal divider,
   lit-pane mark in the corner strip) on the README and the landing page.
 

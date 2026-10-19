@@ -24,6 +24,12 @@ bash install.sh
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
+Prefer a double-clickable installer? Build one with NSIS
+(`bash installer/build.sh` → `dist/fengrid-win64-setup.exe`) — it asks
+for the install mode (including a thumbdrive-friendly portable option)
+and the icon folders to scan in a GUI. See
+[installer/README.md](installer/README.md).
+
 You'll be asked:
 
 1. **Install location** — press Enter for `~/fengrid/` (a visible path
