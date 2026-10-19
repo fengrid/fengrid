@@ -4,6 +4,39 @@ All notable changes to this project are documented in this file. Format is
 based on [Keep a Changelog](https://keepachangelog.com/), and this project
 adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Windows launcher (`fengrid.cmd`) set an empty `APP_DIR`** — inside a
+  PowerShell array literal the comma operator binds tighter than `+`, so
+  the unparenthesized `'set "APP_DIR=' + $InstallDir + '"'` in
+  `install.ps1` was parsed as three separate array elements and the
+  generated launcher had `APP_DIR` split across three lines; the
+  server-launch path could never work. The expression is now
+  parenthesized.
+
+- **Windows installer (`install.ps1`) rejects pasted paths** — entering
+  `"D:\Library\Design Library\Icons"` (as produced by Explorer's *Copy as
+  path* or PowerShell tab completion) failed the directory check even when
+  the folder existed. Typed paths are now normalized: surrounding quotes
+  and whitespace stripped, `~` expanded, and all user-supplied paths are
+  checked with `-LiteralPath` so `[`/`]` in folder names no longer act as
+  wildcards. The skip message now distinguishes "it is a file" from
+  "directory not found".
+
+### Changed
+
+- Windows installer robustness: `list.txt`/`list.js`/`fengrid.cmd` are
+  written as UTF-8 (ASCII corrupted non-ASCII icon file names), `list.txt`
+  is written next to the script instead of the caller's current directory
+  (running `install.ps1 -File` from another directory used to break the
+  install copy step), same-named icons from different scan roots are
+  suffixed instead of silently overwriting each other, the system-owned
+  location check compares SIDs instead of the localized
+  `NT AUTHORITY\SYSTEM` name, a bare drive root (`D:\`) survives path
+  normalization, and a failed auto-launch no longer aborts the install.
+
 ## [v0.3.1] — 2026-10-18
 
 The project formerly known as GTK4 Icon Browser / Icon Browser is now
