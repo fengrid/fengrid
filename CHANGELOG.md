@@ -37,6 +37,11 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Font showcase install step** — the installer now asks to scan font
+  folders (default yes; `--fonts`/`--no-fonts` to control it
+  non-interactively). Scanned fonts generate `fonts-list.txt` +
+  `font-meta.js` for the font showcase. Custom font folders can be added
+  at the prompt.
 - **Font showcase** — the header's Icons / Fonts switch opens `fonts.html`,
   a sibling page with the same design system but wider grid cells and
   live typeface previews. Each card renders the preview text in its own

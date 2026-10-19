@@ -38,6 +38,10 @@ You'll be asked:
 4. **LAN webshare** — default **yes** (exposes the showcase to your local
    network for QR sharing; answer `n` or rerun with `--no-webshare` to keep
    it local-only).
+5. **Font folders** — default **yes**: scans `~/.local/share/fonts`,
+   `~/.fonts`, and `/usr/share/fonts` for the font showcase (answer `n`
+   or rerun with `--no-fonts` to skip; add custom font folders when
+   prompted).
 
 Then it copies the icons next to the page (a few minutes on very large icon
 sets — macOS converts `.icns` with the built-in `sips`) and opens it in your
