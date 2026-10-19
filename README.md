@@ -46,8 +46,12 @@ page — no build step, no runtime, no server required.
 - **Mobile-friendly layout** — responsive controls, swipeable filter chips,
   44px touch targets, tap-to-select on phones, and a one-tap control
   collapse for a full-page grid (phones start with it collapsed)
-- **QR webshare (optional)** — a tiny local webserver publishes the showcase
-  to your local network; open the connect page on any desktop and scan the
+- **Local web server by default** — `fengrid` starts a loopback-only server
+  and opens `http://127.0.0.1:8642/`, so the refresh button and
+  ImageMagick-powered export work without any setup in every browser;
+  `fengrid --file` opens the plain file when Python is unavailable
+- **QR webshare (optional)** — the same local webserver can be exposed to
+  your local network; open the connect page on any desktop and scan the
   QR with a phone. Same-origin serving means no CORS issues, and directory
   listings are disabled
 - **Light & dark modes** — persisted between visits

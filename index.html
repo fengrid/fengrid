@@ -806,20 +806,25 @@
 
   function parseLine(line) {
     line = line.trim();
-    if (!line || line[0] !== '/') return null;
+    // POSIX absolute paths and Windows drive paths (D:/...) are both accepted;
+    // the Windows installers write drive paths into list.txt
+    if (!line || (line[0] !== '/' && !/^[A-Za-z]:\//.test(line))) return null;
     var marker = '/icons/';
     var mi = line.indexOf(marker);
     var rel, theme;
     if (mi !== -1) {
       rel = line.slice(mi + marker.length);
-      theme = rel.slice(0, rel.indexOf('/')) || 'other';
+      var slash = rel.indexOf('/');
+      theme = slash === -1 ? 'other' : rel.slice(0, slash);
     } else {
-      // custom root: theme = first dir under the scan root's parent is unknowable;
-      // treat the parent directory name as the theme
+      // custom root: the installer copies these flat as icons/<theme>/<file>,
+      // where theme = the file's parent directory name. Build rel from the
+      // LAST two segments — slicing at indexOf(theme) breaks whenever the
+      // theme name also occurs earlier in the path.
       var segs = line.split('/');
-      segs.pop();
+      var f = segs.pop();
       theme = segs.pop() || 'other';
-      rel = line.slice(line.indexOf(theme));
+      rel = theme + '/' + f;
     }
     var segs = rel.split('/');
     var file = segs.pop();
@@ -828,11 +833,19 @@
     var name = file.slice(0, dot);
     var ext = file.slice(dot + 1).toLowerCase();
     var size = '', px = 0, context = '';
-    if (segs.length && (SIZE_RE.test(segs[0]) || segs[0] === 'scalable')) {
-      var m = segs[0].match(SIZE_RE);
-      if (m) { size = segs[0]; px = parseInt(m[1], 10) * (m[2] ? 2 : 1); }
+    // rel starts with the theme segment, so the size directory (16x16,
+    // 32x32@2, scalable, ...) can sit at any position — find it, and the
+    // context is the directory inside it (documented layout). Custom-root
+    // copies are flat, so segs is just [theme] and context falls back to it.
+    var sizeIdx = -1;
+    for (var i = 0; i < segs.length; i++) {
+      if (SIZE_RE.test(segs[i]) || segs[i] === 'scalable') { sizeIdx = i; break; }
+    }
+    if (sizeIdx !== -1) {
+      var m = segs[sizeIdx].match(SIZE_RE);
+      if (m) { size = segs[sizeIdx]; px = parseInt(m[1], 10) * (m[2] ? 2 : 1); }
       else { size = 'scalable'; px = 512; }
-      context = segs.length > 1 ? segs[1] : '';
+      context = sizeIdx + 1 < segs.length ? segs[sizeIdx + 1] : '';
     } else {
       context = segs.length ? segs[0] : '';
     }

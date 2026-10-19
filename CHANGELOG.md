@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Windows paths were dropped by the page's list parser** — `parseLine`
+  rejected any `list.txt` line not starting with `/`, so Windows drive
+  paths (`D:/Library/.../icon.png`) yielded zero icons. It now accepts
+  drive paths, derives the relative path from the last two segments (a
+  theme name recurring earlier in the path no longer corrupts it), and
+  finds the size directory (`16x16`, `32x32@2`, `scalable`, …) anywhere
+  in the path — previously the size dir was only detected when it
+  directly followed `/icons/`, so theme-style layouts never got sizes
+  and their context fell back to the theme name (contrary to the
+  documented layout).
 - **Windows launcher (`fengrid.cmd`) set an empty `APP_DIR`** — inside a
   PowerShell array literal the comma operator binds tighter than `+`, so
   the unparenthesized `'set "APP_DIR=' + $InstallDir + '"'` in
@@ -27,6 +37,13 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The local web server is the default, not an option** — both launchers
+  (`fengrid` on Linux/macOS, `fengrid.cmd` on Windows) start `serve.py`
+  bound to the loopback interface and open `http://127.0.0.1:8642/`,
+  reusing a server already up on the port and falling back to the plain
+  file when Python is unavailable (`fengrid --file` forces that). The
+  install-time prompt now only opts into *exposing* the server to the
+  local network (QR webshare).
 - Windows installer robustness: `list.txt`/`list.js`/`fengrid.cmd` are
   written as UTF-8 (ASCII corrupted non-ASCII icon file names), `list.txt`
   is written next to the script instead of the caller's current directory

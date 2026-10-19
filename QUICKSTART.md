@@ -70,7 +70,9 @@ browser.
 
 ## Share it on your network (phones & tablets)
 
-Say yes to the webshare prompt during install (or start it later):
+The showcase already runs on a local web server — the `fengrid` launcher
+starts it bound to the loopback interface. To expose it to your network,
+say yes to the prompt during install, or start it later:
 
 ```bash
 cd ~/fengrid/server && python3 serve.py

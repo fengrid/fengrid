@@ -244,15 +244,25 @@ if (Test-Path (Join-Path $ScriptDir 'server')) {
 }
 Copy-Item (Join-Path $ScriptDir $ListFile) $InstallDir -Force
 
-# local icon tree: icons/<theme>/<file> with theme = folder name
+# local icon tree: mirrors install.sh and the page's parseLine — a path
+# containing "/icons/" is filed under its suffix after that marker
+# (theme-style layouts), anything else flat as icons/<parent-dir>/<file>.
+# (Without the marker rule, a scan folder literally named "icons" would
+# diverge from the page's derived relative path and render broken.)
 Write-Info 'Copying icon files into icons\ ...'
 $copied = 0
 foreach ($icon in $allIcons) {
-    $theme = Split-Path -Parent $icon.FullName | Split-Path -Leaf
-    $destDir = Join-Path $InstallDir (Join-Path 'icons' $theme)
+    $p = $icon.FullName -replace '\\', '/'
+    $marker = '/icons/'
+    $idx = $p.IndexOf($marker)
+    if ($idx -ge 0) {
+        $rel = $p.Substring($idx + $marker.Length)
+    } else {
+        $rel = (Split-Path -Parent $icon.FullName | Split-Path -Leaf) + '/' + $icon.Name
+    }
+    $dest = Join-Path $InstallDir (Join-Path 'icons' $rel)
+    $destDir = Split-Path -Parent $dest
     New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    # forward-slash list path -> rel used by the page must match icons/<theme>/<name>
-    $dest = Join-Path $destDir $icon.Name
     if ((Test-Path -LiteralPath $dest) -and
         (Get-FileHash -LiteralPath $dest).Hash -ne (Get-FileHash -LiteralPath $icon.FullName).Hash) {
         # same name, different content — two scan roots sharing a theme
@@ -288,12 +298,15 @@ $cmdLines = @(
     # parsed as three separate elements and the .cmd gets APP_DIR split
     ('set "APP_DIR=' + $InstallDir + '"'),
     'if /i "%~1"=="--file" goto file',
+    'rem reuse a server that is already up on the port (e.g. the LAN webshare)',
+    'curl -s -o nul http://127.0.0.1:8642/server-state.js 2>nul && goto open',
     'set "PYEXE="',
     'where pythonw >nul 2>nul && set "PYEXE=pythonw"',
     'where python >nul 2>nul && if not defined PYEXE set "PYEXE=python"',
     'if not defined PYEXE goto file',
     'start "" %PYEXE% "%APP_DIR%\server\serve.py" --dir "%APP_DIR%" --port 8642 --host 127.0.0.1 --kill-existing',
     'timeout /t 2 /nobreak >nul',
+    ':open',
     'start "" "http://127.0.0.1:8642/"',
     'goto :eof',
     ':file',

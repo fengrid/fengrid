@@ -124,9 +124,12 @@ Both are deliberately conservative:
   are kept away from hidden dirs); custom locations allowed,
   hidden/root-owned paths require a second confirmation
 - The launcher (`~/.local/bin/fengrid` on Linux/macOS, `fengrid.cmd`
-  on Windows) is a tiny **script** that opens the *real* install path —
-  not a symlink to the HTML: browsers keep the symlink's own URL, which
-  would resolve page-relative assets under the launcher folder and break
+  on Windows) is a tiny **script** that starts the install's local web
+  server (loopback bind) and opens `http://127.0.0.1:8642/` — not a
+  symlink to the HTML: browsers keep the symlink's own URL, which would
+  resolve page-relative assets under the launcher folder and break. It
+  reuses a server that is already up on the port and falls back to the
+  plain file when Python is missing (`--file` forces that)
 - `--uninstall` / `-Uninstall` asks per location, knows all historical
   install locations, removes only launchers it created, refuses dirs that
   don't look like an install, and protects the running repository
@@ -154,8 +157,12 @@ link into its target.
   and only falls back to the server-injected LAN URL when opened from a
   loopback address — so the QR always encodes something a phone can open
 
-On Windows the same goal is reached with `python serve.py` if Python is
-installed; no PowerShell-native server is provided in this release.
+Both installers default to the server: `install.sh` writes a bash
+launcher and `install.ps1` a `fengrid.cmd`, each starting `serve.py` on the
+loopback interface and opening `http://127.0.0.1:8642/` (reusing a server
+already up on the port; plain-file fallback without Python or via
+`--file`). The LAN webshare below (bind `0.0.0.0`) remains an explicit
+opt-in for phone access.
 
 ## Versioning & releases
 
