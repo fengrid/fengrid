@@ -63,6 +63,17 @@ The project formerly known as GTK4 Icon Browser / Icon Browser is now
 
 ### Added
 
+- **Windows installer binary (`installer/`)** — NSIS-built
+  `fengrid-win64-setup.exe` with a configuration GUI: portable-install
+  toggle (thumbdrive-friendly — no registry, PATH or Start Menu entries;
+  launcher resolves itself via `%~dp0` so the folder can be moved or run
+  from any drive), optional launcher PATH entry, and an editable
+  icon-folder list for the initial scan. Scanning/uninstall share
+  `win-setup-helper.ps1` (same layout and collision rules as
+  `install.ps1`; the uninstaller stops the web server and removes only
+  its own launcher/PATH entry). Build with `installer/build.sh`
+  (makensis cross-compiles from Linux/macOS/WSL) or the new
+  `build-windows` GitHub workflow.
 - New split-screen **light/dark brand screenshot** (thin pane-teal divider,
   lit-pane mark in the corner strip) on the README and the landing page.
 

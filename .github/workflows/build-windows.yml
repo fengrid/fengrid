@@ -1,0 +1,42 @@
+name: build-windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [build-win-x64, dev, main]
+    paths:
+      - 'installer/**'
+      - 'index.html'
+      - 'fonts/**'
+      - 'server/**'
+      - 'LICENSE.md'
+      - '.github/workflows/build-windows.yml'
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - name: Read app version
+        shell: pwsh
+        run: |
+          $m = Select-String -Path index.html -Pattern "APP_VERSION = '([^']+)'"
+          "APPVER=$($m.Matches[0].Groups[1].Value)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          makensis /DAPPVER=$env:APPVER installer\fengrid.nsi
+          Get-Item dist\fengrid-win64-setup.exe | Select-Object Name, Length
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fengrid-win64-setup
+          path: dist/fengrid-win64-setup.exe
+          if-no-files-found: error

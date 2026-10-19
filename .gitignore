@@ -26,3 +26,6 @@ __pycache__/
 
 # runtime state written by server/serve.py at startup (removed at shutdown)
 server-state.js
+
+# NSIS build output
+dist/

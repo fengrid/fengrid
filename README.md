@@ -76,6 +76,17 @@ cd fengrid
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
+**Windows installer binary** — a single-file `fengrid-win64-setup.exe`
+with a configuration GUI (portable/thumbdrive mode, launcher PATH option,
+icon folders to scan) can be built from this repo with NSIS:
+
+```bash
+bash installer/build.sh     # -> dist/fengrid-win64-setup.exe
+```
+
+See [installer/README.md](installer/README.md) for details and a
+prebuilt artifact via the `build-windows` GitHub workflow.
+
 The installers ask before doing anything irreversible and never require
 admin rights. Default install is a visible `~/fengrid` (sandboxed
 browsers can't read hidden paths). Custom scan folders and install locations
