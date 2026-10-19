@@ -55,6 +55,23 @@ case "$MODE" in enabled|disabled|force) ;; *) echo "bad mode: $MODE" >&2; exit 1
 
 say() { $QUIET || printf '%s\n' "$*"; }
 
+# show_progress <current> <total> [label] — in-place progress bar on stderr.
+# Only draws when stderr is a terminal (piped/redirected output stays clean).
+show_progress() {
+    [ -t 2 ] || return 0
+    local cur=$1 total=$2 label="${3:-}"
+    [ "$total" -gt 0 ] 2>/dev/null || return 0
+    local pct=$((cur * 100 / total))
+    [ "$pct" -gt 100 ] && pct=100
+    local width=28 filled i bar=""
+    filled=$((pct * width / 100))
+    for ((i = 0; i < filled; i++)); do bar+="█"; done
+    for ((i = filled; i < width; i++)); do bar+="░"; done
+    printf '\r  %s [%s] %3d%% (%d/%d)\033[K' "$label" "$bar" "$pct" "$cur" "$total" >&2
+}
+# call after a progress loop to start the next output on a fresh line
+progress_done() { [ -t 2 ] && printf '\n' >&2; return 0; }
+
 if [ "$MODE" = disabled ]; then
     say "metadata update disabled — leaving meta.js unchanged"
     exit 0
@@ -140,11 +157,23 @@ fi
 # 3. identify only what changed; emit "key \t JSON-fragment" lines
 USED=0
 if [ "$TODO" -gt 0 ]; then
+    : > "$TMP_RAW"
     (
         cd "$INSTALL_DIR" || exit 1
-        sed 's|^|icons/|' "$TMP_TODO" | tr '\n' '\0' | \
-        xargs -0 -n 200 $IDENTIFY -quiet -format '%i|%B|%w|%h|%[colorspace]|%k|%[type]\n'
-    ) > "$TMP_RAW" 2>/dev/null
+        CHUNK=200
+        DONE=0
+        while [ "$DONE" -lt "$TODO" ]; do
+            START=$((DONE + 1))
+            END=$((DONE + CHUNK))
+            [ "$END" -gt "$TODO" ] && END=$TODO
+            sed -n "${START},${END}p" "$TMP_TODO" | sed 's|^|icons/|' | \
+                tr '\n' '\0' | \
+                xargs -0 $IDENTIFY -quiet -format '%i|%B|%w|%h|%[colorspace]|%k|%[type]\n' 2>/dev/null
+            DONE=$END
+            show_progress "$DONE" "$TODO" "identify"
+        done
+        progress_done
+    ) >> "$TMP_RAW"
 
     awk -F'|' '
         NF >= 7 && $1 ~ /^icons\// && $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && $4 ~ /^[0-9]+$/ {

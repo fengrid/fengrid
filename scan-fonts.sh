@@ -21,6 +21,21 @@ info()  { printf "${CYAN}::${OFF} %s\n" "$*"; }
 ok()    { printf "${GREEN}::${OFF} %s\n" "$*"; }
 warn()  { printf "${YELLOW}::${OFF} %s\n" "$*"; }
 
+# show_progress <current> <total> [label] — in-place progress bar on stderr.
+show_progress() {
+    [ -t 2 ] || return 0
+    local cur=$1 total=$2 label="${3:-}"
+    [ "$total" -gt 0 ] 2>/dev/null || return 0
+    local pct=$((cur * 100 / total))
+    [ "$pct" -gt 100 ] && pct=100
+    local width=28 filled i bar=""
+    filled=$((pct * width / 100))
+    for ((i = 0; i < filled; i++)); do bar+="█"; done
+    for ((i = filled; i < width; i++)); do bar+="░"; done
+    printf '\r  %s [%s] %3d%% (%d/%d)\033[K' "$label" "$bar" "$pct" "$cur" "$total" >&2
+}
+progress_done() { [ -t 2 ] && printf '\n' >&2; return 0; }
+
 FONT_EXTS=(-name '*.ttf' -o -name '*.otf' -o -name '*.woff' -o -name '*.woff2' -o -name '*.ttc' -o -name '*.eot')
 
 # --- helpers -----------------------------------------------------------------
@@ -127,10 +142,14 @@ printf 'window.FONT_META={};\n' > "$META_OUT"
 
 COPIED=0
 UNREADABLE=0
+ITER=0
+TOTAL_FILES=$(wc -l < "$TMP_LIST")
 
 # fc-scan extracts metadata; run once per file (batch would be faster but
 # the per-file parse keeps the mapping simple)
 while IFS= read -r src; do
+    ITER=$((ITER + 1))
+    show_progress "$ITER" "$TOTAL_FILES" "fonts"
     [ -f "$src" ] || continue
     base=$(basename "$src")
     ext="${base##*.}"
@@ -178,6 +197,7 @@ while IFS= read -r src; do
         >> "$META_OUT.tmp"
     COPIED=$((COPIED + 1))
 done < "$TMP_LIST"
+progress_done
 
 # assemble font-meta.js with the header
 if [ -f "$META_OUT.tmp" ]; then

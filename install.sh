@@ -77,6 +77,22 @@ ok()    { printf "${GREEN}::${OFF} %s\n" "$*"; }
 warn()  { printf "${YELLOW}::${OFF} %s\n" "$*"; }
 die()   { printf "${RED}::${OFF} %s\n" "$*" >&2; exit 1; }
 
+# show_progress <current> <total> [label] — in-place progress bar on stderr.
+# Only draws when stderr is a terminal (piped/redirected output stays clean).
+show_progress() {
+    [ -t 2 ] || return 0
+    local cur=$1 total=$2 label="${3:-}"
+    [ "$total" -gt 0 ] 2>/dev/null || return 0
+    local pct=$((cur * 100 / total))
+    [ "$pct" -gt 100 ] && pct=100
+    local width=28 filled i bar=""
+    filled=$((pct * width / 100))
+    for ((i = 0; i < filled; i++)); do bar+="█"; done
+    for ((i = filled; i < width; i++)); do bar+="░"; done
+    printf '\r  %s [%s] %3d%% (%d/%d)\033[K' "$label" "$bar" "$pct" "$cur" "$total" >&2
+}
+progress_done() { [ -t 2 ] && printf '\n' >&2; return 0; }
+
 NO_SHELL=false
 UNINSTALL=false
 AUTO_UPDATES=false
@@ -592,8 +608,11 @@ case "$ICONS_MODE" in
 esac
 mkdir -p "$INSTALL_DIR/icons"
 COPIED=0
+ITER=0
 : > "$INSTALL_DIR/$LIST_FILE.new"
 while IFS= read -r p; do
+    ITER=$((ITER + 1))
+    show_progress "$ITER" "$N" "copying"
     [ -f "$p" ] || continue
     case "$p" in
         */icons/*) rel="${p#*/icons/}" ;;
@@ -639,6 +658,7 @@ while IFS= read -r p; do
     esac
     COPIED=$((COPIED + 1))
 done < "$INSTALL_DIR/$LIST_FILE" > "$INSTALL_DIR/$LIST_FILE.new"
+progress_done
 case "$ICONS_MODE" in
     link)     ok "Icon tree linked: $COPIED symlinks under icons/ (targets untouched; removing the install removes only the links)" ;;
     hardlink) ok "Icon tree hardlinked: $COPIED files share inodes with the originals (cross-device entries were copied)" ;;
