@@ -567,13 +567,14 @@ mkdir -p "$INSTALL_DIR" || die "Cannot create $INSTALL_DIR (permission denied?)"
 mkdir -p "$INSTALL_DIR/fonts" "$INSTALL_DIR/server"
 cp "$SCRIPT_DIR/index.html" "$INSTALL_DIR/index.html" || die "Failed to copy index.html."
 cp "$SCRIPT_DIR/fonts.html" "$INSTALL_DIR/fonts.html" || die "Failed to copy fonts.html."
+cp "$SCRIPT_DIR/code.html" "$INSTALL_DIR/code.html" || die "Failed to copy code.html."
 cp -r "$SCRIPT_DIR/fonts/." "$INSTALL_DIR/fonts/" || die "Failed to copy fonts/."
 cp -r "$SCRIPT_DIR/server/." "$INSTALL_DIR/server/" || die "Failed to copy server/."
 cp "$SCRIPT_DIR/refresh-icons.sh" "$INSTALL_DIR/refresh-icons.sh" || die "Failed to copy refresh-icons.sh."
 cp "$SCRIPT_DIR/icon-meta.sh" "$INSTALL_DIR/icon-meta.sh" || die "Failed to copy icon-meta.sh."
 cp "$SCRIPT_DIR/scan-fonts.sh" "$INSTALL_DIR/scan-fonts.sh" || die "Failed to copy scan-fonts.sh."
 cp "$LIST_FILE" "$INSTALL_DIR/$LIST_FILE" || die "Failed to copy list.txt."
-ok "Installed index.html + fonts.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon-meta.sh + scan-fonts.sh"
+ok "Installed index.html + fonts.html + code.html + list.txt + fonts/ + server/ + refresh-icons.sh + icon-meta.sh + scan-fonts.sh"
 
 # ----------------------------------------------------------------------------
 # 3b. Local icon tree (self-contained previews)

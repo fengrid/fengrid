@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Code playground (`code.html`)** — a JSFiddle-style pane for writing,
+  previewing, and organizing HTML/CSS/JS snippets. Tabbed editors with
+  lightweight syntax highlighting (no external dependencies — a
+  regex tokenizer with private-use-area placeholders), a live Result
+  iframe (Ctrl+Enter or Run ▸), and Save to a local SQLite database
+  (`snippets.db`, created on first save). The taxonomy sidebar lists
+  snippets with search, language filter, recent/title/created sorting,
+  and a clickable tag cloud (tags with counts); Ctrl+S saves, and
+  **Export HTML** downloads a standalone file. Served endpoints:
+  `GET/POST /api/snippets`, `GET/PUT/DELETE /api/snippets/<id>`,
+  `GET /api/tags`. Snippets persist across reinstalls only if
+  `snippets.db` is kept — the uninstaller treats it as data and asks
+  before deleting.
+- **Color-coded modes** — each pane of the app now has its own accent
+  derived from the brand palette: **Icons** stay teal (`#39B8C4` /
+  `#0E7C86`), **Fonts** turn violet (`#A78BFA` / `#6D4FC4`), and
+  **Code** is coral (`#F0885C` / `#C44A1E`). The wordmark, mode switch,
+  buttons, chips, and focus rings all follow the pane's accent; the
+  lit-pane amber remains the shared interaction accent everywhere.
+
 ### Fixed
 
 - **Windows paths were dropped by the page's list parser** — `parseLine`

@@ -32,6 +32,7 @@ import shutil
 import socket
 import socketserver
 import subprocess
+import sqlite3
 import sys
 import tempfile
 import threading
@@ -110,6 +111,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         if path == "/fonts-export":
             self.handle_fonts_export()
+            return
+        if path.startswith("/api/"):
+            self.handle_api("GET")
             return
         # /_connect is a virtual path, so its relative asset refs resolve to
         # /vendor/... — serve those from the server/ dir explicitly
@@ -305,6 +309,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     # pipeline as the GET forms. One import/refresh at a time.
     # ------------------------------------------------------------------
     def do_POST(self):
+        if urlparse(self.path).path.startswith("/api/"):
+            self.handle_api("POST")
+            return
         if urlparse(self.path).path == "/import":
             self.handle_import_post()
             return
@@ -405,6 +412,136 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json_response(504, {"ok": False, "error": "import timed out"})
         except Exception as exc:  # noqa: BLE001 — surfaced to the UI
             return self._json_response(500, {"ok": False, "error": str(exc)[:300]})
+
+    def do_PUT(self):
+        if urlparse(self.path).path.startswith("/api/"):
+            self.handle_api("PUT")
+            return
+        self.send_error(404, "Not found")
+
+    def do_DELETE(self):
+        if urlparse(self.path).path.startswith("/api/"):
+            self.handle_api("DELETE")
+            return
+        self.send_error(404, "Not found")
+
+    # ------------------------------------------------------------------
+    # /api/snippets — local SQLite-backed snippet store for code.html
+    #
+    # Schema: snippets(id, title, description, language, html, css, js,
+    #                  tags, created, updated)
+    # Tags are comma-separated in a single column (mirrors the icon
+    # showcase's localStorage tag model); the /api/tags endpoint expands
+    # them into a distinct list with counts.
+    # ------------------------------------------------------------------
+    def _snippet_db(self):
+        conn = sqlite3.connect(os.path.join(self.server.app_dir, "snippets.db"))
+        conn.row_factory = sqlite3.Row
+        conn.execute("""CREATE TABLE IF NOT EXISTS snippets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL DEFAULT 'Untitled',
+            description TEXT NOT NULL DEFAULT '',
+            language TEXT NOT NULL DEFAULT 'web',
+            html TEXT NOT NULL DEFAULT '',
+            css TEXT NOT NULL DEFAULT '',
+            js TEXT NOT NULL DEFAULT '',
+            tags TEXT NOT NULL DEFAULT '',
+            created TEXT NOT NULL DEFAULT (datetime('now')),
+            updated TEXT NOT NULL DEFAULT (datetime('now'))
+        )""")
+        return conn
+
+    def handle_api(self, method):
+        path = urlparse(self.path).path
+        qs = parse_qs(urlparse(self.path).query)
+        try:
+            conn = self._snippet_db()
+            try:
+                if path == "/api/tags" and method == "GET":
+                    rows = conn.execute("SELECT tags FROM snippets WHERE tags != ''").fetchall()
+                    counts = {}
+                    for r in rows:
+                        for t in r["tags"].split(","):
+                            t = t.strip()
+                            if t:
+                                counts[t] = counts.get(t, 0) + 1
+                    return self._json_response(200, {"ok": True, "tags": [
+                        {"name": k, "count": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])]})
+
+                if path == "/api/snippets":
+                    if method == "GET":
+                        q = (qs.get("q", [""])[0] or "").strip()
+                        tag = (qs.get("tag", [""])[0] or "").strip()
+                        sort = (qs.get("sort", ["updated"])[0] or "updated")
+                        sql = "SELECT id, title, description, language, tags, created, updated FROM snippets"
+                        wh, args = [], []
+                        if q:
+                            wh.append("(title LIKE ? OR description LIKE ? OR tags LIKE ?)")
+                            args += ["%" + q + "%"] * 3
+                        if tag:
+                            wh.append("(',' || tags || ',') LIKE ?")
+                            args.append("%," + tag + ",%")
+                        if wh:
+                            sql += " WHERE " + " AND ".join(wh)
+                        sql += " ORDER BY " + ("title COLLATE NOCASE" if sort == "title" else
+                                               "created" if sort == "created" else "updated DESC")
+                        rows = [dict(r) for r in conn.execute(sql, args).fetchall()]
+                        return self._json_response(200, {"ok": True, "snippets": rows})
+
+                    if method == "POST":
+                        body = self._read_json()
+                        cur = conn.execute(
+                            "INSERT INTO snippets (title, description, language, html, css, js, tags) "
+                            "VALUES (?,?,?,?,?,?,?)",
+                            (body.get("title", "Untitled"), body.get("description", ""),
+                             body.get("language", "web"), body.get("html", ""),
+                             body.get("css", ""), body.get("js", ""),
+                             body.get("tags", "")))
+                        conn.commit()
+                        row = conn.execute("SELECT * FROM snippets WHERE id = ?", (cur.lastrowid,)).fetchone()
+                        return self._json_response(201, {"ok": True, "snippet": dict(row)})
+                    return self._json_response(405, {"ok": False, "error": "method not allowed"})
+
+                m = re.match(r"^/api/snippets/(\d+)$", path)
+                if m:
+                    sid = int(m.group(1))
+                    if method == "GET":
+                        row = conn.execute("SELECT * FROM snippets WHERE id = ?", (sid,)).fetchone()
+                        if not row:
+                            return self._json_response(404, {"ok": False, "error": "not found"})
+                        return self._json_response(200, {"ok": True, "snippet": dict(row)})
+                    if method == "PUT":
+                        body = self._read_json()
+                        fields, args = [], []
+                        for k in ("title", "description", "language", "html", "css", "js", "tags"):
+                            if k in body:
+                                fields.append(k + " = ?")
+                                args.append(body[k])
+                        if not fields:
+                            return self._json_response(400, {"ok": False, "error": "nothing to update"})
+                        fields.append("updated = datetime('now')")
+                        args.append(sid)
+                        conn.execute("UPDATE snippets SET " + ", ".join(fields) + " WHERE id = ?", args)
+                        conn.commit()
+                        row = conn.execute("SELECT * FROM snippets WHERE id = ?", (sid,)).fetchone()
+                        return self._json_response(200, {"ok": True, "snippet": dict(row)})
+                    if method == "DELETE":
+                        conn.execute("DELETE FROM snippets WHERE id = ?", (sid,))
+                        conn.commit()
+                        return self._json_response(200, {"ok": True})
+                    return self._json_response(405, {"ok": False, "error": "method not allowed"})
+
+                return self._json_response(404, {"ok": False, "error": "unknown endpoint"})
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001 — surfaced to the UI
+            return self._json_response(500, {"ok": False, "error": str(exc)[:300]})
+
+    def _read_json(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0 or length > 4 * 1024 * 1024:
+            raise ValueError("empty or oversized request body")
+        return json.loads(self.rfile.read(length))
 
     def _finish_import(self, result, started):
         """Shared tail: refresh the list + metadata, then report."""

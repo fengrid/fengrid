@@ -118,7 +118,7 @@ during import so they render correctly in `<img>` tags.
 
 ## Font showcase
 
-The header's **Icons / Fonts** switch opens `fonts.html` — the same grid
+The header's **Icons / Fonts / Code** switch opens `fonts.html` — the same grid
 experience for the typefaces on your machine. Each card renders live
 preview text in that font (customizable in the toolbar), with search,
 sort by name/weight/style, and style/format filters. Tick checkboxes (or
@@ -138,6 +138,22 @@ bash scan-fonts.sh ~/custom/fonts      # scan a one-off folder
 
 Supported: `.ttf`, `.otf`, `.woff`, `.woff2`, `.ttc`, `.eot`. Metadata
 comes from `fc-scan` (fontconfig).
+
+## Code playground
+
+The **Code** tab opens `code.html` — a JSFiddle-style pane for writing
+and testing snippets. Three tabbed editors (HTML / CSS / JS) with syntax
+highlighting sit beside a live **Result** preview: press **Run ▸** or
+Ctrl+Enter to render, and **Save** (or Ctrl+S) to store the snippet in a
+local SQLite database (`snippets.db`, created on first save). The
+sidebar lists saved snippets with search, a language filter,
+recent/title/created sorting, and a clickable tag cloud; click a snippet
+to reopen it. **Export HTML** downloads the current snippet as a
+standalone file.
+
+Each pane has its own brand-derived accent — Icons are teal, Fonts are
+violet, Code is coral — while the lit-pane amber stays the shared
+interaction accent everywhere.
 
 ## Add your own icons
 
