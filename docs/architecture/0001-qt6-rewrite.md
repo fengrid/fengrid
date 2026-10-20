@@ -310,6 +310,20 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, COLOR-LOCK FIX: root cause was NOT the generator — the
+  swatch card's selection MouseArea was declared AFTER the lock/remove
+  tool buttons, so it stacked on top and swallowed every click aimed at
+  them (locks could never be SET from the UI; bridge logic was correct
+  all along). Fixes: tools Row z:2 over the MouseArea; tools also stay
+  visible while the swatch is selected (hover-only reveal was fragile);
+  locked chips tint amber; save_palette now persists per-position locked
+  flags (bridge save() passes them) so locks survive Save + reopen.
+  Verified by qt/tests/test_qml_colors.py: window-level synthetic mouse
+  events through the REAL delivery path (itemAt stacking) — click flips
+  lock, second click un-locks, locks survive rule switch + generate.
+  GOTCHA: inline-component instances report className "SwTool_QMLTYPE_n"
+  (no "Button" substring) — find them by class prefix, and re-find after
+  any swatchesChanged (delegates are re-created, old references dangle).
 - 2026-10-20, feature batch (7 items):
   1. COLOR LOCKS: `generate()` anchors unlocked slots to the FIRST locked
      swatch's actual hue, offset by the harmony template (hues[i] -
