@@ -406,3 +406,41 @@ def test_color_exports(lib, tmp_path):
     assert png.exists() and png.stat().st_size > 5000  # 2x board render
     with pytest.raises(ValueError):
         fcx.write_exports("x", hexes, tmp_path, "exe")
+
+
+# --------------------------------------------------------------------- glprobe
+
+from fengrid import glprobe
+
+
+def test_fallback_respects_explicit_overrides(monkeypatch):
+    monkeypatch.setenv("QT_QUICK_BACKEND", "software")
+    assert glprobe.needs_software_fallback() is False
+    monkeypatch.delenv("QT_QUICK_BACKEND")
+    monkeypatch.setenv("QSG_RHI_BACKEND", "opengl")
+    assert glprobe.needs_software_fallback() is False
+    monkeypatch.delenv("QSG_RHI_BACKEND")
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    assert glprobe.needs_software_fallback() is False
+
+
+def test_fallback_false_without_display(monkeypatch):
+    # no display connections at all: Qt's own error is the honest signal,
+    # and the ctypes probes must return False without crashing (XOpenDisplay
+    # with no DISPLAY returns NULL)
+    for var in ("QT_QUICK_BACKEND", "QSG_RHI_BACKEND", "QT_QPA_PLATFORM",
+                "DISPLAY", "WAYLAND_DISPLAY", "WAYLAND_SOCKET"):
+        monkeypatch.delenv(var, raising=False)
+    assert glprobe.needs_software_fallback() is False
+    assert glprobe._glx_ok() is False
+
+
+def test_fallback_probes_egl_on_wayland(monkeypatch):
+    monkeypatch.delenv("QT_QUICK_BACKEND", raising=False)
+    monkeypatch.delenv("QSG_RHI_BACKEND", raising=False)
+    monkeypatch.delenv("QT_QPA_PLATFORM", raising=False)
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "qa-test")  # enter the EGL branch
+    # whatever _egl_ok reports, the decision must follow it without crashing
+    result = glprobe.needs_software_fallback()
+    assert result is (not glprobe._egl_ok())

@@ -25,6 +25,7 @@ from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.theme import Theme
 from fengrid.core import db as core_db
+from fengrid.glprobe import needs_software_fallback
 from fengrid.web import register_asset_scheme
 
 
@@ -65,6 +66,15 @@ def main(argv=None) -> int:
     parser.add_argument("--version", action="version",
                         version=f"fengrid {__version__}")
     args = parser.parse_args(argv)
+
+    # Degrade to the software renderer instead of letting Qt abort the
+    # process when the display has no usable hardware GL (GLX-less XWayland,
+    # NVIDIA/VM edge cases — SIGABRT "Could not initialize GLX"). The probe
+    # respects explicit QT_* overrides, so the QA offscreen path is untouched.
+    if needs_software_fallback():
+        os.environ["QT_QUICK_BACKEND"] = "software"
+        print("warning: no usable hardware GL on this display —"
+              " using the software renderer", file=sys.stderr)
 
     # scheme registration must precede QGuiApplication (flags are read at
     # Chromium start); it spawns no threads, so it is always safe. QtWebEngine
