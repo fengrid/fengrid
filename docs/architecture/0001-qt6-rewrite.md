@@ -310,6 +310,26 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, starring + context menu: `db.ensure_defaults()` runs at every
+  connect() — the `starred` tag and `Starred Assets` collection exist from
+  the first launch and are re-created on demand if a user deletes them
+  (`_starred_ids`). `db.set_starred()` toggles the tag AND the collection
+  membership in one action so the tag filter and collection navigator
+  always agree (idempotent). The grid model gains a computed `starred`
+  role (EXISTS subquery in _apply_filters — no per-delegate queries); the
+  grid renders a filled lit-pane star badge on starred cards; a
+  right-click context menu on cards offers Star/Unstar, Copy name, and
+  Add to collection (submenu over existing collections); the inspector
+  carries a star toggle button (get_details now includes `starred`, so the
+  amber active state refreshes via the existing tagsRevision reload path).
+  Icons.qml gained the Feather star (outline + filled via a new optional
+  `fill` param on url()). IconName Gotcha: the Qt theme has NO
+  `borderStrong` token (0.x only) — using it fails with "Unable to assign
+  [undefined] to QColor" caught by the QA render gate. Verified by 5 new
+  core tests (defaults exist, toggle both sides, deleted-defaults
+  recreation, idempotency, role plumbing) + a seeded-DB screenshot: star
+  badge on the starred card only, `Starred Assets — 1` in the rail,
+  `#starred — 1` in tags. QA gate: 56 tests + clean dark/light renders.
 - 2026-10-20, M5 updater: `core/updater.py` — release probe via the GitHub
   releases API over urllib (no external binary on end-user machines), with
   the 0.x `git ls-remote --tags` probe kept as the fallback; pure parsing
