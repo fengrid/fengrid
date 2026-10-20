@@ -332,6 +332,37 @@ Item {
                     ToolTip.text: qsTr("Help & guide")
                     onClicked: helpPopup.open()
                 }
+                Button {
+                    id: demoBtn
+                    text: demo !== null && demo.installed
+                          ? qsTr("Remove demo…") : qsTr("Load demo suite")
+                    Layout.preferredHeight: 26
+                    onClicked: {
+                        if (demo !== null && demo.installed)
+                            demoDialog.open()
+                        else
+                            demo.install()
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: demo !== null && demo.installed
+                        ? qsTr("Delete demo data — choose which kinds to keep")
+                        : qsTr("Load the showcase suite: 14 projects with example icons, fonts, snippets and palettes")
+                    background: Rectangle {
+                        radius: 6
+                        color: demoBtn.hovered ? theme.tokens.surface2
+                                               : "transparent"
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: demoBtn.text
+                        color: theme.tokens.text
+                        font.family: theme.uiFont
+                        font.pixelSize: 11
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 8; rightPadding: 8
+                    }
+                }
             }
         }
 
@@ -779,6 +810,159 @@ Item {
     // shared preview state
     property string previewDoc: ""
     property bool previewActive: false
+
+    Connections {
+        target: demo
+        function onMessage(msg) { toast.show(msg); refreshPickers() }
+        function onFailed(err) {
+            toast.show(qsTr("Demo data error: %1").arg(err))
+        }
+        function onChanged() {
+            refreshPickers()
+            // refresh the project list through the existing search slot
+            projects.set_search(projSearch.text)
+        }
+    }
+
+    // demo removal dialog — per-kind checkboxes (keep tags, drop the rest…)
+    Popup {
+        id: demoDialog
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(380, projectsRoot.width - 40)
+        padding: 16
+        background: Rectangle {
+            radius: 12
+            color: theme.tokens.surface
+            border.color: theme.tokens.border
+        }
+
+        property var checkedKinds: []
+
+        onOpened: checkedKinds = demo.kinds().map(function (k) { return k.id })
+
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                text: qsTr("Delete demo data")
+                font.family: theme.headingFont
+                font.pixelSize: 14
+                color: theme.tokens.accent
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                font.family: theme.uiFont
+                font.pixelSize: 11
+                color: theme.tokens.textMuted
+                text: qsTr("Only demo-created rows are touched — anything "
+                           + "you added yourself stays. Projects that lose "
+                           + "their assets still work; exports skip the "
+                           + "missing files.")
+            }
+            Repeater {
+                model: demo !== null ? demo.kinds() : []
+                CheckBox {
+                    id: kindBox
+                    required property var modelData
+                    text: modelData.label
+                    checked: demoDialog.checkedKinds.indexOf(modelData.id) >= 0
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    onToggled: {
+                        var set = demoDialog.checkedKinds.slice()
+                        var i = set.indexOf(kindBox.modelData.id)
+                        if (checked && i < 0)
+                            set.push(kindBox.modelData.id)
+                        else if (!checked && i >= 0)
+                            set.splice(i, 1)
+                        demoDialog.checkedKinds = set
+                    }
+                    contentItem: Text {
+                        text: kindBox.text
+                        font.family: theme.uiFont
+                        font.pixelSize: 12
+                        color: theme.tokens.text
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 4
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Button {
+                    text: qsTr("Select all")
+                    onClicked: {
+                        demoDialog.checkedKinds =
+                            demo.kinds().map(function (k) { return k.id })
+                    }
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: theme.tokens.text
+                        font.family: theme.uiFont; font.pixelSize: 11
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                Button {
+                    text: qsTr("Keep all")
+                    onClicked: demoDialog.checkedKinds = []
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: theme.tokens.text
+                        font.family: theme.uiFont; font.pixelSize: 11
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Button {
+                    id: demoDeleteBtn
+                    text: qsTr("Delete")
+                    enabled: demoDialog.checkedKinds.length > 0
+                    onClicked: {
+                        demo.remove(demoDialog.checkedKinds)
+                        demoDialog.close()
+                    }
+                    background: Rectangle {
+                        radius: 6
+                        color: demoDeleteBtn.enabled
+                               ? theme.tokens.accent : theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: theme.tokens.bg
+                        font.family: theme.uiFont; font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                Button {
+                    text: qsTr("Cancel")
+                    onClicked: demoDialog.close()
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: theme.tokens.text
+                        font.family: theme.uiFont; font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
+    }
 
     FileDialog {
         id: exportDialog

@@ -746,6 +746,120 @@ def test_starred_role_in_model_rows(lib, tmp_path):
     assert rows["starred"] == 1
 
 
+# ----------------------------------------------------------------------- demo
+
+from fengrid.core import demo as dm
+
+
+def test_demo_install_roundtrip(lib, tmp_path):
+    con = lib
+    demo_dir = str(tmp_path / "demo-assets")
+    fonts_dir = str(Path(__file__).resolve().parents[2] / "fonts")
+
+    summary = dm.install(con, demo_dir, fonts_dir)
+    assert summary["installed"] is True
+    assert summary["projects"] == 14
+    assert summary["palettes"] == 8
+    assert summary["snippets"] == 12
+    assert summary["icons"] == 20
+    assert summary["font"] is True
+
+    ids = dm.demo_ids(con)
+    assert len(ids["projects"]) == 14
+    assert len(ids["assets"]) == 21              # 20 icons + 1 font
+    # files exist under the demo dir only
+    assert (Path(demo_dir) / "icons" / "cart.svg").is_file()
+    assert (Path(demo_dir) / "fonts" / "Bebas Neue"
+            / "BebasNeue-Regular.ttf").is_file()
+
+    # projects carry the demo tag, assets and palette references
+    proj = prj.get_project(con, ids["projects"][2])       # E-commerce
+    assert proj is not None and "ecommerce" in proj["tags"]
+    kinds = {a["asset_kind"] for a in proj["assets"]}
+    assert "icon" in kinds and "palette" in kinds and "snippet" in kinds
+
+    # snippet-driven projects got a live snippetId (Email signature)
+    sig = [prj.get_project(con, p) for p in ids["projects"]]
+    sig = [p for p in sig if p and p["name"] == "HTML Email Signature"][0]
+    assert sig["settings"]["preview"]["mode"] == "snippet"
+    assert sig["settings"]["preview"]["snippetId"] is not None
+
+    # every demo icon is tagged demo + its context tag
+    from fengrid.core import db as cdb
+    cart_tags = cdb.tags_for(con, con.execute(
+        "SELECT id FROM asset WHERE name = 'cart'").fetchone()["id"])
+    assert "demo" in cart_tags
+
+    # idempotent
+    again = dm.install(con, demo_dir, fonts_dir)
+    assert again["installed"] is False
+
+
+def test_demo_remove_keeps_selected_kinds(lib, tmp_path):
+    con = lib
+    demo_dir = str(tmp_path / "demo-assets")
+    fonts_dir = str(Path(__file__).resolve().parents[2] / "fonts")
+    dm.install(con, demo_dir, fonts_dir)
+    ids = dm.demo_ids(con)
+
+    # user-scoped additions that must survive any demo removal
+    from fengrid.core import colors as core_colors
+    user_pal = core_colors.save_palette(con, "My own palette", ["#123456"])
+    user_snip = snp.create_snippet(con, "My own snippet", "", "web",
+                                   "<p>mine</p>", "", "", "")
+    user_tag = con.execute(
+        "INSERT INTO tag(name) VALUES ('my-own-tag')").lastrowid
+    con.commit()
+
+    # remove everything except tags + palettes
+    dm.remove(con, demo_dir,
+              ["projects", "icons", "fonts", "snippets"])
+    removed_ids = dm.demo_ids(con)
+    assert removed_ids["projects"] == []
+    assert removed_ids["snippets"] == []
+    assert removed_ids["assets"] == []
+    assert len(removed_ids["palettes"]) == 8      # kept
+    assert removed_ids["tags"] != []              # kept
+
+    assert not (Path(demo_dir) / "icons").exists()
+    assert not (Path(demo_dir) / "fonts").exists()
+    assert con.execute("SELECT COUNT(*) c FROM projects").fetchone()["c"] == 0
+    assert con.execute("SELECT COUNT(*) c FROM palette").fetchone()["c"] == 9
+    assert con.execute("SELECT COUNT(*) c FROM tag").fetchone()["c"] >= 1
+    # user data untouched
+    assert con.execute("SELECT name FROM palette WHERE id = ?",
+                       (user_pal,)).fetchone()["name"] == "My own palette"
+    assert con.execute("SELECT title FROM snippet WHERE id = ?",
+                       (user_snip,)).fetchone()["title"] == "My own snippet"
+
+    # finishing the job (palettes + tags) clears the marker
+    dm.remove(con, demo_dir, ["palettes", "tags"])
+    assert dm.is_installed(con) is False
+    assert dm.demo_ids(con)["palettes"] == []
+    # the demo-only tag is gone, user tags stay
+    names = {r["name"] for r in con.execute("SELECT name FROM tag")}
+    assert "demo" not in names
+    assert "my-own-tag" in names
+
+
+def test_demo_remove_full_sweep(lib, tmp_path):
+    con = lib
+    demo_dir = str(tmp_path / "demo-assets")
+    fonts_dir = str(Path(__file__).resolve().parents[2] / "fonts")
+    dm.install(con, demo_dir, fonts_dir)
+    dm.remove(con, demo_dir, ["projects", "icons", "fonts", "snippets",
+                              "palettes", "tags"])
+    assert dm.is_installed(con) is False
+    assert not Path(demo_dir).exists()
+    assert con.execute("SELECT COUNT(*) c FROM projects").fetchone()["c"] == 0
+    assert con.execute("SELECT COUNT(*) c FROM palette").fetchone()["c"] == 0
+    assert con.execute("SELECT COUNT(*) c FROM snippet").fetchone()["c"] == 0
+    assert con.execute("SELECT COUNT(*) c FROM asset").fetchone()["c"] == 0
+    # a fresh install works again
+    summary = dm.install(con, demo_dir, fonts_dir)
+    assert summary["installed"] is True
+
+
 # -------------------------------------------------------------------- updater
 
 from fengrid.core import updater as upd

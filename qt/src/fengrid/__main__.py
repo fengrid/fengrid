@@ -22,6 +22,7 @@ from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
 from fengrid.bridges.code import Code
 from fengrid.bridges.colors import Colors
+from fengrid.bridges.demo import Demo
 from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.projects import Projects
@@ -121,6 +122,9 @@ def main(argv=None) -> int:
     colors_bridge = Colors(con)
     code_bridge = Code(con)
     projects_bridge = Projects(con)
+    # demo suite: files under the data dir so removal never touches user folders
+    demo_bridge = Demo(con, os.path.join(_user_data_dir(), "demo-assets"),
+                       _asset_dir("fonts"))
     # the release probe must never fire in QA/offscreen runs
     _offline_qa = bool(args.screenshot) \
         or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
@@ -134,6 +138,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("colors", colors_bridge)
     ctx.setContextProperty("code", code_bridge)
     ctx.setContextProperty("projects", projects_bridge)
+    ctx.setContextProperty("demo", demo_bridge)
     ctx.setContextProperty("updater", updater_bridge)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the
