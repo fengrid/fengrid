@@ -152,9 +152,10 @@ class Colors(QObject):
         if not hexes:
             self.message.emit("Nothing to save")
             return
+        locks = [bool(s["locked"]) for s in self._swatches]
         name = self._name or "Untitled palette"
         self._palette_id = core_colors.save_palette(
-            self._con, name, hexes, tags, self._palette_id)
+            self._con, name, hexes, tags, self._palette_id, locked=locks)
         self._refresh_palettes()
         self.message.emit(f"Saved: {name}")
 

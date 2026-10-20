@@ -695,6 +695,22 @@ def test_generate_without_locks_is_unchanged():
     assert [s["hex"] for s in a] == [s["hex"] for s in c]
 
 
+def test_palette_save_reopen_keeps_locks(lib):
+    """Lock flags survive Save + reopen (palette_color.locked round-trip)."""
+    hexes = ["#101418", "#37B8C4", "#F0785C", "#93A3B0", "#E7EDF2"]
+    pid = colors_mod.save_palette(
+        lib, "Locked kit", hexes, locked=[True, False, True, False, False])
+    cols = colors_mod.palette_colors(lib, pid)
+    assert [c["locked"] for c in cols] == [True, False, True, False, False]
+    # and the reopened locks anchor a fresh generate
+    out = colors_mod.generate("analogous", cols, base_hue=100)
+    assert out[0]["hex"] == hexes[0] and out[2]["hex"] == hexes[2]
+    # default (no locked arg) stays all-unlocked — demo suite behaviour
+    pid2 = colors_mod.save_palette(lib, "Plain", hexes)
+    assert all(not c["locked"]
+               for c in colors_mod.palette_colors(lib, pid2))
+
+
 # ----------------------------------------------------------------- terminal
 
 from fengrid.core import termcolors as tc

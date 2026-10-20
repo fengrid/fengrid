@@ -264,8 +264,13 @@ def palette_colors(con: sqlite3.Connection, palette_id: int) -> list[dict]:
 
 
 def save_palette(con: sqlite3.Connection, name: str, hexes: list[str],
-                 tags: str = "", palette_id: int | None = None) -> int:
-    """Insert (or update, when palette_id is given) and return the id."""
+                 tags: str = "", palette_id: int | None = None,
+                 locked: list[bool] | None = None) -> int:
+    """Insert (or update, when palette_id is given) and return the id.
+
+    `locked` carries the per-position lock flags (the working pane's lock
+    state survives Save + reopen); None means all unlocked.
+    """
     name = (name or "").strip() or "Untitled palette"
     now = time.time()
     if palette_id is None:
@@ -281,10 +286,13 @@ def save_palette(con: sqlite3.Connection, name: str, hexes: list[str],
                     " WHERE id = ?", (name, tags, now, palette_id))
         pid = palette_id
         con.execute("DELETE FROM palette_color WHERE palette_id = ?", (pid,))
+    lock_map = locked or []
     for i, hx in enumerate(hexes):
         con.execute(
             "INSERT INTO palette_color(palette_id, position, hex, locked)"
-            " VALUES (?, ?, ?, 0)", (pid, i, hx))
+            " VALUES (?, ?, ?, ?)", (pid, i, hx,
+                                     1 if i < len(lock_map) and lock_map[i]
+                                     else 0))
     con.commit()
     return pid
 

@@ -540,16 +540,29 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     spacing: 4
-                    opacity: swMa.containsMouse ? 1 : 0
+                    // z ABOVE the card's selection MouseArea (declared after
+                    // it in sibling order, swMa would otherwise eat every
+                    // click aimed at the lock/remove buttons). Also shown
+                    // while the swatch is selected so its tools never
+                    // vanish under a stale hover state.
+                    z: 2
+                    visible: swMa.containsMouse
+                             || (colors !== null && colors.selectedIdx
+                                 === swCard.index)
+                    opacity: swMa.containsMouse
+                             || (colors !== null && colors.selectedIdx
+                                 === swCard.index) ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 100 } }
 
                     component SwTool: AbstractButton {
                         id: st
                         property string icon_name
+                        property color tint: "#FFFFFF"
                         width: 24; height: 24
                         contentItem: IconImage {
                             name: st.icon_name
                             px: 11
-                            tint: "#FFFFFF"
+                            tint: st.tint
                             anchors.centerIn: parent
                         }
                         background: Rectangle {
@@ -559,6 +572,10 @@ Item {
                     }
                     SwTool {
                         icon_name: swCard.modelData.locked ? "lock" : "unlock"
+                        // locked state is tinted amber so it reads even at
+                        // a glance; the icon swap alone is too subtle
+                        tint: swCard.modelData.locked
+                              ? theme.tokens.litPane : "#FFFFFF"
                         onClicked: colors !== null && colors.toggle_lock(
                             swCard.index)
                     }
