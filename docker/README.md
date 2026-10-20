@@ -65,6 +65,22 @@ PUSH=1 PUSH_REF=ghcr.io/fengrid/fengrid-builder:linux-x64 \
   bash build/scripts/build-docker-linux.sh linux-x64
 ```
 
+### GL / rendering notes
+
+The artifact never ships the host X/GL stack (the container's `libX11`/
+`libxcb`/`libGL*` copies would shadow the end machine's and break glvnd
+vendor dispatch → `qglx_findConfig` FBConfig failures, `SIGABRT`). Qt
+resolves X/GL from the end machine at runtime, where a working vendor
+stack is guaranteed on any box that can show a window.
+
+If the display has no usable hardware GL (GLX-less XWayland, some
+NVIDIA/VM setups), the app detects it at startup via a ctypes GLX/EGL
+probe and falls back to the software renderer instead of aborting — you
+will see `warning: no usable hardware GL on this display — using the
+software renderer` on stderr. Force it manually with
+`QT_QUICK_BACKEND=software ./fengrid`; explicit `QT_*` env vars always
+override the probe.
+
 Knobs: `FENGRID_VARIANT` (prod|dev), `IMAGE` (default
 `fengrid-builder:<target>`), `PUSH`/`PUSH_REF`, `OUTPUT=bind|local`,
 `BUILD_DIR` (default `<repo>/build/<target>`), `FENGRID_SMOKE` (default 1 —
