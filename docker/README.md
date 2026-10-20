@@ -51,6 +51,7 @@ paths cannot drift:
 
 ```sh
 # linux-x64 prod, artifacts -> build/linux-x64/ (bind-mount extraction)
+bash build/scripts/build-linux-x64.sh          # thin wrapper, same as below
 bash build/scripts/build-docker-linux.sh linux-x64
 
 # linux-arm64 dev variant, artifacts -> build/linux-arm64/
