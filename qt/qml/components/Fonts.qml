@@ -184,6 +184,25 @@ Item {
                 }
             }
             Item { Layout.fillWidth: true }
+            Button {
+                text: qsTr("Details…")
+                enabled: fonts !== null && fonts.selectedFamily !== ""
+                onClicked: detail.open()
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Open the font details screen — sizing, sample text, variants, light/dark preview")
+                background: Rectangle {
+                    radius: 6; color: theme.tokens.surface2
+                    border.color: theme.tokens.border
+                }
+                contentItem: Text {
+                    text: parent.text
+                    color: theme.tokens.text
+                    font.family: theme.uiFont; font.pixelSize: 11
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 8; rightPadding: 8
+                }
+            }
             Text {
                 text: qsTr("Select a family card to inspect it")
                 visible: fonts !== null && fonts.selectedFamily === ""
@@ -222,8 +241,8 @@ Item {
                 color: famMa.containsMouse ? theme.tokens.surface2
                                            : theme.tokens.surface
                 border.color: fonts !== null && fonts.selectedFamily === model.family
-                              ? theme.tokens.litPane
-                              : (famMa.containsMouse ? theme.tokens.accent
+                              ? theme.tokens.accentFont
+                              : (famMa.containsMouse ? theme.tokens.accentFont
                                                      : theme.tokens.border)
                 border.width: fonts !== null && fonts.selectedFamily === model.family
                               ? 2 : 1
@@ -268,13 +287,68 @@ Item {
                     id: famMa
                     anchors.fill: parent
                     hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (fonts !== null)
-                            fonts.select(model.family)
+                    onClicked: function (mouse) {
+                        if (fonts === null)
+                            return
+                        fonts.select(model.family)
+                        if (mouse.button === Qt.RightButton)
+                            famMenu.popup()
+                    }
+                    onDoubleClicked: {
+                        detail.family = model.family
+                        detail.open()
                     }
                 }
             }
+        }
+
+        // family context menu: details, exports, collection
+        Menu {
+            id: famMenu
+            width: 190
+            padding: 4
+            background: Rectangle {
+                radius: 8; color: theme.tokens.surface
+                border.color: theme.tokens.border
+            }
+            MenuItem {
+                text: qsTr("Font details…")
+                height: 28
+                onTriggered: {
+                    detail.family = fonts !== null ? fonts.selectedFamily : ""
+                    detail.open()
+                }
+            }
+            MenuSeparator {
+                topPadding: 3; bottomPadding: 3
+                contentItem: Rectangle {
+                    implicitHeight: 1; color: theme.tokens.border
+                }
+            }
+            MenuItem {
+                text: qsTr("Export CSS…")
+                height: 28
+                onTriggered: {
+                    exportZip = false
+                    exportDialog.open()
+                }
+            }
+            MenuItem {
+                text: qsTr("Export ZIP…")
+                height: 28
+                onTriggered: {
+                    exportZip = true
+                    exportDialog.open()
+                }
+            }
+        }
+
+        // font details screen (size / sample / variants / light-dark)
+        FontDetail {
+            id: detail
+            family: fonts !== null ? fonts.selectedFamily : ""
         }
 
         // empty / scanning states — mirrors AssetGrid's empty column

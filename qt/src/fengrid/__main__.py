@@ -26,6 +26,7 @@ from fengrid.bridges.demo import Demo
 from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.projects import Projects
+from fengrid.bridges.termcolors import TermColors
 from fengrid.bridges.theme import Theme
 from fengrid.bridges.updater import Updater
 from fengrid.core import db as core_db
@@ -70,6 +71,9 @@ def main(argv=None) -> int:
                         help="skip the first-run auto scan")
     parser.add_argument("--pane", type=int, default=0,
                         help="initial pane: 0 icons, 1 fonts, 2 colors, 3 code"
+                             " (QA screenshots)")
+    parser.add_argument("--term", action="store_true",
+                        help="open the Colors pane on the Terminal designer"
                              " (QA screenshots)")
     parser.add_argument("--version", action="version",
                         version=f"fengrid {__version__}")
@@ -120,6 +124,7 @@ def main(argv=None) -> int:
     library = Library(con, db_path, no_scan=args.no_scan)
     fonts = Fonts(con, db_path)
     colors_bridge = Colors(con)
+    term_bridge = TermColors(con)
     code_bridge = Code(con)
     projects_bridge = Projects(con)
     # demo suite: files under the data dir so removal never touches user folders
@@ -136,6 +141,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("library", library)
     ctx.setContextProperty("fonts", fonts)
     ctx.setContextProperty("colors", colors_bridge)
+    ctx.setContextProperty("terms", term_bridge)
     ctx.setContextProperty("code", code_bridge)
     ctx.setContextProperty("projects", projects_bridge)
     ctx.setContextProperty("demo", demo_bridge)
@@ -146,6 +152,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("previewProfile", preview_profile)
     ctx.setContextProperty("appVersion", __version__)
     ctx.setContextProperty("initialPane", args.pane)
+    ctx.setContextProperty("initialTerm", args.term)
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
     if not engine.rootObjects():
         print("error: failed to load the QML shell", file=sys.stderr)

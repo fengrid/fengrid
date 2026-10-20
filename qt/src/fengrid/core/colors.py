@@ -191,8 +191,14 @@ def generate(rule: str, colors: list[dict], base_hue: float | None = None,
     """Reroll unlocked swatches under a harmony rule.
 
     colors: [{hex, locked}] (2..5 entries supported by the UI). Returns a new
-    list; locked swatches pass through untouched. Deterministic for a given
-    base_hue (tests); the UI passes None -> time-seeded like the web pane.
+    list; locked swatches pass through untouched and ANCHOR the generation:
+    unlocked slots take their hue relative to the first locked swatch's
+    actual hue, offset by the harmony template — so locks survive scheme
+    switches and the fresh colors coordinate with them (e.g. two locks in
+    Complementary → Analogous Generate keeps both and hangs the rest off
+    them). Without locks this reduces to the historical base_hue behavior.
+    Deterministic for a given base_hue (tests); the UI passes None ->
+    time-seeded like the web pane.
     """
     if rule not in HARMONIES:
         raise ValueError(f"unknown harmony rule: {rule}")
@@ -200,6 +206,16 @@ def generate(rule: str, colors: list[dict], base_hue: float | None = None,
         base_hue = _pick(time.time() % 100000) * 360
     l_base = _L_BASE.get(mode, _L_BASE["dark"])
     hues = _HARMONY_HUES[rule]
+
+    anchor_slot = next((i for i in range(5)
+                        if i < len(colors) and colors[i].get("locked")), None)
+    if anchor_slot is None:
+        anchor_hue, template0 = base_hue, 0
+    else:
+        r, g, b = hex2rgb(colors[anchor_slot]["hex"])
+        anchor_hue = rgb2hsl(r, g, b)[0]      # rgb2hsl returns (h, s, l)
+        template0 = hues[anchor_slot]
+
     out: list[dict] = []
     for i in range(5):
         prev = colors[i] if i < len(colors) else None
@@ -207,7 +223,7 @@ def generate(rule: str, colors: list[dict], base_hue: float | None = None,
             out.append(prev)
             continue
         jitter = _pick(i * 7 + 3) * 14 - 7 if rule == "pleasing" else 0
-        h = (base_hue + hues[i] + jitter + 360) % 360
+        h = (anchor_hue + (hues[i] - template0) + jitter + 360) % 360
         l = l_base[i] + math.floor(_pick(i * 13 + 7) * 10) - 5
         s = _S_BASE[i] + math.floor(_pick(i * 17 + 11) * 16) - 8
         rgb = hsl2rgb(h, max(8, min(96, s)), max(8, min(94, l)))

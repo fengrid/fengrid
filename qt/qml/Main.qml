@@ -70,6 +70,38 @@ ApplicationWindow {
                 Layout.alignment: Qt.AlignVCenter
             }
 
+            // search mode: smart (FTS) | fuzzy | regex | content
+            ComboBox {
+                id: searchModeBox
+                Layout.preferredHeight: 32
+                Layout.preferredWidth: 104
+                model: [qsTr("Smart"), qsTr("Fuzzy"), qsTr("Regex"),
+                        qsTr("Content")]
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr(
+                    "Smart: fast indexed prefix search · Fuzzy: close matches"
+                    + " rank first · Regex: regular expressions over names"
+                    + " and paths · Content: search inside snippets and text"
+                    + " files (bounded I/O)")
+                onActivated: function (idx) {
+                    library !== null && library.set_search_mode(
+                        ["smart", "fuzzy", "regex", "content"][idx])
+                }
+                background: Rectangle {
+                    radius: 6
+                    color: theme.tokens.surface2
+                    border.color: theme.tokens.border
+                }
+                contentItem: Text {
+                    text: searchModeBox.displayText
+                    font.family: theme.monoFont
+                    font.pixelSize: 11
+                    color: theme.tokens.textMuted
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 8
+                }
+            }
+
             Rectangle {
                 id: searchBox
                 Layout.preferredWidth: 320

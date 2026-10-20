@@ -161,6 +161,35 @@ def _migrate(con: sqlite3.Connection) -> None:
             if "duplicate column" not in str(e).lower():
                 raise
     con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
+    _migrate_collections(con)
+
+
+def _migrate_collections(con: sqlite3.Connection) -> None:
+    """Collections v2: sub-collections (parent_id), collection-level tags,
+    and generalized membership (collection_ref covers every asset kind —
+    icon, font, snippet, palette). Legacy collection_item rows are copied
+    in as 'icon' refs once; the old table stays for downgrade safety."""
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(collection)")}
+    if "parent_id" not in cols:
+        con.execute("ALTER TABLE collection ADD COLUMN parent_id INTEGER"
+                    " REFERENCES collection(id) ON DELETE CASCADE")
+    if "tags" not in cols:
+        con.execute("ALTER TABLE collection ADD COLUMN tags TEXT")
+    con.execute("""CREATE TABLE IF NOT EXISTS collection_ref (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id INTEGER NOT NULL REFERENCES collection(id) ON DELETE CASCADE,
+        item_kind     TEXT NOT NULL,   -- 'icon' | 'font' | 'snippet' | 'palette'
+        item_id       INTEGER NOT NULL,
+        label         TEXT NOT NULL DEFAULT '',
+        UNIQUE(collection_id, item_kind, item_id)
+    )""")
+    n = con.execute("SELECT COUNT(*) AS c FROM collection_ref").fetchone()["c"]
+    if n == 0:
+        con.execute(
+            "INSERT OR IGNORE INTO collection_ref"
+            " (collection_id, item_kind, item_id, label)"
+            " SELECT collection_id, 'icon', asset_id, '' FROM collection_item")
+    con.commit()
 
 
 STARRED_TAG = "starred"
@@ -199,16 +228,104 @@ def set_starred(con: sqlite3.Connection, asset_id: int, starred: bool) -> None:
         con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
                     " VALUES (?, ?)", (asset_id, tid))
         con.execute(
-            "INSERT OR IGNORE INTO collection_item(collection_id, asset_id,"
-            " position) VALUES (?, ?, COALESCE((SELECT MAX(position) + 1"
-            " FROM collection_item WHERE collection_id = ?), 0))",
-            (cid, asset_id, cid))
+            "INSERT OR IGNORE INTO collection_ref(collection_id, item_kind,"
+            " item_id) VALUES (?, 'icon', ?)", (cid, asset_id))
     else:
         con.execute("DELETE FROM asset_tag WHERE asset_id = ? AND tag_id = ?",
                     (asset_id, tid))
-        con.execute("DELETE FROM collection_item WHERE collection_id = ?"
-                    " AND asset_id = ?", (cid, asset_id))
+        con.execute("DELETE FROM collection_ref WHERE collection_id = ?"
+                    " AND item_kind = 'icon' AND item_id = ?", (cid, asset_id))
     con.commit()
+
+
+COLLECTION_KINDS = ("icon", "font", "snippet", "palette")
+
+
+def collection_tree(con: sqlite3.Connection) -> list[dict]:
+    """Every collection with parent, tags, and per-kind member counts —
+    parents before children, ready for a one-level tree render."""
+    rows = [dict(r) for r in con.execute(
+        "SELECT id, name, parent_id, tags FROM collection"
+        " ORDER BY name COLLATE NOCASE")]
+    counts: dict[int, dict] = {}
+    for r in con.execute(
+            "SELECT collection_id, item_kind, COUNT(*) AS n"
+            " FROM collection_ref GROUP BY collection_id, item_kind"):
+        counts.setdefault(r["collection_id"], {})[r["item_kind"]] = r["n"]
+    for c in rows:
+        c["tags"] = c["tags"] or ""
+        c["counts"] = counts.get(c["id"], {})
+        c["total"] = sum(c["counts"].values())
+    rows.sort(key=lambda c: (c["parent_id"] or 0, c["name"].lower()))
+    return rows
+
+
+def create_sub_collection(con: sqlite3.Connection, name: str,
+                          parent_id: int = 0, tags: str = "") -> int:
+    name = (name or "").strip() or "Untitled collection"
+    cur = con.execute(
+        "INSERT INTO collection(name, parent_id, tags) VALUES (?, ?, ?)",
+        (name, int(parent_id) if parent_id else None, tags))
+    con.commit()
+    return int(cur.lastrowid or 0)
+
+
+def set_collection_tags(con: sqlite3.Connection, coll_id: int,
+                        tags: str) -> None:
+    con.execute("UPDATE collection SET tags = ? WHERE id = ?",
+                (tags.strip(), coll_id))
+    con.commit()
+
+
+def delete_collection(con: sqlite3.Connection, coll_id: int) -> None:
+    # children move up rather than vanishing with their parent
+    con.execute("UPDATE collection SET parent_id = NULL WHERE parent_id = ?",
+                (coll_id,))
+    con.execute("DELETE FROM collection_ref WHERE collection_id = ?",
+                (coll_id,))
+    con.execute("DELETE FROM collection WHERE id = ?", (coll_id,))
+    con.commit()
+
+
+def add_collection_ref(con: sqlite3.Connection, coll_id: int, kind: str,
+                       item_id: int, label: str = "") -> bool:
+    """Attach any asset-kind row to a collection. Returns False for an
+    unknown kind or a row that does not exist."""
+    if kind not in COLLECTION_KINDS:
+        return False
+    if kind in ("icon", "font"):
+        ok = con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
+                         (item_id, kind)).fetchone()
+    elif kind == "snippet":
+        ok = con.execute("SELECT 1 FROM snippet WHERE id = ?",
+                         (item_id,)).fetchone()
+    else:
+        ok = con.execute("SELECT 1 FROM palette WHERE id = ?",
+                         (item_id,)).fetchone()
+    if not ok:
+        return False
+    con.execute(
+        "INSERT OR IGNORE INTO collection_ref(collection_id, item_kind,"
+        " item_id, label) VALUES (?, ?, ?, ?)", (coll_id, kind, item_id, label))
+    con.commit()
+    return True
+
+
+def remove_collection_ref(con: sqlite3.Connection, ref_id: int) -> None:
+    con.execute("DELETE FROM collection_ref WHERE id = ?", (ref_id,))
+    con.commit()
+
+
+def refs_for(con: sqlite3.Connection, coll_id: int,
+             kind: str | None = None) -> list[dict]:
+    sql = ("SELECT id, item_kind, item_id, label FROM collection_ref"
+           " WHERE collection_id = ?")
+    params: list = [coll_id]
+    if kind:
+        sql += " AND item_kind = ?"
+        params.append(kind)
+    sql += " ORDER BY item_kind, id"
+    return [dict(r) for r in con.execute(sql, params)]
 
 
 def is_starred(con: sqlite3.Connection, asset_id: int) -> bool:

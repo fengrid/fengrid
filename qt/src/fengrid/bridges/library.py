@@ -25,7 +25,8 @@ from PySide6.QtSvg import QSvgRenderer
 from .. import __version__
 from ..core import db as core_db
 from ..core import export as core_export
-from ..core import indexer, migrate, scanner, settings
+from ..core import indexer, migrate, scanner, search as core_search
+from ..core import settings
 from ..core.export import ExportError
 
 # QML-facing role names must not collide with context-property names: a role
@@ -112,6 +113,7 @@ class Library(QObject):
         self._model = AssetModel(self)
 
         self._search = ""
+        self._search_mode = "smart"
         self._theme = ""
         self._context = ""
         self._ext = ""
@@ -216,6 +218,32 @@ class Library(QObject):
         return self._lists["collections"]
 
     # ------------------------------------------------------------------- slots
+    @Property(str, notify=filtersChanged)
+    def searchMode(self):
+        return self._search_mode
+
+    @Slot(str)
+    def set_search_mode(self, mode: str) -> None:
+        """smart (FTS) | fuzzy | regex | content — content also surfaces
+        snippet matches through a message; the grid shows asset hits."""
+        if mode not in core_search.MODES or mode == self._search_mode:
+            return
+        self._search_mode = mode
+        self.filtersChanged.emit()
+        self._apply_filters()
+
+    @Slot(str, result="QVariant")
+    def content_snippets(self, term: str) -> list:
+        """Snippet content-search hits for the toast/quick list (the grid
+        itself shows asset hits in content mode)."""
+        return [{"id": r["id"], "title": r["title"]}
+                for r in self._con.execute(
+                    "SELECT id, title FROM snippet WHERE lower(title) LIKE ?"
+                    " OR lower(description) LIKE ? OR lower(tags) LIKE ?"
+                    " OR lower(html) LIKE ? OR lower(css) LIKE ?"
+                    " OR lower(js) LIKE ? LIMIT 20",
+                    ["%" + term.lower() + "%"] * 6).fetchall()]
+
     @Slot(str)
     def set_search(self, term: str) -> None:
         self._search = term or ""
@@ -334,6 +362,53 @@ class Library(QObject):
         self._refresh_lists()
         self.tagsRevision.emit()
 
+    # ------------------------------------------------ collections v2 (tree,
+    # tags, all asset kinds)
+    @Slot(str, int, str, result=int)
+    def create_sub_collection(self, name: str, parent_id: int = 0,
+                              tags: str = "") -> int:
+        cid = core_db.create_sub_collection(self._con, name, parent_id, tags)
+        self._refresh_lists()
+        self.message.emit(f"Collection '{(name or '').strip()}' created")
+        return cid
+
+    @Slot(int, str)
+    def set_collection_tags(self, coll_id: int, tags: str) -> None:
+        core_db.set_collection_tags(self._con, coll_id, tags)
+        self._refresh_lists()
+
+    @Slot(int)
+    def delete_collection(self, coll_id: int) -> None:
+        core_db.delete_collection(self._con, coll_id)
+        if str(coll_id) == self._collection:
+            self._collection = ""
+            self.filtersChanged.emit()
+        self._refresh_lists()
+        self._apply_filters()
+        self.message.emit("Collection deleted")
+
+    @Slot(int, str, int, str, result=bool)
+    def add_ref(self, coll_id: int, kind: str, item_id: int,
+                label: str = "") -> bool:
+        ok = core_db.add_collection_ref(self._con, coll_id, kind, item_id,
+                                        label)
+        self._refresh_lists()
+        if ok:
+            self.message.emit(f"Added to collection ({kind})")
+        else:
+            self.message.emit("Could not add — item not found")
+        return ok
+
+    @Slot(int)
+    def remove_ref(self, ref_id: int) -> None:
+        core_db.remove_collection_ref(self._con, ref_id)
+        self._refresh_lists()
+        self._apply_filters()
+
+    @Slot(int, result="QVariant")
+    def collection_members(self, coll_id: int) -> list:
+        return core_db.refs_for(self._con, coll_id)
+
     @Slot(str, result=int)
     def create_collection(self, name: str) -> int:
         name = (name or "").strip()
@@ -356,27 +431,13 @@ class Library(QObject):
         row = self._model.row(index)
         if not row:
             return
-        self._con.execute(
-            "INSERT OR IGNORE INTO collection_item(collection_id, asset_id,"
-            " position) VALUES (?, ?,"
-            " (SELECT COALESCE(MAX(position), -1) + 1 FROM collection_item"
-            "  WHERE collection_id = ?))",
-            (coll_id, row["id"], coll_id))
-        self._con.commit()
+        ok = core_db.add_collection_ref(self._con, coll_id, "icon",
+                                        row["id"], row["name"])
         self._refresh_lists()
-        name = self._con.execute(
-            "SELECT name FROM collection WHERE id = ?", (coll_id,)).fetchone()
-        self.message.emit(f"Added '{row['name']}' to '{name[0] if name else '?'}'")
-
-    @Slot(int)
-    def delete_collection(self, coll_id: int) -> None:
-        self._con.execute("DELETE FROM collection WHERE id = ?", (coll_id,))
-        self._con.commit()
-        if self._collection == str(coll_id):
-            self._collection = ""
-            self.filtersChanged.emit()
-            self._apply_filters()
-        self._refresh_lists()
+        if ok:
+            self.message.emit(f"Added '{row['name']}' to collection")
+        else:
+            self.message.emit("Could not add to collection")
 
     @Slot(str)
     def add_folder(self, path: str) -> None:
@@ -488,16 +549,40 @@ class Library(QObject):
             "SELECT t.name, COUNT(at.asset_id) AS n FROM tag t"
             " LEFT JOIN asset_tag at ON at.tag_id = t.id"
             " GROUP BY t.id ORDER BY t.name")]
-        colls = [{"id": r[0], "name": r[1], "n": r[2]} for r in con.execute(
-            "SELECT c.id, c.name, COUNT(ci.asset_id) AS n FROM collection c"
-            " LEFT JOIN collection_item ci ON ci.collection_id = c.id"
-            " GROUP BY c.id ORDER BY c.name")]
+        # collections v2: tree order + per-kind counts from collection_ref
+        counts: dict[int, dict] = {}
+        for r in con.execute(
+                "SELECT collection_id, item_kind, COUNT(*) AS n"
+                " FROM collection_ref GROUP BY collection_id, item_kind"):
+            counts.setdefault(r["collection_id"], {})[r["item_kind"]] = r["n"]
+        colls = []
+        for r in con.execute(
+                "SELECT id, name, parent_id, tags FROM collection"
+                " ORDER BY name COLLATE NOCASE"):
+            c = {"id": r["id"], "name": r["name"],
+                 "parentId": r["parent_id"] or 0, "tags": r["tags"] or ""}
+            c["counts"] = counts.get(r["id"], {})
+            c["n"] = sum(c["counts"].values())
+            colls.append(c)
+        colls.sort(key=lambda c: (c["parentId"], c["name"].lower()))
         self._lists = {"themes": themes, "contexts": contexts, "exts": exts,
                        "tags": tags, "collections": colls}
         self.listsChanged.emit()
 
     def _apply_filters(self) -> None:
         con = self._con
+        term = (self._search or "").strip()
+        # alternate search modes bypass the FTS query path
+        if term and self._search_mode in ("fuzzy", "regex", "content"):
+            try:
+                rows = core_search.search_assets(con, term, self._search_mode)
+            except core_search.SearchError as exc:
+                self.message.emit(str(exc))
+                rows = []
+            self._model.set_rows(rows)
+            self.listsChanged.emit()
+            return
+
         # `starred` rides along as a computed role so card badges and the
         # context menu need no extra query per delegate
         sql = ["SELECT a.*, EXISTS("
@@ -531,8 +616,9 @@ class Library(QObject):
             where.append("t.name = ?")
             params.append(self._tag)
         if self._collection:
-            sql.append("JOIN collection_item ci ON ci.asset_id = a.id")
-            where.append("ci.collection_id = ?")
+            sql.append("JOIN collection_ref cr ON cr.item_kind = 'icon'"
+                       " AND cr.item_id = a.id")
+            where.append("cr.collection_id = ?")
             params.append(int(self._collection))
 
         query = " ".join(sql)

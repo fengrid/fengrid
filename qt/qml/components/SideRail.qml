@@ -18,14 +18,17 @@ Rectangle {
     component RailItem: Rectangle {
         id: itemRoot
         property string label
+        property string sub: ""           // secondary line (collection tags)
         property string count: ""
         property bool active: false
+        property color accent: theme.tokens.accent   // per-category accent
+        property bool indent: false       // sub-collection nesting
         signal picked()
 
         Layout.fillWidth: true
-        Layout.leftMargin: 8
+        Layout.leftMargin: indent ? 24 : 8
         Layout.rightMargin: 8
-        height: 26
+        height: sub === "" ? 26 : 36
         radius: 6
         color: active ? theme.tokens.surface2
                       : (itemMa.containsMouse ? theme.tokens.surface2 : "transparent")
@@ -35,8 +38,9 @@ Rectangle {
             height: parent.height - 8
             radius: 1.5
             anchors.left: parent.left
+            anchors.leftMargin: itemRoot.indent ? 8 : 0
             anchors.verticalCenter: parent.verticalCenter
-            color: theme.tokens.accent
+            color: itemRoot.accent
             visible: itemRoot.active
         }
         Text {
@@ -94,29 +98,36 @@ Rectangle {
             width: rail.width
             spacing: 2
 
+            // pane items carry their category accent (Icons teal, Fonts
+            // violet, Colors rose, Code coral, Projects green)
             SectionLabel { text: qsTr("Panes") }
             RailItem {
                 label: qsTr("Icons")
+                accent: theme.tokens.accentIcon
                 active: rail.pane === 0
                 onPicked: rail.panePicked(0)
             }
             RailItem {
                 label: qsTr("Fonts")
+                accent: theme.tokens.accentFont
                 active: rail.pane === 1
                 onPicked: rail.panePicked(1)
             }
             RailItem {
                 label: qsTr("Colors")
+                accent: theme.tokens.accentColor
                 active: rail.pane === 2
                 onPicked: rail.panePicked(2)
             }
             RailItem {
                 label: qsTr("Code")
+                accent: theme.tokens.accentCode
                 active: rail.pane === 3
                 onPicked: rail.panePicked(3)
             }
             RailItem {
                 label: qsTr("Projects")
+                accent: theme.tokens.accentProject
                 active: rail.pane === 4
                 onPicked: rail.panePicked(4)
             }
@@ -177,15 +188,121 @@ Rectangle {
             Repeater {
                 model: library.collections
                 RailItem {
+                    id: collRow
                     required property var modelData
-                    label: modelData.name
-                    count: String(modelData.n)
+                    label: collRow.modelData.name
+                    sub: collRow.modelData.tags
+                    count: String(collRow.modelData.n)
+                    indent: collRow.modelData.parentId > 0
                     active: library !== null
-                            && library.collectionFilter === String(modelData.id)
+                            && library.collectionFilter === String(collRow.modelData.id)
                     onPicked: library.set_collection(
-                        library.collectionFilter === String(modelData.id)
-                            ? "" : String(modelData.id))
+                        library.collectionFilter === String(collRow.modelData.id)
+                            ? "" : String(collRow.modelData.id))
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function (mouse) {
+                            collMenu.target = collRow.modelData
+                            collMenu.popup()
+                        }
+                    }
                 }
+            }
+            // contextual menu for a collection row
+            Menu {
+                id: collMenu
+                property var target: null
+                width: 190
+                padding: 4
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                MenuItem {
+                    text: qsTr("New sub-collection…")
+                    height: 28
+                    enabled: collMenu.target !== null
+                    onTriggered: {
+                        subDialog.parentId = collMenu.target.id
+                        subDialog.open()
+                    }
+                }
+                MenuItem {
+                    text: qsTr("Edit tags…")
+                    height: 28
+                    enabled: collMenu.target !== null
+                    onTriggered: {
+                        subDialog.parentId = collMenu.target.id
+                        subDialog.tagMode = true
+                        subDialog.open()
+                    }
+                }
+                MenuItem {
+                    text: qsTr("Delete collection")
+                    height: 28
+                    enabled: collMenu.target !== null
+                    onTriggered: library.delete_collection(collMenu.target.id)
+                }
+            }
+            // shared name/tags input for new sub-collections + tag edits
+            Popup {
+                id: subDialog
+                property int parentId: 0
+                property bool tagMode: false
+                width: rail.width - 24
+                padding: 10
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                contentItem: ColumnLayout {
+                    spacing: 6
+                    Text {
+                        text: subDialog.tagMode ? qsTr("Collection tags (comma-separated)")
+                                                : qsTr("New sub-collection")
+                        font.family: theme.monoFont; font.pixelSize: 10
+                        color: theme.tokens.textMuted
+                    }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 26
+                        radius: 6
+                        color: theme.tokens.surface2
+                        border.color: subInput.activeFocus ? theme.tokens.accent
+                                                           : theme.tokens.border
+                        TextInput {
+                            id: subInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            verticalAlignment: TextInput.AlignVCenter
+                            font.family: theme.monoFont
+                            font.pixelSize: 11
+                            color: theme.tokens.text
+                            clip: true
+                            onAccepted: subDialog.commit()
+                        }
+                    }
+                }
+                function commit() {
+                    if (subInput.text.trim() === "")
+                        return
+                    if (tagMode)
+                        library.set_collection_tags(parentId, subInput.text)
+                    else
+                        library.create_sub_collection(subInput.text.trim(),
+                                                      parentId)
+                    subInput.text = ""
+                    close()
+                }
+                onOpened: {
+                    subInput.text = tagMode && collMenu.target
+                        ? (collMenu.target.tags || "") : ""
+                    subInput.forceActiveFocus()
+                }
+                onClosed: tagMode = false
             }
             Rectangle {
                 Layout.fillWidth: true

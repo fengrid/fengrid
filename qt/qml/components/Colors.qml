@@ -10,6 +10,11 @@ import "."
 Item {
     id: colorsRoot
 
+    // false = harmony generator (the 0.x port), true = terminal designer;
+    // --term (QA) opens straight into the designer
+    property bool termMode: typeof initialTerm !== "undefined"
+                            ? initialTerm : false
+
     // `colors !== null` guards: context properties are nulled during app
     // teardown while lingering bindings re-evaluate (same as SideRail)
     Rectangle {
@@ -19,12 +24,43 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
+        z: 1
 
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 12
             anchors.rightMargin: 10
             spacing: 10
+
+            // sub-tab toggle: harmony generator vs terminal theme designer
+            RowLayout {
+                spacing: 2
+                Repeater {
+                    model: [qsTr("Harmonies"), qsTr("Terminal")]
+                    delegate: Button {
+                        id: modeBtn
+                        required property int index
+                        required property string modelData
+                        Layout.preferredHeight: 26
+                        onClicked: colorsRoot.termMode = index === 1
+                        background: Rectangle {
+                            radius: 5
+                            color: (colorsRoot.termMode === modeBtn.index)
+                                   ? theme.tokens.accentColor : "transparent"
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: modeBtn.modelData
+                            color: (colorsRoot.termMode === modeBtn.index)
+                                   ? "#101418" : theme.tokens.textMuted
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                    }
+                }
+            }
+            Rectangle { width: 1; height: 18; color: theme.tokens.border }
 
             ComboBox {
                 id: ruleBox
@@ -160,7 +196,7 @@ Item {
                     color: genB.pressed ? theme.tokens.surface2
                                         : (genB.hovered ? theme.tokens.surface2
                                                         : "transparent")
-                    border.color: genB.hovered ? theme.tokens.accent
+                    border.color: genB.hovered ? theme.tokens.accentColor
                                                : theme.tokens.border
                 }
             }
@@ -317,8 +353,15 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 cursorShape: Qt.PointingHandCursor
-                onClicked: colors !== null && colors.open_palette(modelData.id)
+                onClicked: function (mouse) {
+                    colors !== null && colors.open_palette(modelData.id)
+                    if (mouse.button === Qt.RightButton) {
+                        palMenu.target = modelData
+                        palMenu.popup()
+                    }
+                }
                 z: -1
             }
         }
@@ -543,5 +586,75 @@ Item {
         enabled: colorsRoot.visible && !nameField.activeFocus
                  && !tagsField.activeFocus && !hexField.activeFocus
         onActivated: colors !== null && colors.generate()
+    }
+
+    // saved-palette context menu
+    Menu {
+        id: palMenu
+        property var target: null
+        width: 190
+        padding: 4
+        background: Rectangle {
+            radius: 8; color: theme.tokens.surface
+            border.color: theme.tokens.border
+        }
+        MenuItem {
+            text: qsTr("Load into generator")
+            height: 28
+            enabled: palMenu.target !== null
+            onTriggered: palMenu.target
+                         && colors.open_palette(palMenu.target.id)
+        }
+        MenuItem {
+            text: qsTr("Export…")
+            height: 28
+            enabled: palMenu.target !== null
+            onTriggered: {
+                if (palMenu.target)
+                    colors.open_palette(palMenu.target.id)
+                exportKind = "css"
+                exportDialog.open()
+            }
+        }
+        MenuItem {
+            text: qsTr("Add to collection")
+            height: 28
+            enabled: palMenu.target !== null
+                     && library !== null && library.collections.length > 0
+            onTriggered: {
+                if (palMenu.target && library !== null)
+                    library.add_ref(library.collections[0].id, "palette",
+                                    palMenu.target.id, palMenu.target.name)
+            }
+        }
+        MenuSeparator {
+            topPadding: 3; bottomPadding: 3
+            contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
+        }
+        MenuItem {
+            text: qsTr("Delete palette")
+            height: 28
+            enabled: palMenu.target !== null
+            onTriggered: palMenu.target
+                         && colors.delete_palette(palMenu.target.id)
+        }
+    }
+
+    // Terminal designer overlay — covers everything below the toolbar when
+    // the Terminal sub-tab is active (the harmony UI stays mounted beneath)
+    TerminalTab {
+        anchors.top: genBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: colorsRoot.termMode
+        z: 2
+
+        // opaque backdrop so the harmony generator never bleeds through
+        Rectangle {
+            anchors.fill: parent
+            color: theme.tokens.bg
+            z: -1
+        }
     }
 }

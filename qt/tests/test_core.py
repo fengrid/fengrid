@@ -657,6 +657,237 @@ def test_project_tokens_and_export(lib, tmp_path):
         assert "css/tokens.css" in t.getnames()
 
 
+# ------------------------------------------------------------- color locking
+
+from fengrid.core import colors as colors_mod
+
+
+def test_generate_anchors_to_locked_colors():
+    colors = [{"hex": "#3B6EF0", "locked": True},
+              {"hex": "#111111", "locked": False},
+              {"hex": "#E29A3B", "locked": True},
+              {"hex": "#222222", "locked": False},
+              {"hex": "#333333", "locked": False}]
+    out = colors_mod.generate("analogous", colors, base_hue=100)
+    # locks survive the reroll byte-for-byte
+    assert out[0]["hex"] == "#3B6EF0" and out[2]["hex"] == "#E29A3B"
+    assert out[0]["locked"] and out[2]["locked"]
+    # unlocked slots hang off the FIRST locked color's hue at the analogous
+    # template offsets (-18, -36, +36 relative to slot 0)
+    anchor = colors_mod.rgb2hsl(*colors_mod.hex2rgb("#3B6EF0"))[0]
+    for slot, delta in ((1, -18), (3, -36), (4, 36)):
+        h = colors_mod.rgb2hsl(*colors_mod.hex2rgb(out[slot]["hex"]))[0]
+        d = ((h - anchor - delta + 180) % 360) - 180
+        assert abs(d) <= 2, slot
+
+    # complementary: unlocked slot 3 sits opposite the anchor
+    out2 = colors_mod.generate("complementary", colors, base_hue=100)
+    h3 = colors_mod.rgb2hsl(*colors_mod.hex2rgb(out2[3]["hex"]))[0]
+    d = ((h3 - anchor - 180 + 180) % 360) - 180
+    assert abs(d) <= 2
+
+
+def test_generate_without_locks_is_unchanged():
+    plain = [{"hex": "#000000", "locked": False} for _ in range(5)]
+    a = colors_mod.generate("analogous", plain, base_hue=100)
+    b = [{"hex": "#000000", "locked": False} for _ in range(5)]
+    c = colors_mod.generate("analogous", b, base_hue=100)
+    assert [s["hex"] for s in a] == [s["hex"] for s in c]
+
+
+# ----------------------------------------------------------------- terminal
+
+from fengrid.core import termcolors as tc
+
+
+def test_derive_fills_all_slots_deterministically():
+    a = tc.derive("#1E2127", "#D8DEE9", "#37B8C4", name="T")
+    b = tc.derive("#1E2127", "#D8DEE9", "#37B8C4", name="T")
+    assert a == b                                   # deterministic
+    t = tc.normalize(a)
+    for slot in tc.SLOTS:
+        pool = t["normal"] if not slot.startswith("bright") else t["bright"]
+        assert pool[slot].startswith("#") and len(pool[slot]) == 7
+    assert t["bg"] == "#1E2127" and t["fg"] == "#D8DEE9"
+    assert t["cursor"] == "#D8DEE9"
+
+
+def test_terminal_exports_roundtrip():
+    theme = tc.derive("#101418", "#E7EDF2", "#39B8C4", name="Fen Dark")
+    import json as _json
+    # JSON roundtrip
+    back = _json.loads(tc.to_json(theme))
+    assert back["bg"] == "#101418"
+    assert back["normal"]["red"] == theme["normal"]["red"]
+    # iTerm2: valid plist with 16 ansi slots + bg/fg/cursor
+    import plistlib
+    plist = plistlib.loads(tc.to_iterm2(theme))
+    assert "Ansi 0 Color" in plist and "Ansi 15 Color" in plist
+    assert plist["Background Color"]["Red Component"] < 1.0
+    assert len(plist) == 20
+    # windows terminal: flat scheme with slot names
+    wt = _json.loads(tc.to_windows_terminal(theme))
+    assert wt["background"] == "#101418" and "brightBlack" in wt
+    # guake: 18 colon-separated hex values
+    guake = tc.to_guake(theme).split(":")
+    assert len(guake) == 18 and guake[0].startswith("#")
+    # gnome: dconf script lines
+    gnome = tc.to_gnome(theme, "abc-123")
+    assert "PROFILE_UUID=abc-123" in gnome
+    assert "background-color" in gnome and "'#101418'" in gnome
+    # kitty + alacritty shapes
+    assert "color0 " in tc.to_kitty(theme)
+    assert "[colors.normal]" in tc.to_alacritty(theme)
+
+
+def test_terminal_export_files(tmp_path):
+    theme = tc.derive("#101418", "#E7EDF2", "#39B8C4", name="Fen Dark")
+    p = tc.export(theme, "iterm2", str(tmp_path / "out" / "fen"))
+    assert p.endswith(".itermcolors") and Path(p).stat().st_size > 100
+    p2 = tc.export(theme, "guake", str(tmp_path / "out" / "fen"))
+    assert p2.endswith(".txt")
+    try:
+        tc.export(theme, "nope", str(tmp_path / "x"))
+        raise AssertionError("expected ValueError")
+    except ValueError:
+        pass
+
+
+def test_gogh_presets():
+    names = tc.preset_names()
+    assert len(names) >= 14
+    for wanted in ("Dracula", "Nord", "Gruvbox Dark", "Solarized Dark",
+                   "Solarized Light", "One Half Dark", "Tokyo Night",
+                   "Catppuccin Mocha"):
+        assert wanted in names, wanted
+    t = tc.get_preset("Dracula")
+    assert t["bg"] == "#282A36" and t["normal"]["red"] == "#FF5555"
+    assert t["bright"]["brightBlack"] == "#6272A4"
+    # every preset normalizes to a complete 16-slot theme
+    for n in names:
+        p = tc.get_preset(n)
+        for slot in tc.SLOTS:
+            pool = p["normal"] if not slot.startswith("bright") else p["bright"]
+            assert pool[slot].startswith("#"), (n, slot)
+    assert tc.get_preset("does-not-exist") is None
+
+
+def test_terminal_snippet_roundtrip(lib):
+    theme = tc.derive("#101418", "#E7EDF2", "#39B8C4", name="Fen Dark")
+    sid = tc.save_as_snippet(lib, theme)
+    row = snp.get_snippet(lib, sid)
+    assert row["title"] == "Terminal theme — Fen Dark"
+    assert "<div class='term'>" in row["html"]
+    assert "fengrid terminal theme" in row["html"]     # JSON export embedded
+    assert "terminal" in row["tags"]
+
+
+# --------------------------------------------------------------------- search
+
+from fengrid.core import search as srch
+
+
+def test_fuzzy_search_ranks(lib, tmp_path):
+    _seed_asset(lib, tmp_path, "cart.svg")
+    _seed_asset(lib, tmp_path, "shopping-cart.svg")
+    _seed_asset(lib, tmp_path, "user.svg")
+    con = lib
+    hits = srch.search_assets(con, "crt", "fuzzy")     # subsequence of cart
+    names = [h["name"] for h in hits]
+    assert "cart.svg" in names
+    assert "cart.svg" in names[0]
+    assert "user" not in names[:2]
+    # exact name ranks first
+    top = srch.search_assets(con, "user", "fuzzy")[0]
+    assert top["name"] == "user.svg"
+
+
+def test_regex_search(lib, tmp_path):
+    _seed_asset(lib, tmp_path, "cart.svg")
+    _seed_asset(lib, tmp_path, "calendar.svg")
+    hits = srch.search_assets(lib, r"^cart", "regex")
+    assert len(hits) == 1 and hits[0]["name"] == "cart.svg"
+    hits = srch.search_assets(lib, r"(cart|calendar)\.svg$", "regex")
+    assert len(hits) == 2
+    try:
+        srch.search_assets(lib, "([unclosed", "regex")
+        raise AssertionError("expected SearchError")
+    except srch.SearchError:
+        pass
+
+
+def test_content_search_snippets_and_files(lib, tmp_path):
+    _seed_asset(lib, tmp_path, "brand.svg")
+    (Path(tmp_path / "icons") / "brand.svg").write_text(
+        "<svg><!-- company-logo --></svg>")
+    snp.create_snippet(lib, "Branding kit", "", "web",
+                       "<div class='company-logo'>x</div>", "", "", "")
+    hits = srch.search_assets(lib, "company-logo", "content")
+    kinds = {h["kind"] for h in hits}
+    assert "snippet" in kinds and "asset" in kinds
+
+
+def test_snippet_content_search_flag(lib):
+    snp.create_snippet(lib, "S1", "", "web", "<p>needle-in-body</p>", "", "", "")
+    assert srch.search_snippets(lib, "S1") == [1]
+    assert srch.search_snippets(lib, "needle-in-body") == []
+    assert srch.search_snippets(lib, "needle-in-body", include_content=True) == [1]
+
+
+# ------------------------------------------------------- collections v2
+
+def test_collection_migration_preserves_legacy(lib, tmp_path):
+    """Legacy collection_item rows survive the v2 migration as icon refs."""
+    aid = _seed_asset(lib, tmp_path, "legacy.svg")
+    coll = lib.execute("SELECT id FROM collection WHERE name ="
+                       " 'Starred Assets'").fetchone()["id"]
+    lib.execute("INSERT INTO collection_item(collection_id, asset_id, position)"
+                " VALUES (?, ?, 0)", (coll, aid))
+    lib.commit()
+    # the migration already ran at connect; it is idempotent, so re-run it
+    db._migrate_collections(lib)
+    refs = db.refs_for(lib, coll, "icon")
+    assert any(r["item_id"] == aid for r in refs)
+
+
+def test_collections_v2_tree_and_refs(lib, tmp_path):
+    aid = _seed_asset(lib, tmp_path, "pack.svg")
+    snip = snp.create_snippet(lib, "S", "", "web", "<p></p>", "", "", "")
+    from fengrid.core import colors as core_colors
+    pal = core_colors.save_palette(lib, "P", ["#101418"])
+
+    parent = db.create_sub_collection(lib, "UI Kit")
+    child = db.create_sub_collection(lib, "Buttons", parent_id=parent,
+                                     tags="buttons, kit")
+    assert db.add_collection_ref(lib, parent, "icon", aid)
+    assert db.add_collection_ref(lib, parent, "snippet", snip)
+    assert db.add_collection_ref(lib, child, "palette", pal)
+    # unknown kind / missing row rejected
+    assert db.add_collection_ref(lib, parent, "car", 1) is False
+    assert db.add_collection_ref(lib, parent, "icon", 99999) is False
+
+    tree = db.collection_tree(lib)
+    p = next(c for c in tree if c["id"] == parent)
+    ch = next(c for c in tree if c["id"] == child)
+    assert p["counts"] == {"icon": 1, "snippet": 1}
+    assert p["total"] == 2
+    assert ch["parent_id"] == parent
+    assert ch["tags"] == "buttons, kit"
+
+    db.set_collection_tags(lib, parent, "ui, shared")
+    assert next(c for c in db.collection_tree(lib)
+                if c["id"] == parent)["tags"] == "ui, shared"
+
+    ref = db.refs_for(lib, parent, "snippet")[0]
+    db.remove_collection_ref(lib, ref["id"])
+    assert db.refs_for(lib, parent, "snippet") == []
+
+    # deleting a parent re-parents children instead of orphaning them
+    db.delete_collection(lib, parent)
+    ch = next(c for c in db.collection_tree(lib) if c["id"] == child)
+    assert ch["parent_id"] is None
+
+
 # --------------------------------------------------------------------- stars
 
 def _seed_asset(con, tmp_path, name="mark.svg"):
@@ -692,14 +923,16 @@ def test_star_toggles_tag_and_collection(lib, tmp_path):
         " WHERE at.asset_id = ?", (aid,))}
     assert "starred" in tags
     colls = {r["name"] for r in lib.execute(
-        "SELECT c.name FROM collection c JOIN collection_item ci"
-        " ON ci.collection_id = c.id WHERE ci.asset_id = ?", (aid,))}
+        "SELECT c.name FROM collection c JOIN collection_ref cr"
+        " ON cr.collection_id = c.id WHERE cr.item_kind = 'icon'"
+        " AND cr.item_id = ?", (aid,))}
     assert "Starred Assets" in colls
 
     db.set_starred(lib, aid, False)
     assert db.is_starred(lib, aid) is False
-    assert lib.execute("SELECT COUNT(*) c FROM collection_item"
-                       " WHERE asset_id = ?", (aid,)).fetchone()["c"] == 0
+    assert lib.execute("SELECT COUNT(*) c FROM collection_ref"
+                       " WHERE item_kind = 'icon' AND item_id = ?",
+                       (aid,)).fetchone()["c"] == 0
     # the default tag/collection rows survive an unstar
     assert lib.execute("SELECT COUNT(*) c FROM tag WHERE name = 'starred'"
                        ).fetchone()["c"] == 1
@@ -714,8 +947,9 @@ def test_star_recreates_deleted_defaults(lib, tmp_path):
     lib.commit()
     db.set_starred(lib, aid, True)          # must re-create both
     assert db.is_starred(lib, aid) is True
-    assert lib.execute("SELECT COUNT(*) c FROM collection_item"
-                       " WHERE asset_id = ?", (aid,)).fetchone()["c"] == 1
+    assert lib.execute("SELECT COUNT(*) c FROM collection_ref"
+                       " WHERE item_kind = 'icon' AND item_id = ?",
+                       (aid,)).fetchone()["c"] == 1
 
 
 def test_star_is_idempotent(lib, tmp_path):
@@ -724,8 +958,9 @@ def test_star_is_idempotent(lib, tmp_path):
     db.set_starred(lib, aid, True)
     assert lib.execute("SELECT COUNT(*) c FROM asset_tag WHERE asset_id = ?",
                        (aid,)).fetchone()["c"] == 1
-    assert lib.execute("SELECT COUNT(*) c FROM collection_item"
-                       " WHERE asset_id = ?", (aid,)).fetchone()["c"] == 1
+    assert lib.execute("SELECT COUNT(*) c FROM collection_ref"
+                       " WHERE item_kind = 'icon' AND item_id = ?",
+                       (aid,)).fetchone()["c"] == 1
 
 
 def test_starred_role_in_model_rows(lib, tmp_path):

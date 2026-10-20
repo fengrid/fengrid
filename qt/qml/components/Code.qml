@@ -494,6 +494,8 @@ Item {
                     id: snipItem
                     required property var modelData
                     required property int index
+                    // menus outside the delegate read the row via currentItem
+                    readonly property var row: modelData
                     width: snipList.width
                     height: itemCol.implicitHeight + 12
                     radius: 7
@@ -548,10 +550,16 @@ Item {
                         }
                     }
                     MouseArea {
+                        id: snipMa
                         anchors.fill: parent
                         hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: code !== null && code.open_snippet(snipItem.modelData.id)
+                        onClicked: function (mouse) {
+                            code !== null && code.open_snippet(snipItem.modelData.id)
+                            if (mouse.button === Qt.RightButton)
+                                snipMenu.popup()
+                        }
                     }
                 }
 
@@ -563,6 +571,71 @@ Item {
                     font.family: theme.uiFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted
+                }
+            }
+
+            // snippet context menu
+            Menu {
+                id: snipMenu
+                width: 190
+                padding: 4
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                MenuItem {
+                    text: qsTr("Open in editor")
+                    height: 28
+                    onTriggered: code !== null && code.open_snippet(
+                        snipList.currentItem ? snipList.currentItem.row.id : -1)
+                }
+                MenuItem {
+                    text: qsTr("Copy title")
+                    height: 28
+                    onTriggered: {
+                        var it = snipList.currentItem
+                        if (it)
+                            titleField.text = it.row.title
+                    }
+                }
+                MenuSeparator {
+                    topPadding: 3; bottomPadding: 3
+                    contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
+                }
+                MenuItem {
+                    text: qsTr("Add to collection")
+                    height: 28
+                    enabled: library !== null && library.collections.length > 0
+                    Menu {
+                        id: snipCollSub
+                        Repeater {
+                            model: library !== null ? library.collections : []
+                            MenuItem {
+                                id: snipCollItem
+                                required property var modelData
+                                text: snipCollItem.modelData.name
+                                onTriggered: {
+                                    var it = snipList.currentItem
+                                    if (it && code !== null)
+                                        library.add_ref(
+                                            snipCollItem.modelData.id,
+                                            "snippet", it.row.id, it.row.title)
+                                }
+                            }
+                        }
+                    }
+                    onHoveredChanged: if (hovered) snipCollSub.popup(
+                                          parent, parent.width, 0)
+                    onClicked: snipCollSub.popup(parent, parent.width, 0)
+                }
+                MenuItem {
+                    text: qsTr("Delete snippet")
+                    height: 28
+                    onTriggered: {
+                        var it = snipList.currentItem
+                        if (it && code !== null)
+                            code.remove(it.row.id)
+                    }
                 }
             }
 
@@ -648,7 +721,7 @@ Item {
                             background: Rectangle {
                                 radius: 4
                                 color: codeRoot.currentPane === paneTab.modelData
-                                       ? theme.tokens.accent : "transparent"
+                                       ? theme.tokens.accentCode : "transparent"
                                 border.color: theme.tokens.border
                             }
                             contentItem: Text {
@@ -759,7 +832,7 @@ Item {
                         onClicked: codeRoot.saveSnippet()
                         background: Rectangle {
                             radius: 6
-                            color: theme.tokens.accent
+                            color: theme.tokens.accentCode
                         }
                         contentItem: Text {
                             text: saveBtn.text

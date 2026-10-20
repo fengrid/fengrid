@@ -116,7 +116,7 @@ Item {
                 onClicked: projects !== null && projects.new_project()
                 background: Rectangle {
                     radius: 6
-                    color: theme.tokens.accent
+                    color: theme.tokens.accentProject
                 }
                 contentItem: Text {
                     text: parent.text
@@ -176,6 +176,7 @@ Item {
                 delegate: Rectangle {
                     id: projItem
                     required property var modelData
+                    readonly property var row: modelData
                     width: projList.width
                     height: projRow.implicitHeight + 12
                     radius: 7
@@ -184,7 +185,7 @@ Item {
                            ? theme.tokens.surface2 : "transparent"
                     border.color: projects !== null
                                   && projects.currentId === projItem.modelData.id
-                                  ? theme.tokens.accent : "transparent"
+                                  ? theme.tokens.accentProject : "transparent"
 
                     ColumnLayout {
                         id: projRow
@@ -209,10 +210,56 @@ Item {
                         }
                     }
                     MouseArea {
+                        id: projMa
                         anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: projects !== null
-                                    && projects.open(projItem.modelData.id)
+                        onClicked: function (mouse) {
+                            projects !== null
+                                && projects.open(projItem.modelData.id)
+                            if (mouse.button === Qt.RightButton)
+                                projMenu.popup()
+                        }
+                    }
+                }
+
+                // project context menu
+                Menu {
+                    id: projMenu
+                    width: 190
+                    padding: 4
+                    background: Rectangle {
+                        radius: 8; color: theme.tokens.surface
+                        border.color: theme.tokens.border
+                    }
+                    MenuItem {
+                        text: qsTr("Open")
+                        height: 28
+                        onTriggered: projects !== null && projects.open(
+                            projList.currentItem ? projList.currentItem.row.id : -1)
+                    }
+                    MenuItem {
+                        text: qsTr("Export…")
+                        height: 28
+                        onTriggered: {
+                            if (projList.currentItem)
+                                projects.open(projList.currentItem.row.id)
+                            exportDialog.open()
+                        }
+                    }
+                    MenuSeparator {
+                        topPadding: 3; bottomPadding: 3
+                        contentItem: Rectangle {
+                            implicitHeight: 1; color: theme.tokens.border
+                        }
+                    }
+                    MenuItem {
+                        text: qsTr("Delete project")
+                        height: 28
+                        onTriggered: {
+                            if (projList.currentItem && projects !== null)
+                                projects.remove(projList.currentItem.row.id)
+                        }
                     }
                 }
 
