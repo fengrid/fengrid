@@ -310,6 +310,39 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, demo data suite: `core/demo.py` — one-call showcase install:
+  20 generated Feather-style SVG icons (theme/context/tag metadata so the
+  icons-pane filters and tags have real content), a font row (bundled Bebas
+  Neue copied into the demo tree so removal stays uniform), 12 code
+  snippets (product card, stat card, pricing table, table-based email
+  signature, newsletter masthead, markdown recipe card, gallery grid, code
+  block style, hero split, sticky navbar, testimonial, badge chips) and 8
+  named palettes, all wired into 14 demo projects (SaaS marketing site,
+  admin dashboard, e-commerce storefront, online magazine, photographer
+  portfolio, developer blog, toolkit docs, HTML email signature, email
+  newsletter, recipe collection, design system starter, mobile app UI kit,
+  conference/events, nonprofit landing) — each with tags, a per-project
+  prefix/radius/type scale, and attached assets across all four kinds; the
+  email projects are preview-driven (`preview.snippetId` resolved at
+  install). Every created row id is recorded in the `demo_ids` setting, so
+  `remove(kinds)` deletes EXACTLY the demo rows — per kind (projects /
+  icons / fonts / snippets / palettes / tags), leaving user data and any
+  kinds the caller keeps untouched; demo files live under
+  `<data-dir>/demo-assets/` and are swept with their rows. Install is
+  failure-atomic (a crashed run sweeps its own partial state back out) and
+  idempotent. UI: a Demo button in the Projects toolbar — "Load demo
+  suite" / "Remove demo…" opening a per-kind checkbox dialog (Select
+  all / Keep all / Delete). Verified: 3 core tests (install roundtrip
+  incl. counts + snippet-preview wiring + demo tagging; selective removal
+  keeping tags+palettes while user-created rows survive; full sweep clearing
+  the marker and directory with clean re-install), a bridge probe
+  (property/slot/signal behavior incl. partial removal keeping
+  installed=True), and seeded screenshots of the loaded Projects pane
+  (14 projects with asset counts, "Remove demo…" button) and the Icons
+  pane (21 assets, themed filters). QA gate: 65 tests + clean renders.
+  Lesson: connections must come from db.connect() — a raw sqlite3.connect
+  probe crashed in get_project (no sqlite3.Row factory), which is what
+  surfaced the failure-atomicity requirement.
 - 2026-10-20, editor keymap schemes: the Code pane's command layer is now
   scheme-driven (Code bridge `keymap` property + `set_keymap` slot,
   persisted on the `setting` table as `editor_keymap`, default vscode):
