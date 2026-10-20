@@ -310,6 +310,34 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, M3 code pane (snippets + playground): schema (`snippet` table
+  in db.py SCHEMA), `core/snippets.py` (1:1 port of snippet_import.py —
+  JSONC stripper, language map with ≥3-char prefix constraint so short keys
+  like "c"/"go" stay exact-only, VSCode + massCode readers; the 0.x cobol/
+  c-prefix bug is fixed and test-encoded), `bridges/code.py` (CRUD + filter/
+  sort + import bridge), `Code.qml` (tabbed HTML/CSS/JS editors with the
+  transparent-TextArea-over-highlight-overlay technique ported from 0.x,
+  both layers inside the Flickable contentItem so they scroll as one;
+  snippet sidebar with search/sort/lang filter/tag cloud; VSCode/massCode
+  FileDialog import; title/tags inline; Ctrl+S / Ctrl+Enter / Tab-indent;
+  help popup). Preview runs through the hardened off-the-record profile
+  (`web.make_preview_profile`) via PreviewPane's new `document` mode
+  (loadHtml with an fengrid-asset:// base URL) inside an on-demand Loader.
+  WebEngine startup ordering FIXED: QtWebEngineQuick.initialize() must run
+  before QGuiApplication (Qt 6 requirement) — previously deferred, which
+  would have made every preview dead on arrival; now skipped only under
+  QT_QPA_PLATFORM=offscreen so the QA gate stays free of Chromium teardown
+  noise. `web/` restructured: Qt-bound classes moved to web/handlers.py and
+  all entry points guarded, so platforms without WebEngine wheels (Windows
+  ARM64) import cleanly. GLX robustness: app.py gains hl_ink/ink_faint
+  tokens (0.x values); `glprobe.py` degrades to QT_QUICK_BACKEND=software
+  + QT_XCB_GL_INTEGRATION=none when the display has no usable GL; the
+  Xvfb end-to-end test proved the frozen binary launches and renders the
+  full shell where the old build SIGABRTed. KNOWN GAP vs 0.x: the
+  emacs/vim keybinding layer is NOT yet ported (recorded as the next code-
+  pane increment); editor shows line:col status only. QA gate: 37 tests +
+  clean dark/light renders; --pane N CLI flag added for per-pane QA
+  screenshots.
 - 2026-10-19, M3 colors pane: full port of colors.html — harmony generator
   (exact hue offsets + fract(sin(seed)) jitter, deterministic for tests),
   HSL/hex editor with WCAG AAA/AA/AA·lg/fail readouts, deterministic color
