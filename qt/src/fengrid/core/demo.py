@@ -206,7 +206,7 @@ SNIPPETS: list[dict] = [
              "<pre><code class='lang'>const grid = css.grid('12')</code></pre>",
              "pre { background: var(--fg-surface); border-radius: 10px;\n"
              "  padding: 14px 16px; overflow-x: auto; }\n"
-             "code { font-family: ui-monospace, 'Iosevka', monospace;\n"
+             "code { font-family: ui-monospace, 'Roboto Mono', monospace;\n"
              "  font-size: 13px; color: var(--fg-accent); }",
              "", "demo, blog, code"),
     _snippet("Hero split", "Marketing hero with two columns",

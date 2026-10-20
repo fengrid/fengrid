@@ -414,7 +414,7 @@ def board_svg(title: str, hexes: list[str]) -> str:
                    f' rx="{R}" fill="{hx}" stroke="#E5E5E5"'
                    f' stroke-opacity="0.6"/>')
         out.append(f'<g clip-path="url(#sw{i})">')
-        out.append(f'<text x="{x + 10}" y="{cy + 24}" font-family="Iosevka,'
+        out.append(f'<text x="{x + 10}" y="{cy + 24}" font-family="Roboto Mono,'
                    f' monospace" font-size="12" font-weight="500"'
                    f' fill="{ink}">{_esc_xml(hx.upper())}</text>')
         out.append(f'<text x="{x + 10}" y="{cy + 40}" font-family="Inter,'
@@ -422,10 +422,10 @@ def board_svg(title: str, hexes: list[str]) -> str:
                    f' opacity="0.85">{_esc_xml(name)}</text>')
         out.append('</g>')
     fy = H - 24
-    out.append(f'<text x="{PAD}" y="{fy}" font-family="Iosevka, monospace"'
+    out.append(f'<text x="{PAD}" y="{fy}" font-family="Roboto Mono, monospace"'
                f' font-size="10" letter-spacing="2" fill="#93A3B0">PALETTE</text>')
     out.append(f'<text x="{W - PAD}" y="{fy}" text-anchor="end"'
-               f' font-family="Iosevka, monospace" font-size="10"'
+               f' font-family="Roboto Mono, monospace"'
                f' fill="#93A3B0">fengrid</text>')
     out.append('</svg>')
     return "\n".join(out)

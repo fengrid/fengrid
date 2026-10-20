@@ -3,8 +3,8 @@
 Fonts are registered once at startup via QFontDatabase.addApplicationFont
 (see __main__.py); QML never hardcodes a family name — it reads
 theme.headingFont / uiFont / monoFont. Family names are discovered
-dynamically because the bundled files register as e.g. "Iosevka NFM" (the
-Nerd-Font-Mono naming of the bundled build), not the obvious names.
+dynamically from the registered set because bundled files can register
+under non-obvious names (e.g. a style-specific "Roboto Mono Medium").
 """
 
 from __future__ import annotations
@@ -90,9 +90,13 @@ class Theme(QObject):
 
     @Property(str, constant=True)
     def monoFont(self) -> str:
-        # bundled TTF registers as "Iosevka NFM" (Nerd Font Mono naming)
-        return self._pick(["Iosevka NFM", "Iosevka Mono", "Iosevka",
-                           "Noto Sans Mono", "DejaVu Sans Mono"])
+        # Roboto Mono: wider glyphs + larger x-height than the previously
+        # bundled Iosevka, which read as cramped at the UI's small pixel
+        # sizes (user report 2026-10-20). "Roboto Mono Medium" is the
+        # style-specific family the Medium static TTF registers.
+        return self._pick(["Roboto Mono", "Roboto Mono Medium",
+                           "Source Code Pro", "Noto Sans Mono",
+                           "DejaVu Sans Mono"])
 
     @Property(str, constant=True)
     def appVersion(self) -> str:

@@ -310,6 +310,22 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, MONO FONT SWAP (user readability feedback): bundled
+  Iosevka Mono (deliberately condensed — cramped at 9–13px UI sizes)
+  replaced with Roboto Mono (Apache-2.0, googlefonts/RobotoMono static
+  Regular + Medium TTFs). theme.monoFont pick order: Roboto Mono /
+  Roboto Mono Medium (the style-specific family the Medium static TTF
+  also registers) / Source Code Pro / Noto Sans Mono / DejaVu Sans Mono.
+  Sweep: SVG palette-board exports (core/colors.py), demo snippet CSS
+  (core/demo.py), and the 0.x reference pages (index/colors/code/fonts/
+  projects.html @font-face + --font-mono stacks) now point at
+  RobotoMono-*.woff2 — converted from the TTFs with fontTools+brotli —
+  and server/connect.html's mono stack. Iosevka TTFs, woff2s, and
+  license removed (no remaining references in app code; historical docs
+  mentions left as-is). fonts/ROBOTO-LICENSE.txt added (per-font license
+  convention). Verified: QFontDatabase registers 'Roboto Mono' +
+  'Roboto Mono Medium'; Theme probe returns monoFont='Roboto Mono'; 87
+  tests green; dark/light renders clean.
 - 2026-10-20, INTERACTION-REFINEMENT BATCH (user UX feedback):
   1. GENERATE VARIATION: core generate() grew a `variation` counter —
      with locks the pure template math was fully deterministic (repeated

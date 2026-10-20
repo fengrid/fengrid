@@ -8,10 +8,10 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='12' height='12' rx='3' fill='none' stroke='%23E879A6' stroke-width='2.5'/%3E%3Crect x='17' y='3' width='12' height='12' rx='3' fill='none' stroke='%23E879A6' stroke-width='2.5'/%3E%3Crect x='3' y='17' width='12' height='12' rx='3' fill='none' stroke='%23E879A6' stroke-width='2.5'/%3E%3Crect x='17' y='17' width='12' height='12' rx='3.5' fill='%23F5C25C'/%3E%3C/svg%3E">
 <style>
   @font-face { font-family:'Inter'; src:url('fonts/Inter-Variable.woff2') format('woff2-variations'); font-weight:100 900; font-style:normal; font-display:swap; }
-  @font-face { font-family:'Iosevka'; src:url('fonts/IosevkaMono-Regular.woff2') format('woff2'); font-weight:400; font-style:normal; font-display:swap; }
-  @font-face { font-family:'Iosevka'; src:url('fonts/IosevkaMono-Medium.woff2') format('woff2'); font-weight:500; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Roboto Mono'; src:url('fonts/RobotoMono-Regular.woff2') format('woff2'); font-weight:400; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Roboto Mono'; src:url('fonts/RobotoMono-Medium.woff2') format('woff2'); font-weight:500; font-style:normal; font-display:swap; }
 
-  :root { --font-head:'Inter',sans-serif; --font-mono:'Iosevka','Roboto Mono',monospace; --font-body:'Inter',sans-serif; }
+  :root { --font-head:'Inter',sans-serif; --font-mono:'Roboto Mono',monospace; --font-body:'Inter',sans-serif; }
   /* colors mode accent: rose — icons teal, fonts violet, code coral, projects green */
   [data-theme="dark"] {
     --bg:#101418; --surface:#161B21; --surface-2:#1D242B;
@@ -512,13 +512,13 @@
       out.push('<clipPath id="sw' + i + '"><rect x="' + x + '" y="' + cy + '" width="' + sw + '" height="' + ch + '" rx="' + R + '"/></clipPath>');
       out.push('<rect x="' + x + '" y="' + cy + '" width="' + sw + '" height="' + ch + '" rx="' + R + '" fill="' + c.hex + '" stroke="#E5E5E5" stroke-opacity="0.6"/>');
       out.push('<g clip-path="url(#sw' + i + ')">');
-      out.push('<text x="' + (x + 10) + '" y="' + (cy + 24) + '" font-family="Iosevka, monospace" font-size="12" font-weight="500" fill="' + ink + '">' + escXml(c.hex.toUpperCase()) + '</text>');
+      out.push('<text x="' + (x + 10) + '" y="' + (cy + 24) + '" font-family="Roboto Mono, monospace" font-size="12" font-weight="500" fill="' + ink + '">' + escXml(c.hex.toUpperCase()) + '</text>');
       out.push('<text x="' + (x + 10) + '" y="' + (cy + 40) + '" font-family="Inter, Arial, sans-serif" font-size="' + fs + '" fill="' + ink + '" opacity="0.85">' + escXml(name) + '</text>');
       out.push('</g>');
     });
     var fy = H - 24;
-    out.push('<text x="' + PAD + '" y="' + fy + '" font-family="Iosevka, monospace" font-size="10" letter-spacing="2" fill="#93A3B0">PALETTE</text>');
-    out.push('<text x="' + (W - PAD) + '" y="' + fy + '" text-anchor="end" font-family="Iosevka, monospace" font-size="10" fill="#93A3B0">fengrid</text>');
+    out.push('<text x="' + PAD + '" y="' + fy + '" font-family="Roboto Mono, monospace" font-size="10" letter-spacing="2" fill="#93A3B0">PALETTE</text>');
+    out.push('<text x="' + (W - PAD) + '" y="' + fy + '" text-anchor="end" font-family="Roboto Mono, monospace" font-size="10" fill="#93A3B0">fengrid</text>');
     out.push('</svg>');
     return out.join('\n');
   }
