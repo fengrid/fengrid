@@ -26,6 +26,9 @@ class Code(QObject):
     filtersChanged = Signal()
     importDone = Signal(int)
     importFailed = Signal(str)
+    keymapChanged = Signal()
+
+    KEYMAPS = ("vscode", "emacs", "vim", "readline")
 
     def __init__(self, con, parent=None):
         super().__init__(parent)
@@ -38,6 +41,8 @@ class Code(QObject):
         self._snippets: list = []
         self._tags: list = []
         self._last_saved = ""
+        km = settings.get(con, "editor_keymap", "vscode")
+        self._keymap = km if km in self.KEYMAPS else "vscode"
         self._refresh()
 
     # ---------------------------------------------------------------- state
@@ -56,6 +61,25 @@ class Code(QObject):
     @Property("QVariantMap", notify=currentChanged)
     def current(self) -> dict:
         return self._current
+
+    # ------------------------------------------------------------- keymaps
+    @Property(str, notify=keymapChanged)
+    def keymap(self) -> str:
+        return self._keymap
+
+    @Slot(str)
+    def set_keymap(self, scheme: str) -> None:
+        scheme = str(scheme or "").strip().lower()
+        if scheme not in self.KEYMAPS or scheme == self._keymap:
+            return
+        self._keymap = scheme
+        settings.set(self._con, "editor_keymap", scheme)
+        self.keymapChanged.emit()
+        self.message.emit("Editor keymap: " + scheme)
+
+    @Slot(result="QVariantList")
+    def keymap_names(self) -> list:
+        return list(self.KEYMAPS)
 
     @Property(int, notify=snippetsChanged)
     def snippetCount(self) -> int:

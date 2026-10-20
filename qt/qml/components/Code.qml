@@ -37,6 +37,21 @@ Item {
     // the command layer keeps its own snapshots
     property var undoStack: []
 
+    // keybinding scheme: vscode (native) | emacs | vim | readline.
+    // The VIM button/shortcut can overlay vim mode temporarily on any
+    // scheme; scheme "vim" just STARTS in vim mode.
+    property string keymap: code !== null ? code.keymap : "vscode"
+    readonly property var keymapIndex: ({ "vscode": 0, "emacs": 1,
+                                          "vim": 2, "readline": 3 })
+
+    function applyKeymapVim() {
+        if (keymap === "vim" && !vimEnabled) {
+            vimEnabled = true
+            vimMode = "normal"
+        }
+    }
+    Component.onCompleted: applyKeymapVim()
+
     // syntax token colors — same roles as the 0.x .tk-* classes
     readonly property var tkColors: ({
         "t": theme.tokens.accent,     // tags
@@ -271,6 +286,16 @@ Item {
         edTa.text = edTa.text.slice(0, s) + "  " + edTa.text.slice(e)
         edTa.cursorPosition = s + 2
     }
+    function tabDedent() {
+        // Shift+Tab: remove two spaces from the cursor line's start
+        var s = edTa.selectionStart
+        var ls = edTa.text.lastIndexOf("\n", s - 1) + 1
+        if (edTa.text.slice(ls, ls + 2) === "  ") {
+            pushUndo()
+            edTa.text = edTa.text.slice(0, ls) + edTa.text.slice(ls + 2)
+            edTa.cursorPosition = Math.max(ls, s - 2)
+        }
+    }
     function toggleVim() {
         vimEnabled = !vimEnabled
         vimMode = vimEnabled ? "normal" : "insert"
@@ -319,6 +344,14 @@ Item {
         function onMessage(msg) { toast.show(msg) }
         function onImportFailed(err) { toast.show(qsTr("Import failed: %1").arg(err)) }
         function onImportDone(n) { toast.show(qsTr("Imported %1 snippets").arg(n)) }
+        function onKeymapChanged() {
+            if (keymap === "vim") {
+                vimEnabled = true
+                vimMode = "normal"
+            } else if (vimEnabled) {
+                toggleVim()                   // leaving the vim scheme → off
+            }
+        }
     }
     Connections {
         target: theme
@@ -788,6 +821,34 @@ Item {
                             leftPadding: 8; rightPadding: 8
                         }
                     }
+                    ComboBox {
+                        id: keymapBox
+                        Layout.preferredHeight: 26
+                        Layout.preferredWidth: 92
+                        model: [qsTr("VS Code"), qsTr("Emacs"), qsTr("Vim"),
+                                qsTr("Readline")]
+                        currentIndex: code !== null
+                                      ? (codeRoot.keymapIndex[code.keymap] || 0) : 0
+                        onActivated: function (idx) {
+                            code !== null && code.set_keymap(
+                                ["vscode", "emacs", "vim", "readline"][idx])
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Editor keybindings — applies to all three tabs")
+                        background: Rectangle {
+                            radius: 6
+                            color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: keymapBox.displayText
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.text
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 6
+                        }
+                    }
                 }
             }
         }
@@ -858,8 +919,11 @@ Item {
                             // here would fire in ADDITION to the shortcut
                             // (both see the same event) and double-toggle.
 
-                            if (!root.vimEnabled) {
-                                // ---- emacs-style bindings (0.x: always on)
+                            var scheme = root.keymap
+                            if (!root.vimEnabled
+                                    && (scheme === "emacs"
+                                        || scheme === "readline")) {
+                                // ---- emacs-style bindings (0.x port)
                                 if (mod && !shift && event.key === Qt.Key_X) {
                                     root.emacsChord = true
                                     event.accepted = true
@@ -904,6 +968,24 @@ Item {
                                     root.deleteRange(pos, Math.min(pos + 1, v.length), false)
                                     return
                                 }
+                                // readline-only extras (Ctrl+U is
+                                // universal-argument in emacs, so these
+                                // stay out of the emacs scheme)
+                                if (scheme === "readline"
+                                        && mod && !shift
+                                        && event.key === Qt.Key_U) {
+                                    event.accepted = true
+                                    var lbU = root.lineBounds(v, pos)
+                                    root.deleteRange(lbU[0], pos, true)
+                                    return
+                                }
+                                if (scheme === "readline"
+                                        && mod && !shift
+                                        && event.key === Qt.Key_W) {
+                                    event.accepted = true
+                                    root.deleteRange(root.prevWordStart(v, pos), pos, true)
+                                    return
+                                }
                                 if (alt && event.key === Qt.Key_B) {
                                     event.accepted = true
                                     cursorPosition = root.prevWordStart(v, pos)
@@ -927,6 +1009,25 @@ Item {
                                 if (event.key === Qt.Key_Tab) {
                                     event.accepted = true
                                     root.tabIndent()
+                                    return
+                                }
+                                if (event.key === Qt.Key_Backtab) {
+                                    event.accepted = true
+                                    root.tabDedent()
+                                }
+                                return
+                            }
+                            if (!root.vimEnabled) {
+                                // ---- vscode (default): native editing —
+                                // only the indent keys are handled here
+                                if (event.key === Qt.Key_Tab) {
+                                    event.accepted = true
+                                    root.tabIndent()
+                                    return
+                                }
+                                if (event.key === Qt.Key_Backtab) {
+                                    event.accepted = true
+                                    root.tabDedent()
                                 }
                                 return
                             }
@@ -953,6 +1054,11 @@ Item {
                                 if (event.key === Qt.Key_Tab) {
                                     event.accepted = true
                                     root.tabIndent()
+                                    return
+                                }
+                                if (event.key === Qt.Key_Backtab) {
+                                    event.accepted = true
+                                    root.tabDedent()
                                 }
                                 return  // default typing
                             }
@@ -1266,19 +1372,19 @@ Item {
                         + "commas allowed) or a massCode db.sqlite. Unmapped "
                         + "languages keep their code in the JS pane with a "
                         + "lang:<name> tag.\n\n"
-                        + "Emacs-style commands work in every editor: "
-                        + "Ctrl+A / Ctrl+E line home/end, Ctrl+K kill line, "
-                        + "Ctrl+Y yank, Ctrl+D delete char, Alt+B / Alt+F "
-                        + "word motion, Alt+D kill word, Alt+Backspace, "
-                        + "Ctrl+X Ctrl+S save.\n\n"
-                        + "The VIM toggle (or Ctrl+Alt+V) enables modal "
-                        + "editing: motions h j k l w b e 0 $ gg G, operators "
-                        + "d c y with motions (dd yy cc dw x D C), p P paste, "
-                        + "u undo, v visual selection, and :w to save. The "
-                        + "mode shows in the pane header.\n\n"
-                        + "Keyboard: Ctrl+S save · Ctrl+Enter run · Esc close "
-                        + "dialogs / leave vim insert · Tab indents two "
-                        + "spaces.")
+                        + "Keybindings: the Keymap combo switches the editor "
+                        + "between VS Code (native — default), Emacs "
+                        + "(Ctrl+A/E line home/end, Ctrl+K kill, Ctrl+Y "
+                        + "yank, Ctrl+D delete, Alt+B/F word motion, Alt+D "
+                        + "kill word, Ctrl+X Ctrl+S save), Vim (modal — "
+                        + "starts enabled: h j k l w b e 0 $ gg G, d c y "
+                        + "operators, p P, u undo, v visual, :w save) and "
+                        + "Readline (Emacs set plus Ctrl+U kill-to-line-start "
+                        + "and Ctrl+W kill-word-back). The VIM toggle "
+                        + "(Ctrl+Alt+V) overlays vim mode on any scheme.\n\n"
+                        + "Tab indents two spaces · Shift+Tab dedents · "
+                        + "Ctrl+S save · Ctrl+Enter run · Esc closes dialogs "
+                        + "or leaves vim insert.")
                 }
             }
         }

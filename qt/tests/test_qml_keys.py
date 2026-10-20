@@ -142,7 +142,8 @@ def _html(root):
 
 def test_plain_typing_and_emacs(editor):
     ed = editor
-    ta, root = ed["ta"], ed["root"]
+    ta, root, bridge = ed["ta"], ed["root"], ed["bridge"]
+    bridge.set_keymap("emacs")       # this test exercises the emacs layer
     _type(ed, "hello brave world")
     assert _html(root) == "hello brave world"
     assert ta.property("cursorPosition") == 17
@@ -272,3 +273,84 @@ def test_pending_state_transitions(editor):
     assert root.property("pendingOp") == ""
     _key(ed, Qt.Key_I)
     assert root.property("vimMode") == "insert"
+
+
+# ------------------------------------------------------- keybinding schemes
+
+def test_default_keymap_is_vscode(editor):
+    ed = editor
+    ta, root, bridge = ed["ta"], ed["root"], ed["bridge"]
+    assert root.property("keymap") == "vscode"
+    assert root.property("vimEnabled") is False
+    _type(ed, "hello")
+    # vscode: Ctrl+A is SELECT ALL, not emacs line-home
+    _key(ed, Qt.Key_A, Qt.ControlModifier)
+    assert ta.property("selectionStart") != ta.property("selectionEnd")
+
+
+def test_emacs_keymap_line_home(editor):
+    ed = editor
+    ta, root, bridge = ed["ta"], ed["root"], ed["bridge"]
+    bridge.set_keymap("emacs")
+    assert root.property("keymap") == "emacs"
+    _type(ed, "hello")
+    _key(ed, Qt.Key_A, Qt.ControlModifier)
+    assert ta.property("cursorPosition") == 0      # line home
+    assert ta.property("selectionStart") == ta.property("selectionEnd")
+    # switching back to vscode disables the emacs bindings
+    bridge.set_keymap("vscode")
+    _key(ed, Qt.Key_E, Qt.ControlModifier)
+    assert ta.property("cursorPosition") == 0      # select-all, not line end
+
+
+def test_readline_kill_to_start_and_word(editor):
+    ed = editor
+    ta, root, bridge = ed["ta"], ed["root"], ed["bridge"]
+    bridge.set_keymap("readline")
+    _type(ed, "keep drop this")
+    _key(ed, Qt.Key_U, Qt.ControlModifier)         # kill to line start
+    assert _html(root) == ""
+    _key(ed, Qt.Key_Y, Qt.ControlModifier)         # yank it back
+    assert _html(root) == "keep drop this"
+    _key(ed, Qt.Key_W, Qt.ControlModifier)         # kill word backward
+    assert _html(root) == "keep drop "
+
+
+def test_vim_keymap_starts_in_vim(editor):
+    ed = editor
+    ta, root, bridge = ed["ta"], ed["root"], ed["bridge"]
+    _type(ed, "alpha beta")
+    bridge.set_keymap("vim")
+    assert root.property("vimEnabled") is True
+    assert root.property("vimMode") == "normal"
+    _key(ed, Qt.Key_B)
+    _key(ed, Qt.Key_B)               # onto the first word (cursor was at end)
+    _key(ed, Qt.Key_D)
+    _key(ed, Qt.Key_W)
+    assert _html(root) == "beta"
+    # leaving the scheme drops out of vim mode
+    bridge.set_keymap("vscode")
+    assert root.property("vimEnabled") is False
+    # bad schemes are ignored
+    bridge.set_keymap("joe")
+    assert root.property("keymap") == "vscode"
+    assert bridge.keymap == "vscode"
+
+
+def test_keymap_persists(editor):
+    ed = editor
+    bridge, con = ed["bridge"], ed["con"]
+    bridge.set_keymap("readline")
+    from fengrid.core import settings
+    assert settings.get(con, "editor_keymap") == "readline"
+
+
+def test_shift_tab_dedents(editor):
+    ed = editor
+    ta, root = ed["ta"], ed["root"]
+    _type(ed, "    indented\nplain")
+    ta.setProperty("cursorPosition", 0)
+    _key(ed, Qt.Key_Backtab)
+    assert _html(root) == "  indented\nplain"
+    _key(ed, Qt.Key_Backtab)
+    assert _html(root) == "indented\nplain"
