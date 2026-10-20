@@ -21,6 +21,22 @@ Item {
     property string previewDoc: ""
     property bool previewActive: false
 
+    // IDE command layer state (0.x port) — emacs bindings always on for
+    // plain editing; the vim toggle adds modal normal/insert/visual
+    property bool vimEnabled: false
+    property string vimMode: "normal"     // normal | insert | visual
+    property string pendingOp: ""         // d/c/y operator or ':' ex prefix
+    property string pendingCount: ""      // count digits before a motion
+    property bool pendingG: false         // 'g' seen, awaiting second 'g'
+    property int vimAnchor: -1            // visual-mode anchor
+    property int colGoal: -1              // j/k column memory
+    property var killRing: []
+    property bool emacsChord: false       // Ctrl-X seen, awaiting second key
+    // vim 'u' undo: programmatic .text writes do NOT feed Qt's undo stack
+    // (the 0.x leaned on execCommand('undo'), which had the same hole), so
+    // the command layer keeps its own snapshots
+    property var undoStack: []
+
     // syntax token colors — same roles as the 0.x .tk-* classes
     readonly property var tkColors: ({
         "t": theme.tokens.accent,     // tags
@@ -74,6 +90,8 @@ Item {
         editors[currentPane] = edTa.text
         currentPane = lang
         edTa.text = editors[lang]
+        vimAnchor = -1
+        colGoal = -1
         refreshHighlight()
         dirty = true
     }
@@ -85,7 +103,179 @@ Item {
         for (i = 0; i < pos && i < t.length; i++)
             if (t[i] === "\n")
                 line++
-        return line + ":" + (pos - t.lastIndexOf("\n", pos - 1))
+        var col = pos - t.lastIndexOf("\n", pos - 1) - 1
+        if (!vimEnabled)
+            return line + ":" + col
+        var s = "-- " + vimMode.toUpperCase() + " --  " + line + ":" + col
+        if (pendingOp !== "")
+            s = (pendingOp + pendingCount) + "  " + s
+        else if (pendingCount !== "")
+            s = pendingCount + "  " + s
+        else if (pendingG)
+            s = "g  " + s
+        return s
+    }
+
+    // ---- IDE command layer (0.x code.html port). Two 0.x bugs are fixed
+    // here: 'gg' works (separate pendingG state — 0.x reused pendingOp, so
+    // the generic operator path ate the second 'g'), and ':' actually
+    // reaches the ex handler (0.x had no case that set it).
+    function lineBounds(v, pos) {
+        var ls = v.lastIndexOf("\n", pos - 1) + 1
+        var le = v.indexOf("\n", pos)
+        if (le === -1) le = v.length
+        return [ls, le]
+    }
+    function wCls(ch) {
+        return /\s/.test(ch) ? 0 : /[A-Za-z0-9_]/.test(ch) ? 1 : 2
+    }
+    function nextWordStart(v, pos) {
+        var i = pos, n = v.length
+        if (i >= n) return n
+        var cur = wCls(v[i])
+        while (i < n && wCls(v[i]) === cur) i++
+        while (i < n && /\s/.test(v[i])) i++
+        return i
+    }
+    function prevWordStart(v, pos) {
+        var i = pos - 1
+        while (i > 0 && /\s/.test(v[i])) i--
+        if (i <= 0) return 0
+        var cur = wCls(v[i])
+        while (i > 0 && wCls(v[i - 1]) === cur) i--
+        return i
+    }
+    function nextWordEnd(v, pos) {
+        var i = pos + 1, n = v.length
+        while (i < n && /\s/.test(v[i])) i++
+        if (i >= n) return n
+        var cur = wCls(v[i])
+        while (i + 1 < n && wCls(v[i + 1]) === cur) i++
+        return i
+    }
+    function lineStarts(v) {
+        var arr = [0]
+        for (var i = 0; i < v.length; i++)
+            if (v[i] === "\n") arr.push(i + 1)
+        return arr
+    }
+    function taSet(start, end, val) {
+        if (val !== undefined) edTa.text = val
+        if (start > end) { var t = start; start = end; end = t }
+        if (start === end) edTa.cursorPosition = start
+        else edTa.select(start, end)
+    }
+    function pushUndo() {
+        undoStack.push({ t: edTa.text, p: edTa.cursorPosition })
+        if (undoStack.length > 200)
+            undoStack.shift()
+    }
+    function deleteRange(a, b, yank) {
+        var v = edTa.text
+        if (a > b) { var t = a; a = b; b = t }
+        if (a === b) return
+        pushUndo()
+        if (yank) killRing.push(v.slice(a, b))
+        edTa.text = v.slice(0, a) + v.slice(b)
+        edTa.cursorPosition = a
+    }
+    function deleteSelection(yank) {
+        var a = edTa.selectionStart, b = edTa.selectionEnd
+        vimMode = "normal"
+        vimAnchor = -1
+        if (a === b) return
+        pushUndo()
+        if (yank) killRing.push(edTa.text.slice(a, b))
+        edTa.text = edTa.text.slice(0, a) + edTa.text.slice(b)
+        edTa.cursorPosition = a
+    }
+    function yankSelection() {
+        var a = edTa.selectionStart, b = edTa.selectionEnd
+        if (a !== b) killRing.push(edTa.text.slice(a, b))
+        vimMode = "normal"
+        vimAnchor = -1
+        edTa.cursorPosition = a
+    }
+    function moveVert(dir, selecting) {
+        var v = edTa.text, pos = edTa.cursorPosition
+        var starts = lineStarts(v), li = 0
+        while (li + 1 < starts.length && starts[li + 1] <= pos) li++
+        var col = pos - starts[li]
+        if (colGoal >= 0 && colGoal > col) col = Math.min(colGoal, col)
+        var nl = li + dir
+        if (nl < 0 || nl >= starts.length) {
+            colGoal = -1
+            var end = dir > 0 ? v.length : 0
+            taSet(selecting ? Math.min(end, vimAnchor) : end,
+                  selecting ? Math.max(end, vimAnchor) : end)
+            return
+        }
+        colGoal = col
+        var le = nl + 1 < starts.length ? starts[nl + 1] - 1 : v.length
+        var p = starts[nl] + Math.min(col, le - starts[nl])
+        taSet(selecting ? Math.min(p, vimAnchor) : p,
+              selecting ? Math.max(p, vimAnchor) : p)
+    }
+    function opTarget(op, motion) {
+        // [start, end, linewise] for operator+motion, or null
+        var v = edTa.text, pos = edTa.cursorPosition
+        var lb = lineBounds(v, pos)
+        var linewise = false, end = pos, start = pos
+        if (motion === "w") { start = pos; end = nextWordStart(v, pos) }
+        else if (motion === "b") { start = prevWordStart(v, pos); end = pos }
+        else if (motion === "e") { start = pos; end = Math.min(nextWordEnd(v, pos) + 1, v.length) }
+        else if (motion === "0") { start = lb[0]; end = pos }
+        else if (motion === "$") { start = pos; end = lb[1] }
+        else if (motion === "j" || motion === "k") {
+            linewise = true
+            var starts = lineStarts(v), li = 0
+            while (li + 1 < starts.length && starts[li + 1] <= pos) li++
+            var nl = li + (motion === "j" ? 1 : -1)
+            if (nl < 0) nl = 0
+            if (nl >= starts.length) nl = starts.length - 1
+            start = starts[li]
+            end = nl + 1 < starts.length ? starts[nl + 1] : v.length
+        } else if (motion === "d") {
+            linewise = true
+            start = lb[0]; end = lb[1] + 1
+            if (end > v.length) end = v.length
+        } else return null
+        return [Math.min(start, end), Math.max(start, end), linewise]
+    }
+    function vimDo(op, motion) {
+        var t = opTarget(op, motion)
+        if (!t) return
+        if (op === "d") deleteRange(t[0], t[1], true)
+        else if (op === "y") {
+            killRing.push(edTa.text.slice(t[0], t[1]))
+            edTa.cursorPosition = t[0]
+        } else if (op === "c") {
+            deleteRange(t[0], t[1], true)
+            vimMode = "insert"
+        }
+    }
+    function pasteLine(before) {
+        var v = edTa.text, pos = edTa.cursorPosition
+        if (killRing.length === 0) return
+        pushUndo()
+        var last = killRing[killRing.length - 1]
+        var lb = lineBounds(v, pos)
+        var text = last.slice(-1) === "\n" || last.indexOf("\n") !== -1
+                   ? last : last + "\n"
+        var at = before ? lb[0] : Math.min(lb[1] + 1, v.length)
+        edTa.text = v.slice(0, at) + text + v.slice(at)
+        edTa.cursorPosition = at + text.length
+    }
+    function tabIndent() {
+        var s = edTa.selectionStart, e = edTa.selectionEnd
+        edTa.text = edTa.text.slice(0, s) + "  " + edTa.text.slice(e)
+        edTa.cursorPosition = s + 2
+    }
+    function toggleVim() {
+        vimEnabled = !vimEnabled
+        vimMode = vimEnabled ? "normal" : "insert"
+        pendingOp = ""; pendingCount = ""; pendingG = false
+        vimAnchor = -1; colGoal = -1
     }
 
     function refreshHighlight() {
@@ -439,22 +629,16 @@ Item {
                         }
                     }
                     Rectangle { width: 1; height: 16; color: theme.tokens.border }
-                    // cursor line:col status (vim mode lands in a follow-up)
-                     Text {
+                    // cursor line:col + vim mode — a function binding, so it
+                    // re-evaluates whenever any property it reads changes
+                    // (cursor, text, vim state)
+                    Text {
                         id: posStatus
                         text: codeRoot.cursorStatus()
                         font.family: theme.monoFont
                         font.pixelSize: 10
-                        color: theme.tokens.textMuted
-                        Connections {
-                            target: edTa
-                            function onCursorPositionChanged() {
-                                posStatus.text = codeRoot.cursorStatus()
-                            }
-                            function onTextChanged() {
-                                posStatus.text = codeRoot.cursorStatus()
-                            }
-                        }
+                        color: codeRoot.vimEnabled && codeRoot.vimMode !== "insert"
+                               ? theme.tokens.accent : theme.tokens.textMuted
                     }
                     Item { Layout.fillWidth: true }
                     IconButton {
@@ -578,6 +762,32 @@ Item {
                             leftPadding: 10; rightPadding: 10
                         }
                     }
+                    Button {
+                        id: vimBtn
+                        text: qsTr("VIM")
+                        Layout.preferredHeight: 26
+                        onClicked: codeRoot.toggleVim()
+                        ToolTip.text: qsTr("Vim modal editing (Ctrl+Alt+V)")
+                        ToolTip.visible: hovered
+                        background: Rectangle {
+                            radius: 6
+                            color: codeRoot.vimEnabled ? theme.tokens.accent
+                                                       : theme.tokens.surface2
+                            border.color: codeRoot.vimEnabled
+                                          ? theme.tokens.accent
+                                          : theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: vimBtn.text
+                            color: codeRoot.vimEnabled ? theme.tokens.bg
+                                                       : theme.tokens.textMuted
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 8; rightPadding: 8
+                        }
+                    }
                 }
             }
         }
@@ -588,11 +798,12 @@ Item {
             Layout.fillHeight: true
             orientation: Qt.Horizontal
 
+            // static themed handle — reading SplitView.hovered/pressed INSIDE
+            // the handle delegate trips Qt's "attached properties must be
+            // accessed through a direct child" warning and never resolves
             handle: Rectangle {
-                color: SplitView.hovered ? theme.tokens.accent
-                                         : theme.tokens.border
-                width: SplitView.pressed ? 3 : 1
-                Behavior on width { NumberAnimation { duration: 80 } }
+                color: theme.tokens.border
+                width: 1
             }
 
             // ---- editor
@@ -634,12 +845,317 @@ Item {
                             dirty = true
                             refreshHighlight()
                         }
-                        Keys.onTabPressed: function (event) {
-                            // two-space indent, 0.x behaviour
-                            var s = selectionStart, e = selectionEnd
-                            text = text.slice(0, s) + "  " + text.slice(e)
-                            cursorPosition = s + 2
-                            event.accepted = true
+                        Keys.onPressed: function (event) {
+                            var v = text, pos = cursorPosition
+                            var mod = event.modifiers
+                                      & (Qt.ControlModifier | Qt.MetaModifier)
+                            var shift = event.modifiers & Qt.ShiftModifier
+                            var alt = event.modifiers & Qt.AltModifier
+                            var root = codeRoot
+
+                            // NOTE: the Ctrl+Alt+V vim toggle lives in the
+                            // pane-level Shortcut ONLY — a Keys-level branch
+                            // here would fire in ADDITION to the shortcut
+                            // (both see the same event) and double-toggle.
+
+                            if (!root.vimEnabled) {
+                                // ---- emacs-style bindings (0.x: always on)
+                                if (mod && !shift && event.key === Qt.Key_X) {
+                                    root.emacsChord = true
+                                    event.accepted = true
+                                    return
+                                }
+                                if (root.emacsChord) {
+                                    root.emacsChord = false
+                                    if (mod && event.key === Qt.Key_S) {
+                                        event.accepted = true
+                                        root.saveSnippet()
+                                    }
+                                    return
+                                }
+                                if (mod && !shift && event.key === Qt.Key_A) {
+                                    event.accepted = true
+                                    cursorPosition = root.lineBounds(v, pos)[0]
+                                    return
+                                }
+                                if (mod && !shift && event.key === Qt.Key_E) {
+                                    event.accepted = true
+                                    cursorPosition = root.lineBounds(v, pos)[1]
+                                    return
+                                }
+                                if (mod && !shift && event.key === Qt.Key_K) {
+                                    event.accepted = true
+                                    var lbK = root.lineBounds(v, pos)
+                                    root.deleteRange(pos, lbK[1], true)
+                                    return
+                                }
+                                if (mod && !shift && event.key === Qt.Key_Y) {
+                                    event.accepted = true
+                                    if (root.killRing.length > 0) {
+                                        var y = root.killRing[
+                                            root.killRing.length - 1]
+                                        text = v.slice(0, pos) + y + v.slice(pos)
+                                        cursorPosition = pos + y.length
+                                    }
+                                    return
+                                }
+                                if (mod && !shift && event.key === Qt.Key_D) {
+                                    event.accepted = true
+                                    root.deleteRange(pos, Math.min(pos + 1, v.length), false)
+                                    return
+                                }
+                                if (alt && event.key === Qt.Key_B) {
+                                    event.accepted = true
+                                    cursorPosition = root.prevWordStart(v, pos)
+                                    return
+                                }
+                                if (alt && event.key === Qt.Key_F) {
+                                    event.accepted = true
+                                    cursorPosition = root.nextWordStart(v, pos)
+                                    return
+                                }
+                                if (alt && event.key === Qt.Key_D) {
+                                    event.accepted = true
+                                    root.deleteRange(pos, root.nextWordStart(v, pos), true)
+                                    return
+                                }
+                                if (alt && event.key === Qt.Key_Backspace) {
+                                    event.accepted = true
+                                    root.deleteRange(root.prevWordStart(v, pos), pos, true)
+                                    return
+                                }
+                                if (event.key === Qt.Key_Tab) {
+                                    event.accepted = true
+                                    root.tabIndent()
+                                }
+                                return
+                            }
+
+                            // ---- vim modal editing
+                            if (event.key === Qt.Key_Escape) {
+                                event.accepted = true
+                                root.vimMode = "normal"
+                                root.pendingOp = ""; root.pendingCount = ""
+                                root.pendingG = false; root.colGoal = -1
+                                if (cursorPosition > 0 && selectionStart === selectionEnd)
+                                    cursorPosition = cursorPosition - 1
+                                else {
+                                    root.vimAnchor = -1
+                                    select(selectionStart, selectionStart)
+                                }
+                                return
+                            }
+                            if (mod && event.key === Qt.Key_R) {
+                                event.accepted = true
+                                return
+                            }
+                            if (root.vimMode === "insert") {
+                                if (event.key === Qt.Key_Tab) {
+                                    event.accepted = true
+                                    root.tabIndent()
+                                }
+                                return  // default typing
+                            }
+
+                            // NORMAL / VISUAL — nothing types
+                            if (event.text.length === 1
+                                    && event.text.charCodeAt(0) >= 32)
+                                event.accepted = true
+                            var key = event.text
+                            var count = parseInt(root.pendingCount, 10) || 1
+                            var visual = root.vimMode === "visual"
+
+                            function keepSel(fn) {
+                                if (visual) {
+                                    if (root.vimAnchor < 0) root.vimAnchor = pos
+                                    fn()
+                                    var a = root.vimAnchor, b = edTa.cursorPosition
+                                    if (b < a) { var tt = a; a = b; b = tt }
+                                    edTa.select(a, b)
+                                } else fn()
+                            }
+                            function n(fn) {
+                                for (var i2 = 0; i2 < count; i2++) fn()
+                                root.pendingCount = ""
+                            }
+
+                            // digits: count prefix ('0' only continues a count)
+                            if (/^[1-9]$/.test(key)
+                                    || (root.pendingCount !== "" && key === "0")) {
+                                root.pendingCount = root.pendingCount + key
+                                return
+                            }
+                            // ex command — only :w (save) is supported
+                            if (root.pendingOp === ":") {
+                                if (key === "w") {
+                                    root.pendingOp = ""; root.pendingCount = ""
+                                    root.saveSnippet()
+                                } else { root.pendingOp = ""; root.pendingCount = "" }
+                                return
+                            }
+                            if (root.pendingG) {
+                                root.pendingG = false
+                                if (key === "g") keepSel(function () { root.taSet(0, 0) })
+                                return
+                            }
+                            if (root.pendingOp) {
+                                var op = root.pendingOp, mot = key
+                                root.pendingOp = ""
+                                var pc = root.pendingCount
+                                root.pendingCount = ""
+                                for (var rep = 0; rep < (parseInt(pc, 10) || 1); rep++)
+                                    root.vimDo(op, mot)
+                                return
+                            }
+                            if (event.key === Qt.Key_Backspace) {
+                                event.accepted = true
+                                keepSel(function () {
+                                    var p = Math.max(0, edTa.cursorPosition - 1)
+                                    root.taSet(p, p) })
+                                return
+                            }
+                            if (event.key === Qt.Key_Return
+                                    || event.key === Qt.Key_Enter) {
+                                event.accepted = true
+                                keepSel(function () { root.moveVert(1, visual) })
+                                return
+                            }
+
+                            switch (key) {
+                            case "h":
+                                keepSel(function () { n(function () {
+                                    var p = Math.max(0, edTa.cursorPosition - 1)
+                                    root.taSet(p, p) }) })
+                                break
+                            case "l":
+                                keepSel(function () { n(function () {
+                                    var p = Math.min(edTa.text.length,
+                                                     edTa.cursorPosition + 1)
+                                    root.taSet(p, p) }) })
+                                break
+                            case "j":
+                                root.colGoal = -1
+                                keepSel(function () { n(function () {
+                                    root.moveVert(1, visual) }) })
+                                break
+                            case "k":
+                                root.colGoal = -1
+                                keepSel(function () { n(function () {
+                                    root.moveVert(-1, visual) }) })
+                                break
+                            case "w":
+                                keepSel(function () { n(function () {
+                                    var p = root.nextWordStart(edTa.text, edTa.cursorPosition)
+                                    root.taSet(p, p) }) })
+                                break
+                            case "b":
+                                keepSel(function () { n(function () {
+                                    var p = root.prevWordStart(edTa.text, edTa.cursorPosition)
+                                    root.taSet(p, p) }) })
+                                break
+                            case "e":
+                                keepSel(function () { n(function () {
+                                    var p = Math.min(root.nextWordEnd(edTa.text, edTa.cursorPosition),
+                                                     edTa.text.length - 1)
+                                    root.taSet(p, p) }) })
+                                break
+                            case "0":
+                                keepSel(function () {
+                                    var lb0 = root.lineBounds(edTa.text, edTa.cursorPosition)
+                                    root.taSet(lb0[0], lb0[0]) })
+                                break
+                            case "$":
+                                keepSel(function () {
+                                    var lb1 = root.lineBounds(edTa.text, edTa.cursorPosition)
+                                    root.taSet(lb1[1], lb1[1]) })
+                                break
+                            case "g":
+                                root.pendingG = true
+                                break
+                            case "G":
+                                keepSel(function () {
+                                    root.taSet(edTa.text.length, edTa.text.length) })
+                                break
+                            case "x":
+                                if (visual) root.deleteSelection(true)
+                                else n(function () {
+                                    var p = edTa.cursorPosition
+                                    root.deleteRange(p, Math.min(p + 1, edTa.text.length), true) })
+                                break
+                            case "D":
+                                root.deleteRange(edTa.cursorPosition,
+                                                 root.lineBounds(edTa.text, edTa.cursorPosition)[1],
+                                                 true)
+                                break
+                            case "C":
+                                root.deleteRange(edTa.cursorPosition,
+                                                 root.lineBounds(edTa.text, edTa.cursorPosition)[1],
+                                                 true)
+                                root.vimMode = "insert"
+                                break
+                            case "d":
+                                if (visual) root.deleteSelection(true)
+                                else root.pendingOp = "d"
+                                break
+                            case "c":
+                                if (visual) { root.deleteSelection(true); root.vimMode = "insert" }
+                                else root.pendingOp = "c"
+                                break
+                            case "y":
+                                if (visual) root.yankSelection()
+                                else root.pendingOp = "y"
+                                break
+                            case "p": root.pasteLine(false); break
+                            case "P": root.pasteLine(true); break
+                            case "i": root.vimMode = "insert"; break
+                            case "a":
+                                root.vimMode = "insert"
+                                root.taSet(Math.min(pos + 1, edTa.text.length),
+                                           Math.min(pos + 1, edTa.text.length))
+                                break
+                            case "A":
+                                root.vimMode = "insert"
+                                var lbA = root.lineBounds(edTa.text, edTa.cursorPosition)
+                                root.taSet(lbA[1], lbA[1])
+                                break
+                            case "I":
+                                root.vimMode = "insert"
+                                var lbI = root.lineBounds(edTa.text, edTa.cursorPosition)
+                                root.taSet(lbI[0], lbI[0])
+                                break
+                            case "o": {
+                                var lbO = root.lineBounds(edTa.text, edTa.cursorPosition)
+                                root.vimMode = "insert"
+                                var at2 = lbO[1] + 1
+                                root.taSet(at2, at2,
+                                           edTa.text.slice(0, lbO[1]) + "\n"
+                                           + edTa.text.slice(lbO[1]))
+                                break
+                            }
+                            case "O": {
+                                var lbO2 = root.lineBounds(edTa.text, edTa.cursorPosition)
+                                root.vimMode = "insert"
+                                root.taSet(lbO2[0], lbO2[0],
+                                           edTa.text.slice(0, lbO2[0]) + "\n"
+                                           + edTa.text.slice(lbO2[0]))
+                                break
+                            }
+                            case "v":
+                                root.vimMode = "visual"
+                                root.vimAnchor = pos
+                                break
+                            case "u":
+                                if (root.undoStack.length > 0) {
+                                    var snap = root.undoStack.pop()
+                                    edTa.text = snap.t
+                                    edTa.cursorPosition = snap.p
+                                }
+                                root.vimAnchor = -1
+                                break
+                            case ":":
+                                root.pendingOp = ":"
+                                break
+                            }
                         }
                     }
 
@@ -750,8 +1266,19 @@ Item {
                         + "commas allowed) or a massCode db.sqlite. Unmapped "
                         + "languages keep their code in the JS pane with a "
                         + "lang:<name> tag.\n\n"
+                        + "Emacs-style commands work in every editor: "
+                        + "Ctrl+A / Ctrl+E line home/end, Ctrl+K kill line, "
+                        + "Ctrl+Y yank, Ctrl+D delete char, Alt+B / Alt+F "
+                        + "word motion, Alt+D kill word, Alt+Backspace, "
+                        + "Ctrl+X Ctrl+S save.\n\n"
+                        + "The VIM toggle (or Ctrl+Alt+V) enables modal "
+                        + "editing: motions h j k l w b e 0 $ gg G, operators "
+                        + "d c y with motions (dd yy cc dw x D C), p P paste, "
+                        + "u undo, v visual selection, and :w to save. The "
+                        + "mode shows in the pane header.\n\n"
                         + "Keyboard: Ctrl+S save · Ctrl+Enter run · Esc close "
-                        + "dialogs · Tab indents two spaces.")
+                        + "dialogs / leave vim insert · Tab indents two "
+                        + "spaces.")
                 }
             }
         }
@@ -766,5 +1293,10 @@ Item {
         sequence: "Ctrl+Return"
         enabled: codeRoot.visible && previewProfile !== null
         onActivated: codeRoot.runPreview()
+    }
+    Shortcut {
+        sequence: "Ctrl+Alt+V"
+        enabled: codeRoot.visible
+        onActivated: codeRoot.toggleVim()
     }
 }
