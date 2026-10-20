@@ -82,6 +82,9 @@ Item {
                 text: pick.displayText
                 font.family: theme.monoFont; font.pixelSize: 10
                 color: theme.tokens.text
+                // elide inside the combo — long labels (file names like
+                // "Bebas Neue-Regular.ttf") clipped mid-glyph at the edge
+                elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter; leftPadding: 6
             }
         }

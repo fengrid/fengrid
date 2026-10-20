@@ -262,6 +262,7 @@ Item {
                     color: theme.tokens.text
                 }
                 Text {
+                    id: famName
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 6
                     anchors.left: parent.left
@@ -270,10 +271,13 @@ Item {
                     font.family: theme.monoFont
                     font.pixelSize: 10
                     color: theme.tokens.textMuted
-                    width: parent.width - 20
+                    // stop before the files·weights label — the old
+                    // full-card width let long family names run UNDER it
+                    width: parent.width - 20 - famMeta.implicitWidth - 6
                     elide: Text.ElideRight
                 }
                 Text {
+                    id: famMeta
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 6
                     anchors.right: parent.right

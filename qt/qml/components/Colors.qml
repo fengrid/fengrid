@@ -98,7 +98,7 @@ Item {
 
             Button {
                 id: genBtn
-                text: qsTr("Generate  ␣")
+                text: qsTr("Generate (space)")
                 onClicked: colors !== null && colors.generate()
                 background: Rectangle {
                     radius: 6
@@ -294,8 +294,10 @@ Item {
                 anchors.topMargin: 8
                 anchors.left: parent.left
                 anchors.leftMargin: 8
-                anchors.right: parent.right
-                anchors.rightMargin: 8
+                // stop before the delete button — the chip run used to slide
+                // under the trash and clip flush at the card edge
+                anchors.right: delBtn.left
+                anchors.rightMargin: 2
                 height: 20
                 spacing: 2
                 Repeater {
