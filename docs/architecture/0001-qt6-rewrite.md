@@ -310,6 +310,42 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, M5 updater: `core/updater.py` — release probe via the GitHub
+  releases API over urllib (no external binary on end-user machines), with
+  the 0.x `git ls-remote --tags` probe kept as the fallback; pure parsing
+  helpers (`parse_version`, `is_newer` — '0.3.0.dev0' compares as 0.3.0,
+  a dev suffix never counts as newer; `parse_ls_remote` skips peeled
+  `^{}` lines and non-version tags). `bridges/updater.py` probes on a
+  daemon thread (a blocked socket must not freeze the UI) and reports
+  through queued signals; auto-check 4 s after startup, DISABLED under
+  offscreen/screenshot QA so the gate never touches the network. Footer
+  version text flips to an amber "update available: vX — click to open"
+  that opens the releases page; clicking the plain version re-checks.
+  QA gate: 51 tests + clean dark/light renders.
+- 2026-10-20, M4 projects pane: `core/projects.py` — full port of the 0.x
+  configurator export adapted to the Qt data model (attached assets are
+  rows of the indexed `asset` table rather than install-tree files):
+  tokens.css (six roles falling back positionally to the first attached
+  palette, then to the 0.x dark defaults; radius; modular type scale;
+  font stacks), fonts.css @font-face set, icons.css classes + icons.js
+  name map, the boilerplate index.html driven entirely by the tokens,
+  snippet pages, palettes.json, manifest.json, README — as zip OR tar.gz.
+  `build_site_html(inline_css=True)` is the SAME generator for the live
+  preview, so preview and export cannot drift; attached icon/font urls
+  are rewritten to absolute fengrid-asset:// paths (the scheme allowlists
+  exactly the scan index). Schema: `projects` + `project_asset`
+  (UNIQUE(project_id, asset_kind, asset_id), FK ON DELETE CASCADE — the
+  0.x (type,key) join model kept, rows instead of keys). Bridge: CRUD,
+  search, per-key settings setter, positional palette→roles assignment,
+  picker slots (icons/fonts/snippets/palettes/families read from the same
+  index the other panes use). QML: sidebar + four parameter areas + assets
+  strip + preview split. QML lessons recorded: inline `component` blocks
+  must be declared INSIDE the root object (outside breaks the parser with
+  a misleading "Expected token `)'" far away), and QML JS does NOT
+  auto-concatenate adjacent string literals (needs explicit `+`).
+  Vision pass caught a real horizontal overflow in the params column
+  (fixed with explicit Layout widths); re-verified clean.
+  QA gate: 46 tests + clean dark/light renders.
 - 2026-10-20, M3 code pane (snippets + playground): schema (`snippet` table
   in db.py SCHEMA), `core/snippets.py` (1:1 port of snippet_import.py —
   JSONC stripper, language map with ≥3-char prefix constraint so short keys
