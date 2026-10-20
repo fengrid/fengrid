@@ -28,13 +28,14 @@ QtObject {
         "help": "<circle cx='12' cy='12' r='10'/><path d='M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3'/><line x1='12' y1='17' x2='12.01' y2='17'/>",
         "play": "<polygon points='5 3 19 12 5 21 5 3'/>",
         "upload": "<path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='17 8 12 3 7 8'/><line x1='12' y1='3' x2='12' y2='15'/>",
-        "code": "<polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/>"
+        "code": "<polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/>",
+        "star": "<polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/>"
     })
 
-    function url(name, color) {
+    function url(name, color, fill) {
         var body = _paths[name] || "";
         var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'" +
-                  " viewBox='0 0 24 24' fill='none' stroke='" + color + "'" +
+                  " viewBox='0 0 24 24' fill='" + (fill || "none") + "' stroke='" + color + "'" +
                   " stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>" +
                   body + "</svg>";
         return "data:image/svg+xml;utf8," + encodeURIComponent(svg);

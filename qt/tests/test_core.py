@@ -657,6 +657,95 @@ def test_project_tokens_and_export(lib, tmp_path):
         assert "css/tokens.css" in t.getnames()
 
 
+# --------------------------------------------------------------------- stars
+
+def _seed_asset(con, tmp_path, name="mark.svg"):
+    icon = tmp_path / "icons" / name
+    icon.parent.mkdir(parents=True, exist_ok=True)
+    icon.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    con.execute("INSERT OR IGNORE INTO source (id, kind, path, label)"
+                " VALUES (1, 'folder', '/tmp/seed', 'seed')")
+    return con.execute(
+        "INSERT INTO asset (source_id, kind, path, name, ext)"
+        " VALUES (1, 'icon', ?, ?, 'svg')", (str(icon), name)).lastrowid
+
+
+def test_starred_defaults_exist():
+    con = db.connect(":memory:")
+    try:
+        tags = [r["name"] for r in con.execute("SELECT name FROM tag")]
+        colls = [r["name"] for r in con.execute("SELECT name FROM collection")]
+        assert "starred" in tags
+        assert "Starred Assets" in colls
+    finally:
+        con.close()
+
+
+def test_star_toggles_tag_and_collection(lib, tmp_path):
+    aid = _seed_asset(lib, tmp_path)
+    assert db.is_starred(lib, aid) is False
+
+    db.set_starred(lib, aid, True)
+    assert db.is_starred(lib, aid) is True
+    tags = {r["name"] for r in lib.execute(
+        "SELECT t.name FROM tag t JOIN asset_tag at ON at.tag_id = t.id"
+        " WHERE at.asset_id = ?", (aid,))}
+    assert "starred" in tags
+    colls = {r["name"] for r in lib.execute(
+        "SELECT c.name FROM collection c JOIN collection_item ci"
+        " ON ci.collection_id = c.id WHERE ci.asset_id = ?", (aid,))}
+    assert "Starred Assets" in colls
+
+    db.set_starred(lib, aid, False)
+    assert db.is_starred(lib, aid) is False
+    assert lib.execute("SELECT COUNT(*) c FROM collection_item"
+                       " WHERE asset_id = ?", (aid,)).fetchone()["c"] == 0
+    # the default tag/collection rows survive an unstar
+    assert lib.execute("SELECT COUNT(*) c FROM tag WHERE name = 'starred'"
+                       ).fetchone()["c"] == 1
+    assert lib.execute("SELECT COUNT(*) c FROM collection"
+                       " WHERE name = 'Starred Assets'").fetchone()["c"] == 1
+
+
+def test_star_recreates_deleted_defaults(lib, tmp_path):
+    aid = _seed_asset(lib, tmp_path, "second.svg")
+    lib.execute("DELETE FROM tag WHERE name = 'starred'")
+    lib.execute("DELETE FROM collection WHERE name = 'Starred Assets'")
+    lib.commit()
+    db.set_starred(lib, aid, True)          # must re-create both
+    assert db.is_starred(lib, aid) is True
+    assert lib.execute("SELECT COUNT(*) c FROM collection_item"
+                       " WHERE asset_id = ?", (aid,)).fetchone()["c"] == 1
+
+
+def test_star_is_idempotent(lib, tmp_path):
+    aid = _seed_asset(lib, tmp_path, "third.svg")
+    db.set_starred(lib, aid, True)
+    db.set_starred(lib, aid, True)
+    assert lib.execute("SELECT COUNT(*) c FROM asset_tag WHERE asset_id = ?",
+                       (aid,)).fetchone()["c"] == 1
+    assert lib.execute("SELECT COUNT(*) c FROM collection_item"
+                       " WHERE asset_id = ?", (aid,)).fetchone()["c"] == 1
+
+
+def test_starred_role_in_model_rows(lib, tmp_path):
+    """The grid model's `starred` role reflects the DB, before and after."""
+    aid = _seed_asset(lib, tmp_path, "roled.svg")
+    rows = lib.execute("SELECT EXISTS("
+                       " SELECT 1 FROM asset_tag sat JOIN tag st"
+                       " ON st.id = sat.tag_id WHERE sat.asset_id = a.id"
+                       " AND st.name = 'starred') AS starred FROM asset a"
+                       " WHERE a.id = ?", (aid,)).fetchone()
+    assert rows["starred"] == 0
+    db.set_starred(lib, aid, True)
+    rows = lib.execute("SELECT EXISTS("
+                       " SELECT 1 FROM asset_tag sat JOIN tag st"
+                       " ON st.id = sat.tag_id WHERE sat.asset_id = a.id"
+                       " AND st.name = 'starred') AS starred FROM asset a"
+                       " WHERE a.id = ?", (aid,)).fetchone()
+    assert rows["starred"] == 1
+
+
 # -------------------------------------------------------------------- updater
 
 from fengrid.core import updater as upd

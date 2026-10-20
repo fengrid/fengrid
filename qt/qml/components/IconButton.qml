@@ -8,14 +8,18 @@ ToolButton {
     id: btn
     property string icon_name: ""
     property int icon_px: 16
+    // active = a persistent on-state (e.g. the star toggle) — renders in the
+    // lit-pane amber, which the palette reserves for selection states
+    property bool active: false
     icon.width: 0
     icon.height: 0
     implicitWidth: 30
     implicitHeight: 30
     contentItem: IconImage {
         name: btn.icon_name
-        tint: btn.hovered || btn.pressed ? theme.tokens.text
-                                         : theme.tokens.textMuted
+        tint: btn.active ? theme.tokens.litPane
+                         : (btn.hovered || btn.pressed ? theme.tokens.text
+                                                       : theme.tokens.textMuted)
         px: btn.icon_px
         anchors.centerIn: parent
     }

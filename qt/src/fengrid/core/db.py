@@ -163,6 +163,62 @@ def _migrate(con: sqlite3.Connection) -> None:
     con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
 
 
+STARRED_TAG = "starred"
+STARRED_COLLECTION = "Starred Assets"
+
+
+def ensure_defaults(con: sqlite3.Connection) -> None:
+    """The 'starred' tag and 'Starred Assets' collection exist from the
+    first launch (idempotent — INSERT OR IGNORE on the unique names)."""
+    con.execute("INSERT OR IGNORE INTO tag(name) VALUES (?)", (STARRED_TAG,))
+    con.execute("INSERT OR IGNORE INTO collection(name) VALUES (?)",
+                (STARRED_COLLECTION,))
+
+
+def _starred_ids(con: sqlite3.Connection) -> tuple[int, int]:
+    """(tag_id, collection_id), re-created when a user deleted either —
+    starring must always work."""
+    tag = con.execute("SELECT id FROM tag WHERE name = ?",
+                      (STARRED_TAG,)).fetchone()
+    coll = con.execute("SELECT id FROM collection WHERE name = ?",
+                       (STARRED_COLLECTION,)).fetchone()
+    tid = tag["id"] if tag else con.execute(
+        "INSERT INTO tag(name) VALUES (?)", (STARRED_TAG,)).lastrowid
+    cid = coll["id"] if coll else con.execute(
+        "INSERT INTO collection(name) VALUES (?)",
+        (STARRED_COLLECTION,)).lastrowid
+    return tid, cid
+
+
+def set_starred(con: sqlite3.Connection, asset_id: int, starred: bool) -> None:
+    """Star/unstar one asset: toggles the 'starred' tag AND membership in
+    the 'Starred Assets' collection — one action, two side effects, so the
+    tag filter and the collection navigator always agree."""
+    tid, cid = _starred_ids(con)
+    if starred:
+        con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
+                    " VALUES (?, ?)", (asset_id, tid))
+        con.execute(
+            "INSERT OR IGNORE INTO collection_item(collection_id, asset_id,"
+            " position) VALUES (?, ?, COALESCE((SELECT MAX(position) + 1"
+            " FROM collection_item WHERE collection_id = ?), 0))",
+            (cid, asset_id, cid))
+    else:
+        con.execute("DELETE FROM asset_tag WHERE asset_id = ? AND tag_id = ?",
+                    (asset_id, tid))
+        con.execute("DELETE FROM collection_item WHERE collection_id = ?"
+                    " AND asset_id = ?", (cid, asset_id))
+    con.commit()
+
+
+def is_starred(con: sqlite3.Connection, asset_id: int) -> bool:
+    row = con.execute(
+        "SELECT 1 FROM asset_tag at JOIN tag t ON t.id = at.tag_id"
+        " WHERE at.asset_id = ? AND t.name = ?", (asset_id, STARRED_TAG),
+    ).fetchone()
+    return row is not None
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     """Open (and initialise) the library database. WAL + foreign keys on."""
     con = sqlite3.connect(str(path))
@@ -171,6 +227,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
     _migrate(con)
+    ensure_defaults(con)
     has_fts = True
     try:
         con.executescript(FTS_SCHEMA)

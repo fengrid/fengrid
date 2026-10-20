@@ -257,6 +257,39 @@ Rectangle {
             spacing: 8
             Layout.fillWidth: true
             Button {
+                id: starBtn
+                implicitWidth: 36
+                implicitHeight: 30
+                enabled: panel.index >= 0
+                onClicked: library.set_starred(
+                    panel.index, !(d && d.starred))
+                ToolTip.visible: hovered
+                ToolTip.delay: 400
+                ToolTip.text: (d && d.starred)
+                    ? qsTr("Unstar — removes the 'starred' tag and pulls the asset out of Starred Assets")
+                    : qsTr("Star — tags the asset and adds it to Starred Assets")
+                background: Rectangle {
+                    radius: 6
+                    color: starBtn.hovered ? theme.tokens.surface2
+                                           : "transparent"
+                    border.color: theme.tokens.border
+                }
+                contentItem: Item {
+                    Image {
+                        anchors.centerIn: parent
+                        width: 16
+                        height: 16
+                        sourceSize.width: 32
+                        sourceSize.height: 32
+                        source: Icons.url(
+                            "star",
+                            d && d.starred ? theme.tokens.litPane
+                                           : theme.tokens.textMuted,
+                            d && d.starred ? theme.tokens.litPane : "none")
+                    }
+                }
+            }
+            Button {
                 id: copyBtn
                 Layout.fillWidth: true
                 implicitHeight: 30

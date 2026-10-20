@@ -60,6 +60,20 @@ Item {
                     px: Math.min(28, gridRoot.iconPx)
                     tint: theme.tokens.textMuted
                 }
+                // starred badge — filled star, top-right of the card
+                Image {
+                    id: starBadge
+                    visible: model.starred === true || model.starred === 1
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 5
+                    width: 13
+                    height: 13
+                    sourceSize.width: 26
+                    sourceSize.height: 26
+                    source: Icons.url("star", theme.tokens.litPane,
+                                      theme.tokens.litPane)
+                }
                 Text {
                     id: cardLabel
                     anchors.bottom: parent.bottom
@@ -80,12 +94,141 @@ Item {
                     id: cardMa
                     anchors.fill: parent
                     hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
+                    onClicked: function (mouse) {
                         grid.currentIndex = index
                         grid.forceActiveFocus()
+                        if (mouse.button === Qt.RightButton)
+                            cardMenu.popup()
                     }
                     onDoubleClicked: library.copy_name(index)
+                }
+            }
+        }
+
+        // right-click context menu for the selected asset
+        Menu {
+            id: cardMenu
+            width: 210
+            padding: 4
+
+            background: Rectangle {
+                radius: 8
+                color: theme.tokens.surface
+                border.color: theme.tokens.border
+            }
+
+            onOpened: {
+                var st = library.is_starred(grid.currentIndex)
+                starItem.starred = st
+                starItem.text = st ? qsTr("Unstar") : qsTr("Star")
+            }
+
+            MenuItem {
+                id: starItem
+                property bool starred: false
+                height: 30
+                onTriggered: library.set_starred(grid.currentIndex, !starred)
+                contentItem: Text {
+                    text: starItem.text
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    color: starItem.starred ? theme.tokens.textMuted
+                                            : theme.tokens.hlInk
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 10
+                }
+                background: Rectangle {
+                    color: starItem.hovered ? theme.tokens.surface2
+                                            : "transparent"
+                    radius: 5
+                }
+            }
+            MenuSeparator {
+                topPadding: 3
+                bottomPadding: 3
+                contentItem: Rectangle {
+                    implicitHeight: 1
+                    color: theme.tokens.border
+                }
+            }
+            MenuItem {
+                id: copyItem
+                text: qsTr("Copy name")
+                height: 30
+                onTriggered: library.copy_name(grid.currentIndex)
+                contentItem: Text {
+                    text: copyItem.text
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    color: theme.tokens.text
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 10
+                }
+                background: Rectangle {
+                    color: copyItem.hovered ? theme.tokens.surface2
+                                            : "transparent"
+                    radius: 5
+                }
+            }
+            MenuItem {
+                id: collMenuItem
+                text: qsTr("Add to collection")
+                height: 30
+                enabled: library !== null && library.collections.length > 0
+                contentItem: Text {
+                    text: collMenuItem.text
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    color: theme.tokens.text
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 10
+                }
+                background: Rectangle {
+                    color: collMenuItem.hovered ? theme.tokens.surface2
+                                                : "transparent"
+                    radius: 5
+                }
+                onHoveredChanged: if (hovered) collSubmenu.popup(
+                                      collMenuItem, collMenuItem.width, 0)
+                onClicked: collSubmenu.popup(
+                               collMenuItem, collMenuItem.width, 0)
+
+                Menu {
+                    id: collSubmenu
+                    width: 190
+                    padding: 4
+                    background: Rectangle {
+                        radius: 8
+                        color: theme.tokens.surface
+                        border.color: theme.tokens.border
+                    }
+                    Repeater {
+                        model: library !== null ? library.collections : []
+                        MenuItem {
+                            id: collItem
+                            required property var modelData
+                            text: collItem.modelData.name
+                            height: 28
+                            onTriggered: library.add_to_collection(
+                                grid.currentIndex, collItem.modelData.id)
+                            contentItem: Text {
+                                text: collItem.modelData.name
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 10
+                            }
+                            background: Rectangle {
+                                color: collItem.hovered
+                                       ? theme.tokens.surface2 : "transparent"
+                                radius: 5
+                            }
+                        }
+                    }
                 }
             }
         }

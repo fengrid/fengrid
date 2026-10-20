@@ -32,10 +32,10 @@ from ..core.export import ExportError
 # named `theme` shadowed the Theme bridge inside grid delegates, so token
 # bindings resolved against a plain theme string instead of the bridge.
 _ROLE_NAMES = ("name", "path", "assetTheme", "context", "ext", "sizePx",
-               "width", "height", "mono", "bytes", "id")
+               "width", "height", "mono", "bytes", "id", "starred")
 # row-dict keys backing each role (the assetTheme role reads the `theme` key)
 _ROLE_KEYS = ("name", "path", "theme", "context", "ext", "sizePx",
-              "width", "height", "mono", "bytes", "id")
+              "width", "height", "mono", "bytes", "id", "starred")
 
 _MAX_FILTER_ROWS = 20000
 
@@ -274,11 +274,34 @@ class Library(QObject):
         d = dict(row)
         d["tags"] = core_db.tags_for(self._con, row["id"])
         d["variants"] = core_db.variants_for(self._con, row["id"])
+        d["starred"] = core_db.is_starred(self._con, row["id"])
         return d
 
     @Slot(int, result=int)
     def row_of_asset(self, asset_id: int) -> int:
         return self._index_by_id.get(int(asset_id), -1)
+
+    # ------------------------------------------------------------ starring
+    @Slot(int, result=bool)
+    def is_starred(self, index: int) -> bool:
+        row = self._model.row(index)
+        if not row:
+            return False
+        return core_db.is_starred(self._con, row["id"])
+
+    @Slot(int, bool)
+    def set_starred(self, index: int, starred: bool) -> None:
+        row = self._model.row(index)
+        if not row:
+            return
+        core_db.set_starred(self._con, row["id"], bool(starred))
+        self._refresh_lists()
+        self.tagsRevision.emit()
+        self._apply_filters()
+        if starred:
+            self.message.emit(f"Starred '{row['name']}' — added to Starred Assets")
+        else:
+            self.message.emit(f"Unstarred '{row['name']}'")
 
     @Slot(int, str)
     def add_tag(self, index: int, name: str) -> None:
@@ -475,7 +498,12 @@ class Library(QObject):
 
     def _apply_filters(self) -> None:
         con = self._con
-        sql = ["SELECT a.* FROM asset a"]
+        # `starred` rides along as a computed role so card badges and the
+        # context menu need no extra query per delegate
+        sql = ["SELECT a.*, EXISTS("
+               " SELECT 1 FROM asset_tag sat JOIN tag st ON st.id = sat.tag_id"
+               " WHERE sat.asset_id = a.id AND st.name = 'starred')"
+               " AS starred FROM asset a"]
         where: list[str] = []
         params: list = []
 
