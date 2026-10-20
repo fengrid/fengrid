@@ -36,6 +36,8 @@ class Code(QObject):
         self._q = ""
         self._lang = ""
         self._sort = "updated"
+        # optional collection filter for the side rail (snippet kind)
+        self._collection: int | None = None
         self._current_id: int | None = None
         self._current: dict = {}
         self._snippets: list = []
@@ -97,6 +99,10 @@ class Code(QObject):
     def sortBy(self) -> str:
         return self._sort
 
+    @Property(str, notify=filtersChanged)
+    def collectionFilter(self) -> str:
+        return "" if self._collection is None else str(self._collection)
+
     @Property(str, notify=savedChanged)
     def lastSaved(self) -> str:
         return self._last_saved
@@ -117,6 +123,18 @@ class Code(QObject):
         if sort not in ("updated", "created", "title"):
             return
         self._sort = sort
+        self._refresh()
+
+    @Slot(str)
+    def set_collection(self, coll: str) -> None:
+        """Toggle the side-rail collection filter (snippet kind)."""
+        s = (coll or "").strip()
+        cid = int(s) if s.isdigit() else None
+        if cid is None or cid == self._collection:
+            self._collection = None
+        else:
+            self._collection = cid
+        self.filtersChanged.emit()
         self._refresh()
 
     @Slot()
@@ -193,7 +211,8 @@ class Code(QObject):
     # -------------------------------------------------------------- internals
     def _refresh(self) -> None:
         rows = core_snippets.list_snippets(
-            self._con, q=self._q, lang=self._lang, sort=self._sort)
+            self._con, q=self._q, lang=self._lang, sort=self._sort,
+            collection_id=self._collection)
         self._snippets = [dict(r) for r in rows]
         self._tags = [{"name": n, "count": c}
                       for n, c in core_snippets.tag_cloud(self._con)]

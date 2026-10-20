@@ -8,9 +8,29 @@ Rectangle {
     id: rail
     color: theme.tokens.surface
 
-    // pane switching: 0 = icons, 1 = fonts (Main owns the state)
+    // pane switching: 0 = icons, 1 = fonts, 2 = colors, 3 = code (Main owns
+    // the state)
     property int pane: 0
     signal panePicked(int idx)
+
+    // CONTEXT-SPECIFIC RAIL — the rail's contents follow the active pane:
+    // icon-only sections (themes / contexts / types / tags / add-folder)
+    // render only on the Icons pane, and the Collections list tracks the
+    // pane's own ref kind (icon, palette, snippet) with per-kind counts.
+    // Fonts and Projects don't carry collection refs yet, so those panes
+    // hide the collections block entirely.
+    property string paneKind: pane === 0 ? "icon"
+                              : pane === 2 ? "palette"
+                              : pane === 3 ? "snippet" : ""
+    property bool showIconSections: pane === 0
+    property bool showCollections: paneKind !== ""
+
+    // per-kind collection count for a row (falls back to 0)
+    function kindCount(counts) {
+        if (pane === 0 || !counts)
+            return -1        // -1 = show the total instead
+        return counts[paneKind] || 0
+    }
 
     // `library !== null` guards: context properties are nulled during app
     // teardown while lingering bindings re-evaluate — without the guard the
@@ -32,6 +52,9 @@ Rectangle {
         radius: 6
         color: active ? theme.tokens.surface2
                       : (itemMa.containsMouse ? theme.tokens.surface2 : "transparent")
+        // smooth the hover/active switch — an abrupt transparent<->surface2
+        // flip reads as "flicker" when the mouse sweeps across rows
+        Behavior on color { ColorAnimation { duration: 90 } }
 
         Rectangle {
             width: 3
@@ -132,8 +155,9 @@ Rectangle {
                 onPicked: rail.panePicked(4)
             }
 
-            SectionLabel { text: qsTr("Library") }
+            SectionLabel { text: qsTr("Library"); visible: rail.showIconSections }
             RailItem {
+                visible: rail.showIconSections
                 label: qsTr("All assets")
                 count: library !== null ? String(library.totalAssets) : ""
                 active: library !== null && library.themeFilter === ""
@@ -145,10 +169,11 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Themes") }
+            SectionLabel { text: qsTr("Themes"); visible: rail.showIconSections }
             Repeater {
                 model: library.themes
                 RailItem {
+                    visible: rail.showIconSections
                     required property var modelData
                     label: modelData.name
                     count: String(modelData.n)
@@ -158,10 +183,11 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Contexts") }
+            SectionLabel { text: qsTr("Contexts"); visible: rail.showIconSections }
             Repeater {
                 model: library.contexts
                 RailItem {
+                    visible: rail.showIconSections
                     required property var modelData
                     label: modelData.name
                     count: String(modelData.n)
@@ -171,10 +197,11 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Types") }
+            SectionLabel { text: qsTr("Types"); visible: rail.showIconSections }
             Repeater {
                 model: library.exts
                 RailItem {
+                    visible: rail.showIconSections
                     required property var modelData
                     label: modelData.name.toUpperCase()
                     count: String(modelData.n)
@@ -184,21 +211,45 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Collections") }
+            SectionLabel { text: qsTr("Collections")
+                           visible: rail.showCollections }
             Repeater {
                 model: library.collections
                 RailItem {
                     id: collRow
                     required property var modelData
+                    // context-specific: a collection is listed when it holds
+                    // refs of the current pane's kind — or when it's empty,
+                    // so newly created collections stay reachable everywhere
+                    visible: rail.showCollections
+                             && (rail.pane === 0 || collRow.modelData.n === 0
+                                 || (collRow.modelData.counts
+                                     && collRow.modelData.counts[rail.paneKind] > 0))
                     label: collRow.modelData.name
                     sub: collRow.modelData.tags
-                    count: String(collRow.modelData.n)
+                    count: rail.pane === 0
+                           ? String(collRow.modelData.n)
+                           : String(rail.kindCount(collRow.modelData.counts))
                     indent: collRow.modelData.parentId > 0
-                    active: library !== null
-                            && library.collectionFilter === String(collRow.modelData.id)
-                    onPicked: library.set_collection(
-                        library.collectionFilter === String(collRow.modelData.id)
-                            ? "" : String(collRow.modelData.id))
+                    active: rail.pane === 0
+                            ? (library !== null && library.collectionFilter
+                               === String(collRow.modelData.id))
+                            : rail.pane === 2
+                              ? (colors !== null && colors.collectionFilter
+                                 === String(collRow.modelData.id))
+                              : (code !== null && code.collectionFilter
+                                 === String(collRow.modelData.id))
+                    onPicked: {
+                        // clicking a collection filters the ACTIVE pane's
+                        // content (each bridge keeps its own filter state)
+                        var cid = String(collRow.modelData.id)
+                        if (rail.pane === 0 && library !== null)
+                            library.set_collection(cid)
+                        else if (rail.pane === 2 && colors !== null)
+                            colors.set_collection(cid)
+                        else if (rail.pane === 3 && code !== null)
+                            code.set_collection(cid)
+                    }
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.RightButton
@@ -305,6 +356,7 @@ Rectangle {
                 onClosed: tagMode = false
             }
             Rectangle {
+                visible: rail.showCollections
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
                 Layout.rightMargin: 8
@@ -348,10 +400,11 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Tags") }
+            SectionLabel { text: qsTr("Tags"); visible: rail.showIconSections }
             Repeater {
                 model: library.tags
                 RailItem {
+                    visible: rail.showIconSections
                     required property var modelData
                     label: "#" + modelData.name
                     count: String(modelData.n)
@@ -361,6 +414,7 @@ Rectangle {
                 }
             }
             Text {
+                visible: rail.showIconSections
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 topPadding: 6
@@ -375,6 +429,7 @@ Rectangle {
 
             // add-folder source (native FolderDialog — no server involved)
             Rectangle {
+                visible: rail.showIconSections
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
                 Layout.rightMargin: 8
@@ -382,6 +437,7 @@ Rectangle {
                 height: 26
                 radius: 6
                 color: addMa.containsMouse ? theme.tokens.surface2 : "transparent"
+                Behavior on color { ColorAnimation { duration: 90 } }
                 border.color: theme.tokens.border
                 RowLayout {
                     anchors.fill: parent

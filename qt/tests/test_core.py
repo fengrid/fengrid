@@ -359,11 +359,81 @@ def test_generate_deterministic_locked_passthrough():
 
 
 def test_generate_all_rules_valid_hexes():
-    for rule in fcx.HARMONIES:
+    for rule in fcx.HARMONIES + ("random",):
         out = fcx.generate(rule, [], base_hue=50)
         assert len(out) == 5
         for s in out:
             assert s["hex"].startswith("#") and len(s["hex"]) == 7
+
+
+def test_generate_variation_fresh_with_locks():
+    """Repeated Generate presses must always yield fresh unlocked colors,
+    even with locks present (the user's 'Generate does nothing' bug)."""
+    sw = [{"hex": "#282A36", "locked": True}] + [
+        {"hex": "#111111", "locked": False} for _ in range(4)]
+    a = fcx.generate("complementary", sw, base_hue=100, variation=1)
+    b = fcx.generate("complementary", sw, base_hue=100, variation=2)
+    # locked color untouched in both
+    assert a[0]["hex"] == "#282A36" and b[0]["hex"] == "#282A36"
+    # unlocked slots differ between presses
+    assert [s["hex"] for s in a[1:]] != [s["hex"] for s in b[1:]]
+    # and the same variation is reproducible (deterministic seeding)
+    a2 = fcx.generate("complementary", sw, base_hue=100, variation=1)
+    assert a == a2
+
+
+def test_generate_anchor_rotation_two_locks():
+    """Each press re-derives the scheme around a different locked color."""
+    two = [{"hex": "#FF0000", "locked": True},
+           {"hex": "#111111", "locked": False},
+           {"hex": "#00FF00", "locked": True},
+           {"hex": "#222222", "locked": False},
+           {"hex": "#333333", "locked": False}]
+    v0 = fcx.generate("analogous", two, base_hue=100, variation=0)
+    v1 = fcx.generate("analogous", two, base_hue=100, variation=1)
+    assert v0[0]["hex"] == "#FF0000" and v0[2]["hex"] == "#00FF00"
+    assert v1[0]["hex"] == "#FF0000" and v1[2]["hex"] == "#00FF00"
+    # anchor rotated (red for v0, green for v1) → different unlocked hues
+    assert v0[1]["hex"] != v1[1]["hex"]
+    assert v0[3]["hex"] != v1[3]["hex"]
+
+
+def test_generate_random_mode():
+    """Random mode: no scheme binding, but locks still honored."""
+    sw = [{"hex": "#282A36", "locked": True}] + [
+        {"hex": "#111111", "locked": False} for _ in range(4)]
+    r = fcx.generate("random", sw, base_hue=100, variation=3)
+    assert r[0] == sw[0]                      # locked passes through
+    assert all(s["hex"].startswith("#") and len(s["hex"]) == 7 for s in r)
+    r2 = fcx.generate("random", sw, base_hue=100, variation=4)
+    assert [s["hex"] for s in r[1:]] != [s["hex"] for s in r2[1:]]
+
+
+def test_palette_collection_filter(lib):
+    """The side rail filters the palette list by collection (palette kind)."""
+    pid_a = fcx.save_palette(lib, "Coll A", ["#101418", "#37B8C4", "#F0785C",
+                                             "#93A3B0", "#E7EDF2"])
+    pid_b = fcx.save_palette(lib, "Coll B", ["#181C20", "#C4375C", "#F0A05C",
+                                             "#B0A393", "#E7F2ED"])
+    assert db.add_collection_ref(lib, 1, "palette", pid_a, "Coll A")
+    rows = fcx.list_palettes(lib, collection_id=1)
+    assert [r["id"] for r in rows] == [pid_a]
+    # unfiltered shows both
+    assert len(fcx.list_palettes(lib)) == 2
+
+
+def test_snippet_collection_filter(lib):
+    """The side rail filters the snippet list by collection (snippet kind)."""
+    from fengrid.core import snippets as snp
+    sid = snp.create_snippet(lib, "Filtered one", "", "web",
+                             "<p>hi</p>", "", "", "")
+    other = snp.create_snippet(lib, "Unfiltered", "", "web",
+                               "<p>bye</p>", "", "", "")
+    assert db.add_collection_ref(lib, 1, "snippet", sid, "Filtered one")
+    rows = snp.list_snippets(lib, collection_id=1)
+    assert [r["id"] for r in rows] == [sid]
+    rows = snp.list_snippets(lib)
+    assert len(rows) == 2
 
 
 def test_palette_crud_roundtrip(lib):

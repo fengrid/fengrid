@@ -25,6 +25,8 @@ import time
 from pathlib import Path
 
 HARMONIES = ("pleasing", "analogous", "complementary", "triadic", "monochrome")
+# generation modes: the harmonies + free-form random (no scheme binding)
+GENERATION_MODES = HARMONIES + ("random",)
 
 # exact offsets from colors.html generate()
 _HARMONY_HUES = {
@@ -187,45 +189,90 @@ def _pick(seed: float) -> float:
 
 
 def generate(rule: str, colors: list[dict], base_hue: float | None = None,
-             mode: str = "dark") -> list[dict]:
+             mode: str = "dark", variation: int = 0) -> list[dict]:
     """Reroll unlocked swatches under a harmony rule.
 
     colors: [{hex, locked}] (2..5 entries supported by the UI). Returns a new
-    list; locked swatches pass through untouched and ANCHOR the generation:
-    unlocked slots take their hue relative to the first locked swatch's
+    list; locked swatches pass through untouched.
+
+    ANCHORING: unlocked slots take their hue relative to a locked swatch's
     actual hue, offset by the harmony template — so locks survive scheme
-    switches and the fresh colors coordinate with them (e.g. two locks in
-    Complementary → Analogous Generate keeps both and hangs the rest off
-    them). Without locks this reduces to the historical base_hue behavior.
-    Deterministic for a given base_hue (tests); the UI passes None ->
-    time-seeded like the web pane.
+    switches and the fresh colors coordinate with them.
+
+    VARIATION: `variation` is a monotonically increasing counter (the UI
+    increments it on every Generate press). With locks present the pure
+    template math is otherwise fully deterministic — repeated presses would
+    be no-ops. Two variation sources fix that:
+      1. ANCHOR ROTATION — which locked color anchors the template rotates
+         through the locked set (variation % n_locks). With several locks
+         each press re-derives the scheme around a different anchor.
+      2. SEEDED JITTER — a deterministic pseudo-random drift (same _pick
+         helper as colors.html) seeded by slot index + variation, applied
+         to hue (subtle for strict schemes, wider for pleasing) and to the
+         L/S bases. Locked slots are never touched.
+
+    RANDOM MODE (`rule == "random"`): no scheme binding — every unlocked
+    slot gets a fully random hue with L/S spread across the mode's ramp.
+    Locked slots still pass through, so locking is honored here too.
+
+    Deterministic for a given (base_hue, variation) — tests pin both; the
+    UI passes base_hue=None -> time-seeded like the web pane.
     """
-    if rule not in HARMONIES:
-        raise ValueError(f"unknown harmony rule: {rule}")
+    if rule not in GENERATION_MODES:
+        raise ValueError(f"unknown generation mode: {rule}")
     if base_hue is None:
         base_hue = _pick(time.time() % 100000) * 360
     l_base = _L_BASE.get(mode, _L_BASE["dark"])
-    hues = _HARMONY_HUES[rule]
+    v = int(variation)
 
-    anchor_slot = next((i for i in range(5)
-                        if i < len(colors) and colors[i].get("locked")), None)
-    if anchor_slot is None:
-        anchor_hue, template0 = base_hue, 0
-    else:
+    if rule == "random":
+        out: list[dict] = []
+        for i in range(5):
+            prev = colors[i] if i < len(colors) else None
+            if prev is not None and prev.get("locked"):
+                out.append(prev)
+                continue
+            seed = i * 31 + v * 101 + 17
+            h = _pick(seed) * 360
+            l = l_base[i] + math.floor(_pick(seed + 1) * 10) - 5
+            s = _S_BASE[i] + math.floor(_pick(seed + 2) * 16) - 8
+            rgb = hsl2rgb(h, max(8, min(96, s)), max(8, min(94, l)))
+            out.append({"hex": rgb2hex(*rgb),
+                        "locked": bool(prev["locked"]) if prev else False})
+        return out
+
+    hues = _HARMONY_HUES[rule]
+    locked_slots = [i for i in range(len(colors))
+                    if colors[i].get("locked")]
+    if locked_slots:
+        # rotate which locked color anchors the template each press —
+        # "shifting the locked colors to different positions in the
+        # equation" so the scheme re-derives around a different member
+        anchor_slot = locked_slots[v % len(locked_slots)]
         r, g, b = hex2rgb(colors[anchor_slot]["hex"])
         anchor_hue = rgb2hsl(r, g, b)[0]      # rgb2hsl returns (h, s, l)
         template0 = hues[anchor_slot]
+    else:
+        anchor_hue, template0 = base_hue, 0
 
-    out: list[dict] = []
+    # hue drift per press: strong on the loose rule, subtle on strict ones —
+    # enough that Generate always visibly changes the unlocked slots, never
+    # enough to break the scheme's character. Gated on v > 0 so variation=0
+    # reproduces the historical template math bit-for-bit (tests pin it);
+    # the UI starts presses at 1.
+    drift = 14 if rule == "pleasing" else 4
+    out = []
     for i in range(5):
         prev = colors[i] if i < len(colors) else None
         if prev is not None and prev.get("locked"):
             out.append(prev)
             continue
-        jitter = _pick(i * 7 + 3) * 14 - 7 if rule == "pleasing" else 0
+        jitter = (_pick(i * 7 + 3) * 14 - 7 if rule == "pleasing" else 0)
+        if v:
+            jitter += _pick(i * 7 + 3 + v * 61) * drift * 2 - drift
         h = (anchor_hue + (hues[i] - template0) + jitter + 360) % 360
-        l = l_base[i] + math.floor(_pick(i * 13 + 7) * 10) - 5
-        s = _S_BASE[i] + math.floor(_pick(i * 17 + 11) * 16) - 8
+        l = l_base[i] + math.floor(_pick(i * 13 + 7 + v * 83) * 10) - 5
+        s = _S_BASE[i] + math.floor(_pick(i * 17 + 11 + v * 103) * 16) - 8
         rgb = hsl2rgb(h, max(8, min(96, s)), max(8, min(94, l)))
         out.append({"hex": rgb2hex(*rgb),
                     "locked": bool(prev["locked"]) if prev else False})
@@ -235,16 +282,26 @@ def generate(rule: str, colors: list[dict], base_hue: float | None = None,
 # ---------------------------------------------------------------- persistence
 
 def list_palettes(con: sqlite3.Connection, q: str = "",
-                  sort: str = "updated") -> list[dict]:
+                  sort: str = "updated",
+                  collection_id: int | None = None) -> list[dict]:
     order = {"updated": "updated DESC", "name": "name COLLATE NOCASE",
              "created": "created DESC"}.get(sort, "updated DESC")
-    where, params = "", []
+    where, params = [], []
+    join = ""
     if q:
-        where = "WHERE name LIKE ? OR tags LIKE ?"
-        params = [f"%{q}%", f"%{q}%"]
-    rows = con.execute(
-        f"SELECT id, name, tags, created, updated FROM palette {where}"
-        f" ORDER BY {order}", params).fetchall()
+        where.append("(p.name LIKE ? OR p.tags LIKE ?)")
+        params += [f"%{q}%", f"%{q}%"]
+    if collection_id is not None:
+        join = (" JOIN collection_ref cr ON cr.item_kind = 'palette'"
+                " AND cr.item_id = p.id")
+        where.append("cr.collection_id = ?")
+        params.append(collection_id)
+    sql = (f"SELECT p.id, p.name, p.tags, p.created, p.updated"
+           f" FROM palette p{join}")
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += f" ORDER BY {order}"
+    rows = con.execute(sql, params).fetchall()
     out = []
     for r in rows:
         colors = [c[0] for c in con.execute(

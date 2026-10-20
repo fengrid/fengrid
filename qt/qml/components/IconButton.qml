@@ -20,6 +20,9 @@ ToolButton {
         tint: btn.active ? theme.tokens.litPane
                          : (btn.hovered || btn.pressed ? theme.tokens.text
                                                        : theme.tokens.textMuted)
+        // smooth the hover tint swap — instant muted<->text flips read as
+        // "flicker" when the mouse sweeps across a toolbar
+        Behavior on tint { ColorAnimation { duration: 90 } }
         px: btn.icon_px
         anchors.centerIn: parent
     }
@@ -27,6 +30,7 @@ ToolButton {
         radius: 6
         color: btn.pressed ? theme.tokens.surface2
                            : (btn.hovered ? theme.tokens.surface2 : "transparent")
+        Behavior on color { ColorAnimation { duration: 90 } }
     }
     ToolTip.visible: hovered && ToolTip.text.length > 0
     ToolTip.delay: 400

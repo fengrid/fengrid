@@ -64,20 +64,20 @@ Item {
 
             ComboBox {
                 id: ruleBox
-                Layout.preferredWidth: 150
+                Layout.preferredWidth: 160
                 Layout.preferredHeight: 28
                 model: [qsTr("Pleasing mix"), qsTr("Analogous"),
                         qsTr("Complementary"), qsTr("Triadic"),
-                        qsTr("Monochrome")]
+                        qsTr("Monochrome"), qsTr("Random")]
                 currentIndex: {
                     var rules = ["pleasing", "analogous", "complementary",
-                                 "triadic", "monochrome"]
+                                 "triadic", "monochrome", "random"]
                     return colors !== null
                            ? Math.max(0, rules.indexOf(colors.rule)) : 0
                 }
                 onActivated: function (idx) {
                     var rules = ["pleasing", "analogous", "complementary",
-                                 "triadic", "monochrome"]
+                                 "triadic", "monochrome", "random"]
                     if (colors !== null)
                         colors.set_rule(rules[idx])
                 }
@@ -498,8 +498,20 @@ Item {
                 Layout.fillHeight: true
                 radius: 10
                 color: modelData.hex
-                border.color: colors !== null && colors.selectedIdx === index
-                              ? theme.tokens.litPane : "transparent"
+                // DRAG-TO-REORDER: the card body is grabbable — open-hand
+                // cursor on hover is the standard "can drag" indicator,
+                // closed-hand while dragging; the card lifts (z + translate)
+                // and snaps to the slot under the drop point on release.
+                transform: Translate {
+                    x: swMa.dragging ? swMa.dragDX : 0
+                    Behavior on x { NumberAnimation { duration: 40 } }
+                }
+                z: swMa.dragging ? 3 : 0
+                border.color: swMa.dragging
+                              ? theme.tokens.accent
+                              : (colors !== null && colors.selectedIdx
+                                 === swCard.index
+                                 ? theme.tokens.litPane : "transparent")
                 border.width: 2
 
                 Column {
@@ -542,17 +554,14 @@ Item {
                     spacing: 4
                     // z ABOVE the card's selection MouseArea (declared after
                     // it in sibling order, swMa would otherwise eat every
-                    // click aimed at the lock/remove buttons). Also shown
-                    // while the swatch is selected so its tools never
-                    // vanish under a stale hover state.
+                    // click aimed at the lock/remove buttons).
+                    //
+                    // ALWAYS visible: per the interaction rule, anything
+                    // rendered and interactive performs its primary function
+                    // on engagement — the lock/✕ chips must not depend on
+                    // hover or prior swatch selection (hover-only reveal
+                    // proved fragile in QT6 and hid the affordance).
                     z: 2
-                    visible: swMa.containsMouse
-                             || (colors !== null && colors.selectedIdx
-                                 === swCard.index)
-                    opacity: swMa.containsMouse
-                             || (colors !== null && colors.selectedIdx
-                                 === swCard.index) ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 100 } }
 
                     component SwTool: AbstractButton {
                         id: st
@@ -590,7 +599,41 @@ Item {
                     id: swMa
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    // standard drag indicators: open hand = grabbable,
+                    // closed hand = dragging
+                    cursorShape: swMa.dragging ? Qt.ClosedHandCursor
+                                               : Qt.OpenHandCursor
+                    property bool dragging: false
+                    property real pressX: 0
+                    property real dragDX: 0
+                    onPressed: function (mouse) {
+                        pressX = mouse.x
+                        dragDX = 0
+                        dragging = false
+                    }
+                    onPositionChanged: function (mouse) {
+                        if (!pressed)
+                            return
+                        dragDX = mouse.x - pressX
+                        if (!dragging && Math.abs(dragDX) > 8)
+                            dragging = true
+                    }
+                    onReleased: {
+                        // one reorder per gesture, on release — calling
+                        // move_swatch mid-drag would recreate the delegates
+                        // and drop the mouse grab
+                        if (dragging && colors !== null) {
+                            var n = colors.swatches.length
+                            var slot = (paletteRow.width - 8 * (n - 1)) / n
+                            var target = swCard.index
+                                         + Math.round(dragDX / (slot + 8))
+                            target = Math.max(0, Math.min(n - 1, target))
+                            if (target !== swCard.index)
+                                colors.move_swatch(swCard.index, target)
+                        }
+                        dragging = false
+                        dragDX = 0
+                    }
                     onClicked: colors !== null && colors.select(swCard.index)
                 }
             }

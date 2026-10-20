@@ -310,6 +310,50 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, INTERACTION-REFINEMENT BATCH (user UX feedback):
+  1. GENERATE VARIATION: core generate() grew a `variation` counter —
+     with locks the pure template math was fully deterministic (repeated
+     presses were no-ops). Two sources fix it: (a) ANCHOR ROTATION — the
+     anchor rotates through the locked set (variation % n_locks), so
+     multi-lock schemes re-derive around a different member each press;
+     (b) SEEDED JITTER — deterministic _pick(seed + v*const) drift on
+     hue (±4° strict rules, ±14° pleasing) and the L/S bases. GATED ON
+     v > 0: variation=0 reproduces the historical math bit-for-bit (the
+     anchoring tests pin exact hues); the bridge starts presses at 1.
+     GOTCHA: ORDER BY columns must take table aliases once a JOIN exists
+     (`s.id` — bare `id` is ambiguous with collection_ref.id).
+  2. RANDOM MODE: rule "random" — unlocked slots get fully random hues
+     with L/S spread; locks still pass through. GENERATION_MODES =
+     HARMONIES + ("random",); bridge set_rule accepts it; Colors combo
+     gains "Random".
+  3. DRAG-TO-REORDER swatches: press → >8px → dragging; the card lifts
+     (z:3 + Translate dragDX), open-hand cursor on hover / closed-hand
+     while dragging (standard indicators), ONE move_swatch on release
+     (mid-drag moves would recreate delegates and drop the grab).
+     Target = index + round(dragDX / (slot+spacing)). Click still selects.
+     Tested with window-level press/move/release events (test_qml_colors).
+  4. LOCK CHIPS ALWAYS VISIBLE: hover/selection gating removed — per the
+     user's rule, anything visible must perform its primary function on
+     engagement; hover-only reveal also proved fragile (stale hover).
+  5. FONTS SINGLE-CLICK: family card click now selects AND opens the
+     details screen (the old hover-preview cue forced a second click).
+  6. CONTEXT-SPECIFIC RAIL: paneKind (icon/palette/snippet) drives the
+     rail — icon-only sections (All assets, Themes, Contexts, Types,
+     Tags, Add-folder) render only on the Icons pane; Collections show
+     per-kind counts and hide rows with none of the current kind (empty
+     collections stay listed as create targets); clicking a collection
+     filters the ACTIVE pane via its own bridge filter (library→icons,
+     colors→palettes via list_palettes(collection_id), code→snippets via
+     list_snippets(collection_id)); each bridge keeps its own filter
+     state (colors.collectionFilter / code.collectionFilter). Fonts and
+     Projects hide the collections block entirely (no font refs exist).
+  7. FLICKER SMOOTHING: Behavior on color/tint (90ms ColorAnimation) on
+     SideRail RailItem + add-folder row and IconButton tint/background —
+     abrupt hover flips read as flicker when the mouse sweeps.
+  Verified: 87 tests (was 81; +5 core generation/filter tests, +1 QML
+  drag test), clean dark/light renders, vision-verified Colors pane
+  (chips always visible, rail shows only Panes+Collections) and Fonts
+  pane (collections block correctly absent — no font refs).
 - 2026-10-20, COLOR-LOCK FIX: root cause was NOT the generator — the
   swatch card's selection MouseArea was declared AFTER the lock/remove
   tool buttons, so it stacked on top and swallowed every click aimed at

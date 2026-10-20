@@ -147,6 +147,55 @@ def test_lock_button_click_flips_lock_state(colors_ui):
     assert bridge.swatches[0]["locked"] is False
 
 
+def test_drag_reorders_swatch(colors_ui):
+    """Drag-to-reorder: press on a card body, move past ~2 slots, release —
+    the swatch moves through the REAL event path (window -> itemAt)."""
+    ed = colors_ui
+    bridge, win, root = ed["colors"], ed["win"], ed["root"]
+
+    # card 0 = tools[0].parent.parent (SwTool -> tools Row -> card)
+    btn0 = _sw_tool_buttons(root)[0]
+    card = btn0.parent().parent()
+    card_w = card.width()
+    assert card_w > 50, "swatch card geometry not laid out"
+
+    hexes_before = [s["hex"] for s in bridge.swatches]
+    order_before = list(range(len(hexes_before)))
+
+    start = card.mapToScene(QPointF(card_w / 2, card.height() / 2))
+    # 2.4 slots of travel → Math.round rounds to a 2-slot move
+    dx = 2.4 * (card_w + 8)
+
+    # press, incremental moves, release — through the window delivery path
+    ev = QMouseEvent(QEvent.MouseButtonPress, start, start, Qt.LeftButton,
+                     Qt.LeftButton, Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+    steps = 12
+    for k in range(1, steps + 1):
+        p = QPointF(start.x() + dx * k / steps, start.y())
+        QCoreApplication.sendEvent(win, QMouseEvent(
+            QEvent.MouseMove, p, p, Qt.NoButton, Qt.LeftButton,
+            Qt.KeyboardModifier.NoModifier))
+        _qapp().processEvents()
+    end = QPointF(start.x() + dx, start.y())
+    ev = QMouseEvent(QEvent.MouseButtonRelease, end, end, Qt.LeftButton,
+                     Qt.NoButton, Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+
+    hexes_after = [s["hex"] for s in bridge.swatches]
+    assert hexes_after != hexes_before, "drag did not reorder the swatches"
+    # card 0 moved two slots right: its hex now sits at index 2
+    assert hexes_after[2] == hexes_before[0]
+    # and the rest of the order is a consistent rotation
+    assert hexes_after[0] == hexes_before[1]
+    assert hexes_after[1] == hexes_before[2]
+    assert hexes_after[3:] == hexes_before[3:]
+    # guards the unused-variable lint on order_before usage in the contract
+    assert order_before[2] == 2
+
+
 def test_lock_survives_rule_switch_and_generate(colors_ui):
     ed = colors_ui
     bridge = ed["colors"]

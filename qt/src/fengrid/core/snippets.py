@@ -293,25 +293,34 @@ def import_file(kind, path):
 # connect() path guarantees the snippet tables exist before this module is
 # used. CRUD here is intentionally schema-free.
 # --------------------------------------------------------------------------
-def list_snippets(con, q="", lang="", sort="updated"):
+def list_snippets(con, q="", lang="", sort="updated", collection_id=None):
     """(id, title, description, language, tags, created, updated) rows."""
-    sql = ("SELECT id, title, description, language, tags, created, updated"
-           " FROM snippet")
+    sql = ("SELECT s.id, s.title, s.description, s.language, s.tags,"
+           " s.created, s.updated FROM snippet s")
+    join = ""
     where, args = [], []
+    if collection_id is not None:
+        join = (" JOIN collection_ref cr ON cr.item_kind = 'snippet'"
+                " AND cr.item_id = s.id")
+        where.append("cr.collection_id = ?")
+        args.append(collection_id)
     if q:
         like = "%" + q.lower() + "%"
-        where.append("(lower(title) LIKE ? OR lower(description) LIKE ?"
-                     " OR lower(tags) LIKE ? OR lower(html) LIKE ?"
-                     " OR lower(css) LIKE ? OR lower(js) LIKE ?)")
+        where.append("(lower(s.title) LIKE ? OR lower(s.description) LIKE ?"
+                     " OR lower(s.tags) LIKE ? OR lower(s.html) LIKE ?"
+                     " OR lower(s.css) LIKE ? OR lower(s.js) LIKE ?)")
         args += [like] * 6
     if lang:
-        where.append("language = ?")
+        where.append("s.language = ?")
         args.append(lang)
     if where:
-        sql += " WHERE " + " AND ".join(where)
-    order = {"updated": "updated DESC, id DESC",
-             "created": "created DESC, id DESC",
-             "title": "title COLLATE NOCASE ASC, id ASC"}.get(sort, "updated DESC, id DESC")
+        sql += join + " WHERE " + " AND ".join(where)
+    else:
+        sql += join
+    order = {"updated": "s.updated DESC, s.id DESC",
+             "created": "s.created DESC, s.id DESC",
+             "title": "s.title COLLATE NOCASE ASC, s.id ASC"}.get(
+                 sort, "s.updated DESC, s.id DESC")
     sql += " ORDER BY " + order
     return con.execute(sql, args).fetchall()
 

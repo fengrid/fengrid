@@ -289,14 +289,18 @@ Item {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
+                    // SINGLE CLICK opens the details screen — the old
+                    // hover-preview cue required a second click to get the
+                    // real detail view, which violated "what you can see
+                    // and engage should just work". Select + open at once.
                     onClicked: function (mouse) {
                         if (fonts === null)
                             return
                         fonts.select(model.family)
-                        if (mouse.button === Qt.RightButton)
+                        if (mouse.button === Qt.RightButton) {
                             famMenu.popup()
-                    }
-                    onDoubleClicked: {
+                            return
+                        }
                         detail.family = model.family
                         detail.open()
                     }

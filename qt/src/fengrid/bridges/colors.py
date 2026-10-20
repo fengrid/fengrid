@@ -32,11 +32,17 @@ class Colors(QObject):
         self._con = con
         self._swatches: list[dict] = []
         self._rule = settings.get(con, "colors_rule", "pleasing")
-        if self._rule not in core_colors.HARMONIES:
+        if self._rule not in core_colors.GENERATION_MODES:
             self._rule = "pleasing"
         self._selected = -1
         self._name = ""
         self._palette_id: int | None = None
+        # increments on every Generate press — feeds core generate()'s
+        # variation seed so repeated presses always yield fresh unlocked
+        # colors (anchor rotation + seeded jitter), even with locks present
+        self._variation = 0
+        # optional collection filter for the side rail (palette kind)
+        self._collection: int | None = None
         self._refresh_palettes()
         # seed the pane with one roll so it never opens empty
         self._swatches = core_colors.generate(self._rule, [], mode="dark")
@@ -78,18 +84,35 @@ class Colors(QObject):
     def palettes(self) -> list:
         return self._palettes
 
+    @Property(str, notify=palettesChanged)
+    def collectionFilter(self) -> str:
+        return "" if self._collection is None else str(self._collection)
+
     # ---------------------------------------------------------------- slots
     @Slot(str)
     def set_rule(self, rule: str) -> None:
-        if rule not in core_colors.HARMONIES or rule == self._rule:
+        if rule not in core_colors.GENERATION_MODES or rule == self._rule:
             return
         self._rule = rule
         settings.set(self._con, "colors_rule", rule)
         self.ruleChanged.emit()
 
+    @Slot(str)
+    def set_collection(self, coll: str) -> None:
+        """Toggle the side-rail collection filter (palette kind)."""
+        s = (coll or "").strip()
+        cid = int(s) if s.isdigit() else None
+        if cid is None or cid == self._collection:
+            self._collection = None
+        else:
+            self._collection = cid
+        self._refresh_palettes()
+
     @Slot()
     def generate(self) -> None:
-        self._swatches = core_colors.generate(self._rule, self._swatches)
+        self._variation += 1
+        self._swatches = core_colors.generate(
+            self._rule, self._swatches, variation=self._variation)
         self.swatchesChanged.emit()
 
     @Slot(int)
@@ -203,5 +226,6 @@ class Colors(QObject):
 
     # ------------------------------------------------------------ internals
     def _refresh_palettes(self) -> None:
-        self._palettes = core_colors.list_palettes(self._con)
+        self._palettes = core_colors.list_palettes(
+            self._con, collection_id=self._collection)
         self.palettesChanged.emit()
