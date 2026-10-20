@@ -310,6 +310,79 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, feature batch (7 items):
+  1. COLOR LOCKS: `generate()` anchors unlocked slots to the FIRST locked
+     swatch's actual hue, offset by the harmony template (hues[i] -
+     hues[anchor_slot]); scheme switches + Generate now keep locks fixed
+     while fresh colors coordinate with them. No-locks behavior unchanged
+     (base_hue path). GOTCHA: rgb2hsl returns (h, s, l) — hue FIRST; an
+     `_, _, x =` unpack reads LIGHTNESS.
+  2. FONT DETAILS: FontDetail.qml popup — size slider (10–96px), editable
+     sample text, light/dark preview background, glyph sentence, and every
+     indexed variant rendered in its own weight/italic (CSS weights mapped
+     to Qt Font enums). Opened via double-click, right-click menu, or the
+     Details… button in the fonts detail strip.
+  3. CONTEXT MENUS: asset cards (star/unstar, copy, add-to-collection),
+     snippet rows (open, copy title, add-to-collection submenu, delete),
+     projects (open, export…, delete), saved palettes (load, export…,
+     add-to-collection, delete), font families (details, export CSS/ZIP),
+     collections (new sub-collection, edit tags, delete). Pattern: delegate
+     exposes `readonly property var row: modelData`; a root-level Menu
+     reads `list.currentItem.row` or a `target` set at popup time.
+  4. COLLECTIONS v2: migration adds collection.parent_id + collection.tags
+     and the collection_ref table (item_kind × item_id — icon/font/
+     snippet/palette); legacy collection_item rows are copied in once as
+     'icon' refs (old table kept, unused). starring moved to collection_ref.
+     db.collection_tree (parents before children, per-kind counts),
+     create_sub_collection, set_collection_tags, delete_collection
+     (children re-parent, not orphaned), add/remove_collection_ref with
+     row-existence validation. Rail renders the tree (indented children,
+     tags as a second line) with the context menu.
+  5. SEARCH: core/search.py — fuzzy (subsequence + difflib ratio ranking),
+     regex (compiled once, SearchError on bad patterns), content (snippet
+     bodies via SQL + text-like asset files, capped at MAX_FILE_BYTES
+     256KB / MAX_SCANS 2000). Bridge: library.set_search_mode +
+     searchMode property; the top bar gains a mode combo. Code-pane
+     snippet search already covers body content. PERFORMANCE GUIDANCE:
+     fuzzy/regex scan a bounded candidate list (100k names ≈ a few MB,
+     ~0.5s/search) — fine to ~100k assets; beyond that, precompute a
+     name index. Content search is I/O-bound by design; the right scale-up
+     is an FTS5 content index populated by the indexer's metadata pass
+     (it already visits every file), not query-time reads. Regex patterns
+     are user-supplied: the cap bounds the damage, but a dedicated regex
+     timeout worker would be the next hardening step.
+  6. CATEGORY ACCENTS: theme tokens accent_icon (teal), accent_font
+     (violet), accent_code (coral), accent_color (rose), accent_project
+     (green) — dark + light variants (0.x pane colors). Applied: rail pane
+     indicator bars, Code tabs/Save, Fonts selection borders, Projects
+     new-button/selection, Colors GenButton hover/Terminal toggle/Derive/
+     Save-to-snippets, Terminal section headers.
+  7. TERMINAL THEMES: core/termcolors.py — 16-slot theme model
+     (bg/fg/cursor/selection + 8 ANSI + 8 bright), derive() from
+     bg/fg/accent (deterministic HSL rotations), exports: iTerm2 plist
+     (plistlib), Windows Terminal JSON, Guake palette string (16+bg+fg),
+     GNOME dconf script, kitty.conf, alacritty.toml, generic JSON.
+     preview_html doubles as a saved-snippet body (live terminal mock with
+     the JSON export embedded as a comment) — themes persist via
+     "Save to snippets" (collectable + project-attachable). Bridge
+     TermColors (working theme, presets, set_value/derive/export/
+     save_as_snippet). Colors pane gains Harmonies | Terminal sub-tabs
+     (--term QA flag); designer = preset picker + name + derive anchors +
+     slot editor + pure-QML live terminal preview + export bar.
+  PRESETS: 14 example themes transcribed from Gogh-Co/Gogh themes/*.yml
+  (MIT/Apache-2.0): Dracula, Nord, Gruvbox Dark, Solarized Dark/Light,
+  One Half Dark/Light, Tomorrow Night, Tokyo Night, Catppuccin Mocha,
+  Monokai Pro, Snazzy, Ayu Dark, One Dark — fetched verbatim from the
+  upstream repo (selection colors chosen per theme; Gogh YAML has none).
+  Verified: 19 new core tests (65→78 total incl. generate-anchoring,
+  termcolors roundtrips/plists/exports/presets/snippet roundtrip, search
+  modes, collections v2 incl. migration preservation and re-parenting),
+  bridge probes (search mode switching, collections tree/tags/delete,
+  demo bridge), and offscreen screenshots (terminal designer opaque +
+  complete; --term QA flag added). QML lessons reconfirmed: adjacent
+  string literals need `+`; Slot-with-result must be CALLED in QML
+  (`terms.presets()`, not `terms.presets`); repeater delegates need ids
+  (parent.parent.modelData traps).
 - 2026-10-20, demo data suite: `core/demo.py` — one-call showcase install:
   20 generated Feather-style SVG icons (theme/context/tag metadata so the
   icons-pane filters and tags have real content), a font row (bundled Bebas
