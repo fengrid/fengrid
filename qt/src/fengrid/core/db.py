@@ -115,6 +115,57 @@ CREATE TABLE IF NOT EXISTS project_asset (
     label      TEXT NOT NULL DEFAULT '',
     UNIQUE(project_id, asset_kind, asset_id)
 );
+
+-- Saved libraries: named tag sets that resolve to a dynamic asset view
+CREATE TABLE IF NOT EXISTS library_view (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    name      TEXT NOT NULL UNIQUE,
+    tags      TEXT NOT NULL DEFAULT '',   -- comma-separated tag names
+    match_all INTEGER NOT NULL DEFAULT 0, -- 1 = asset must carry every tag
+    created   REAL NOT NULL,
+    updated   REAL NOT NULL
+);
+
+-- Smart collections: stored criteria, evaluated live (no membership rows)
+CREATE TABLE IF NOT EXISTS smart_collection (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    name      TEXT NOT NULL UNIQUE,
+    item_kind TEXT NOT NULL DEFAULT 'icon',   -- which pane it filters
+    criteria  TEXT NOT NULL DEFAULT '{}',     -- JSON, see core/taxonomy.py
+    created   TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+-- Custom fields (the taxonomy layer): global definitions + per-asset values
+CREATE TABLE IF NOT EXISTS asset_field (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    name    TEXT NOT NULL UNIQUE,
+    type    TEXT NOT NULL,                  -- text|number|bool|date|select|id
+    options TEXT NOT NULL DEFAULT '',       -- JSON: select choices / id prefix+pad
+    created REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS asset_field_value (
+    asset_id INTEGER NOT NULL REFERENCES asset(id) ON DELETE CASCADE,
+    field_id INTEGER NOT NULL REFERENCES asset_field(id) ON DELETE CASCADE,
+    value    TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (asset_id, field_id)
+);
+
+-- Typed links between any two first-class objects (asset kinds, collections,
+-- libraries, projects). Direction carries the one-to-many / many-to-many
+-- distinction; many-to-one is many links pointing at the same target.
+CREATE TABLE IF NOT EXISTS asset_link (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_kind TEXT NOT NULL,
+    from_id   INTEGER NOT NULL,
+    to_kind   TEXT NOT NULL,
+    to_id     INTEGER NOT NULL,
+    role      TEXT NOT NULL DEFAULT '',     -- free-text relationship label
+    created   TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    UNIQUE(from_kind, from_id, to_kind, to_id, role)
+);
+CREATE INDEX IF NOT EXISTS idx_link_from ON asset_link(from_kind, from_id);
+CREATE INDEX IF NOT EXISTS idx_link_to ON asset_link(to_kind, to_id);
 """
 
 # External-content FTS5 kept in sync by triggers (the indexer never UPDATEs
@@ -236,6 +287,32 @@ def set_starred(con: sqlite3.Connection, asset_id: int, starred: bool) -> None:
         con.execute("DELETE FROM collection_ref WHERE collection_id = ?"
                     " AND item_kind = 'icon' AND item_id = ?", (cid, asset_id))
     con.commit()
+
+
+def rename_tag(con: sqlite3.Connection, old: str, new: str) -> bool:
+    """Rename a tag in place (asset_tag rows follow via the FK). Returns
+    False when the old tag is missing or the new name already exists."""
+    new = (new or "").strip()
+    row = con.execute("SELECT id FROM tag WHERE name = ?", (old,)).fetchone()
+    if row is None or not new:
+        return False
+    if con.execute("SELECT 1 FROM tag WHERE name = ? AND id != ?",
+                   (new, row["id"])).fetchone() is not None:
+        return False
+    con.execute("UPDATE tag SET name = ? WHERE id = ?", (new, row["id"]))
+    con.commit()
+    return True
+
+
+def delete_tag(con: sqlite3.Connection, name: str) -> bool:
+    """Delete a tag and its memberships (asset_tag rows go with it)."""
+    row = con.execute("SELECT id FROM tag WHERE name = ?", (name,)).fetchone()
+    if row is None:
+        return False
+    con.execute("DELETE FROM asset_tag WHERE tag_id = ?", (row["id"],))
+    con.execute("DELETE FROM tag WHERE id = ?", (row["id"],))
+    con.commit()
+    return True
 
 
 COLLECTION_KINDS = ("icon", "font", "snippet", "palette")

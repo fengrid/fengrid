@@ -247,6 +247,61 @@ Item {
                             exportDialog.open()
                         }
                     }
+                    // a project can collect an ENTIRE collection — its refs
+                    // follow live (project_asset kind 'collection')
+                    MenuItem {
+                        id: attachCollItem
+                        text: qsTr("Attach collection…")
+                        height: 28
+                        enabled: library !== null
+                                 && library.collections.length > 0
+                        onHoveredChanged: if (hovered) attachCollSub.popup(
+                                              attachCollItem,
+                                              attachCollItem.width, 0)
+                        onClicked: attachCollSub.popup(
+                                       attachCollItem, attachCollItem.width, 0)
+                        Menu {
+                            id: attachCollSub
+                            width: 200
+                            padding: 4
+                            background: Rectangle {
+                                radius: 8; color: theme.tokens.surface
+                                border.color: theme.tokens.border
+                            }
+                            Repeater {
+                                model: library !== null
+                                       ? library.collections : []
+                                MenuItem {
+                                    id: attachCollTarget
+                                    required property var modelData
+                                    height: 28
+                                    onTriggered: {
+                                        if (projList.currentItem
+                                                && projects !== null)
+                                            projects.add_asset(
+                                                "collection",
+                                                attachCollTarget.modelData.id,
+                                                attachCollTarget.modelData.name)
+                                    }
+                                    contentItem: Text {
+                                        text: attachCollTarget.modelData.name
+                                        font.family: theme.uiFont
+                                        font.pixelSize: 11
+                                        color: theme.tokens.text
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                        leftPadding: 10
+                                    }
+                                    background: Rectangle {
+                                        color: attachCollTarget.hovered
+                                               ? theme.tokens.surface2
+                                               : "transparent"
+                                        radius: 5
+                                    }
+                                }
+                            }
+                        }
+                    }
                     MenuSeparator {
                         topPadding: 3; bottomPadding: 3
                         contentItem: Rectangle {

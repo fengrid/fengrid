@@ -436,6 +436,192 @@ def test_snippet_collection_filter(lib):
     assert len(rows) == 2
 
 
+def _mk_asset(con, name, kind="icon"):
+    src = con.execute("SELECT id FROM source LIMIT 1").fetchone()
+    sid = src["id"] if src else con.execute(
+        "INSERT INTO source(kind, path, label) VALUES ('folder', '/tmp/x',"
+        " 'test')").lastrowid
+    cur = con.execute(
+        "INSERT INTO asset(source_id, kind, path, name) VALUES (?, ?, ?, ?)",
+        (sid, kind, f"/tmp/x/{name}.svg", name))
+    con.commit()
+    return cur.lastrowid
+
+
+def _tag_asset(con, asset_id, tagname):
+    con.execute("INSERT OR IGNORE INTO tag(name) VALUES (?)", (tagname,))
+    tid = con.execute("SELECT id FROM tag WHERE name = ?",
+                      (tagname,)).fetchone()[0]
+    con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
+                " VALUES (?, ?)", (asset_id, tid))
+    con.commit()
+
+
+def test_taxonomy_library_views(lib):
+    from fengrid.core import taxonomy as tx
+    vid = tx.create_library_view(lib, "Brand kit", "brand, marketing")
+    assert tx.list_library_views(lib)[0]["name"] == "Brand kit"
+    tx.update_library_view(lib, vid, "Brand kit v2", "brand", True)
+    v = tx.list_library_views(lib)[0]
+    assert v["match_all"] == 1 and v["tags"] == "brand"
+    with pytest.raises(ValueError):
+        tx.create_library_view(lib, "", "x")
+    tx.delete_library_view(lib, vid)
+    assert tx.list_library_views(lib) == []
+
+
+def test_library_view_tag_matching(lib):
+    from fengrid.core import taxonomy as tx
+    a = _mk_asset(lib, "alpha")
+    b = _mk_asset(lib, "beta")
+    c = _mk_asset(lib, "gamma")
+    _tag_asset(lib, a, "brand")
+    _tag_asset(lib, b, "marketing")
+    _tag_asset(lib, c, "brand")
+    _tag_asset(lib, c, "marketing")
+    any_view = tx.create_library_view(lib, "All mkt", "brand, marketing")
+    all_view = tx.create_library_view(lib, "Both", "brand, marketing",
+                                      match_all=True)
+    assert sorted(tx.library_view_assets(lib, any_view)) == sorted([a, b, c])
+    assert tx.library_view_assets(lib, all_view) == [c]
+    assert tx.library_view_assets(lib, 9999) == []   # unknown view
+
+
+def test_smart_collections_crud_and_matching(lib):
+    from fengrid.core import taxonomy as tx
+    a = _mk_asset(lib, "alpha", kind="icon")
+    _tag_asset(lib, a, "brand")
+    sid = tx.create_smart_collection(
+        lib, "Brand icons", "icon", {"tags": ["brand"]})
+    rows = tx.list_smart_collections(lib)
+    assert rows[0]["name"] == "Brand icons"
+    assert rows[0]["item_kind"] == "icon"
+    assert tx.smart_asset_ids(lib, "icon", {"tags": ["brand"]}) == [a]
+    assert tx.smart_asset_ids(lib, "icon", {"starred": True}) == []
+    assert tx.smart_asset_ids(
+        lib, "icon", {"tags": ["brand"], "q": "alpha"}) == [a]
+    assert tx.smart_asset_ids(
+        lib, "icon", {"tags": ["brand"], "q": "nomatch"}) == []
+    with pytest.raises(ValueError):
+        tx.create_smart_collection(lib, "bad", "nope", {})
+    tx.update_smart_collection(lib, sid, "Renamed", {"tags": ["nope"]})
+    assert tx.list_smart_collections(lib)[0]["name"] == "Renamed"
+    assert tx.smart_asset_ids(lib, "icon", {"tags": ["nope"]}) == []
+    tx.delete_smart_collection(lib, sid)
+    assert tx.list_smart_collections(lib) == []
+
+
+def test_smart_kinds_snippet_palette(lib):
+    from fengrid.core import taxonomy as tx
+    from fengrid.core import snippets as snp
+    from fengrid.core import colors as fcx
+    sid = snp.create_snippet(lib, "Button", "", "web", "<b/>", "", "",
+                             "ui, buttons")
+    pid = fcx.save_palette(lib, "Brand palette",
+                           ["#101418", "#37B8C4", "#F0785C", "#93A3B0",
+                            "#E7EDF2"], tags="brand, web")
+    hits = tx.smart_asset_ids(lib, "snippet", {"tags": ["ui"]})
+    assert sid in hits
+    assert pid in tx.smart_asset_ids(lib, "palette", {"tags": ["brand"]})
+    # match_all semantics: both tags required
+    assert sid not in tx.smart_asset_ids(
+        lib, "snippet", {"tags": ["ui", "brand"], "tag_match_all": True})
+
+
+def test_custom_fields_crud(lib):
+    from fengrid.core import taxonomy as tx
+    a = _mk_asset(lib, "alpha")
+    fid = tx.create_field(lib, "Status", "select",
+                          {"choices": ["draft", "approved"]})
+    fid2 = tx.create_field(lib, "Reviewed", "bool")
+    with pytest.raises(ValueError):
+        tx.create_field(lib, "Bad", "nope")
+    with pytest.raises(ValueError):
+        tx.create_field(lib, "", "text")
+    tx.set_field_value(lib, a, fid, "approved")
+    tx.set_field_value(lib, a, fid2, "1")
+    vals = {v["name"]: v["value"] for v in tx.asset_field_values(lib, a)}
+    assert vals["Status"] == "approved" and vals["Reviewed"] == "1"
+    # an asset with no value still lists the field with ''
+    b = _mk_asset(lib, "beta")
+    vals_b = {v["name"]: v["value"] for v in tx.asset_field_values(lib, b)}
+    assert vals_b["Status"] == ""
+    tx.delete_field(lib, fid)
+    assert all(v["name"] != "Status" for v in tx.asset_field_values(lib, a))
+
+
+def test_generated_ids(lib):
+    from fengrid.core import taxonomy as tx
+    a = _mk_asset(lib, "alpha")
+    b = _mk_asset(lib, "beta")
+    fid = tx.create_field(lib, "Asset ID", "id",
+                          {"prefix": "ICON-", "pad": 4})
+    assert tx.generate_field_id(lib, a, fid) == "ICON-0001"
+    assert tx.generate_field_id(lib, b, fid) == "ICON-0002"
+    # a manually-inserted high value pushes the counter past it
+    tx.set_field_value(lib, a, fid, "ICON-0100")
+    assert tx.generate_field_id(lib, b, fid) == "ICON-0101"
+    # non-id fields reject generation
+    other = tx.create_field(lib, "Plain", "text")
+    with pytest.raises(ValueError):
+        tx.generate_field_id(lib, a, other)
+
+
+def test_links(lib):
+    from fengrid.core import taxonomy as tx
+    a = _mk_asset(lib, "alpha")
+    cid = lib.execute("SELECT id FROM collection LIMIT 1").fetchone()["id"]
+    tx.add_link(lib, "icon", a, "collection", cid, "part of")
+    tx.add_link(lib, "collection", cid, "icon", a, "")   # reverse direction
+    out = tx.links_for(lib, "icon", a, "out")
+    inc = tx.links_for(lib, "icon", a, "in")
+    both = tx.links_for(lib, "icon", a, "both")
+    assert len(out) == 1 and out[0]["label"] and out[0]["kind"] == "collection"
+    assert len(inc) == 1 and len(both) == 2
+    # duplicate links are ignored (UNIQUE)
+    lib.execute("INSERT OR IGNORE INTO asset_link(from_kind, from_id,"
+                " to_kind, to_id, role) VALUES ('icon', ?, 'collection', ?,"
+                " 'part of')", (a, cid))
+    lib.commit()
+    assert len(tx.links_for(lib, "icon", a, "out")) == 1
+    with pytest.raises(ValueError):
+        tx.add_link(lib, "icon", a, "widget", 1)
+    lid = out[0]["id"]
+    tx.set_link_role(lib, lid, "variant of")
+    assert tx.links_for(lib, "icon", a, "out")[0]["role"] == "variant of"
+    tx.remove_link(lib, lid)
+    assert len(tx.links_for(lib, "icon", a, "out")) == 0
+
+
+def test_tag_rename_delete(lib):
+    a = _mk_asset(lib, "alpha")
+    _tag_asset(lib, a, "oldname")
+    assert db.rename_tag(lib, "oldname", "newname") is True
+    tid = lib.execute("SELECT id FROM tag WHERE name = 'newname'").fetchone()
+    assert tid is not None
+    # memberships follow the rename
+    n = lib.execute("SELECT COUNT(*) FROM asset_tag at JOIN tag t"
+                    " ON t.id = at.tag_id WHERE t.name = 'newname'"
+                    " AND at.asset_id = ?", (a,)).fetchone()[0]
+    assert n == 1
+    assert db.rename_tag(lib, "oldname", "newname") is False  # missing
+    assert db.rename_tag(lib, "newname", "") is False         # blank
+    assert db.delete_tag(lib, "newname") is True
+    assert db.delete_tag(lib, "newname") is False
+    assert lib.execute("SELECT COUNT(*) FROM asset_tag WHERE asset_id = ?",
+                       (a,)).fetchone()[0] == 0
+
+
+def test_project_accepts_collection_ref(lib):
+    from fengrid.core import projects as prj
+    pid = prj.create_project(lib, "Collector")
+    cid = lib.execute("SELECT id FROM collection LIMIT 1").fetchone()["id"]
+    assert prj.add_asset(lib, pid, "collection", cid, "Brand collection")
+    rows = lib.execute("SELECT asset_kind FROM project_asset"
+                       " WHERE project_id = ?", (pid,)).fetchall()
+    assert [r["asset_kind"] for r in rows] == ["collection"]
+
+
 def test_palette_crud_roundtrip(lib):
     pid = fcx.save_palette(lib, "Midnight Garden",
                            ["#101418", "#39B8C4", "#F5C25C"], "dark, brand")

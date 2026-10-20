@@ -172,6 +172,145 @@ Item {
                     radius: 5
                 }
             }
+            // LINK TO — typed links to collections / libraries / projects
+            // (targets pulled live when the menu opens)
+            MenuItem {
+                id: linkItem
+                property var targets: []
+                text: qsTr("Link to…")
+                height: 30
+                onHoveredChanged: {
+                    if (!hovered || taxonomy === null)
+                        return
+                    targets = taxonomy.link_targets()
+                    linkSub.open(linkItem, linkItem.width, 0)
+                }
+                onClicked: linkSub.popup(linkItem, linkItem.width, 0)
+                contentItem: Text {
+                    text: linkItem.text
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    color: theme.tokens.text
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 10
+                }
+                background: Rectangle {
+                    color: linkItem.hovered ? theme.tokens.surface2
+                                            : "transparent"
+                    radius: 5
+                }
+                Menu {
+                    id: linkSub
+                    width: 230
+                    padding: 4
+                    background: Rectangle {
+                        radius: 8; color: theme.tokens.surface
+                        border.color: theme.tokens.border
+                    }
+                    Repeater {
+                        model: linkItem.targets
+                        MenuItem {
+                            id: linkTarget
+                            required property var modelData
+                            height: 28
+                            onTriggered: {
+                                var row = library.row(grid.currentIndex)
+                                if (row === null || taxonomy === null)
+                                    return
+                                taxonomy.add_link("icon", row.id,
+                                                  linkTarget.modelData.kind,
+                                                  linkTarget.modelData.id, "")
+                            }
+                            contentItem: Text {
+                                text: linkTarget.modelData.label
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 10
+                            }
+                            background: Rectangle {
+                                color: linkTarget.hovered
+                                       ? theme.tokens.surface2 : "transparent"
+                                radius: 5
+                            }
+                        }
+                    }
+                }
+            }
+            // GENERATE ID — one item per id-type custom field
+            MenuItem {
+                id: genIdItem
+                property var idFields: []
+                text: qsTr("Generate ID…")
+                height: 30
+                enabled: idFields.length > 0
+                onHoveredChanged: {
+                    if (!hovered || taxonomy === null)
+                        return
+                    var out = []
+                    var all = taxonomy.fields
+                    for (var i = 0; i < all.length; i++)
+                        if (all[i].type === "id")
+                            out.push(all[i])
+                    idFields = out
+                    genIdSub.open(genIdItem, genIdItem.width, 0)
+                }
+                onClicked: genIdSub.popup(genIdItem, genIdItem.width, 0)
+                contentItem: Text {
+                    text: genIdItem.text
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    color: genIdItem.enabled
+                           ? theme.tokens.text : theme.tokens.textMuted
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 10
+                }
+                background: Rectangle {
+                    color: genIdItem.hovered ? theme.tokens.surface2
+                                             : "transparent"
+                    radius: 5
+                }
+                Menu {
+                    id: genIdSub
+                    width: 200
+                    padding: 4
+                    background: Rectangle {
+                        radius: 8; color: theme.tokens.surface
+                        border.color: theme.tokens.border
+                    }
+                    Repeater {
+                        model: genIdItem.idFields
+                        MenuItem {
+                            id: genIdTarget
+                            required property var modelData
+                            height: 28
+                            onTriggered: {
+                                var row = library.row(grid.currentIndex)
+                                if (row === null || taxonomy === null)
+                                    return
+                                taxonomy.generate_id(row.id,
+                                                     genIdTarget.modelData.id)
+                            }
+                            contentItem: Text {
+                                text: genIdTarget.modelData.name
+                                font.family: theme.monoFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 10
+                            }
+                            background: Rectangle {
+                                color: genIdTarget.hovered
+                                       ? theme.tokens.surface2 : "transparent"
+                                radius: 5
+                            }
+                        }
+                    }
+                }
+            }
             MenuItem {
                 id: collMenuItem
                 text: qsTr("Add to collection")

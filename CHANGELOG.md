@@ -8,6 +8,29 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **QT6 taxonomy layer** (dev-qt) — the organizational backbone of the
+  Qt port:
+  - **Saved libraries** — named tag sets (match any or all tags) that
+    resolve to a live asset view; add/configure from the left rail
+    (`+ New library…`, right-click → Configure…/Delete).
+  - **Smart collections** — stored criteria (tags any/all, theme,
+    context, ext, starred, name-contains) evaluated live at query time;
+    per-kind rows in the rail's Smart section with an editor dialog and
+    click-to-filter on every pane that carries the kind.
+  - **Custom fields** — global definitions of type text / number / bool
+    / date / select / id, edited in the asset inspector (FIELDS
+    section); right-click a field label to delete.
+  - **Generated IDs** — id-type fields mint `prefix` + zero-padded
+    counters (suffix-scan based; manual high values push the counter);
+    Generate ID ▸ in the asset context menu.
+  - **Typed links** — directed, role-labelled links between assets,
+    collections, libraries, projects (one-to-many / many-to-one /
+    many-to-many all expressible); Link to… in the asset context menu,
+    both-direction listing in the inspector.
+  - **Tag management** — right-click a tag to rename or delete it.
+  - **Projects × collections** — a project can now collect an entire
+    collection (its refs follow live); Attach collection… in the
+    project context menu.
 - **Snippet import from VSCode and massCode** — the Code pane's new
   **Import** button reads `.code-snippets` / per-language `.json`
   snippet files (JSONC: comments and trailing commas tolerated) and

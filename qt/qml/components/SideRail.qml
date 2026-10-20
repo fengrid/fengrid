@@ -169,7 +169,9 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Themes"); visible: rail.showIconSections }
+            SectionLabel { text: qsTr("Themes")
+                           visible: rail.showIconSections
+                                    && library.themes.length > 0 }
             Repeater {
                 model: library.themes
                 RailItem {
@@ -183,7 +185,9 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Contexts"); visible: rail.showIconSections }
+            SectionLabel { text: qsTr("Contexts")
+                           visible: rail.showIconSections
+                                    && library.contexts.length > 0 }
             Repeater {
                 model: library.contexts
                 RailItem {
@@ -197,7 +201,9 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Types"); visible: rail.showIconSections }
+            SectionLabel { text: qsTr("Types")
+                           visible: rail.showIconSections
+                                    && library.exts.length > 0 }
             Repeater {
                 model: library.exts
                 RailItem {
@@ -383,6 +389,14 @@ Rectangle {
                             text = ""
                         }
                     }
+                    Text {
+                        visible: collInput.text === ""
+                        Layout.fillWidth: true
+                        text: qsTr("new collection…")
+                        font.family: theme.uiFont
+                        font.pixelSize: 10
+                        color: theme.tokens.textMuted
+                    }
                     IconImage {
                         name: "plus"
                         px: 12
@@ -400,10 +414,170 @@ Rectangle {
                 }
             }
 
+            // smart collections — live criteria membership; listed under the
+            // collections block on every pane that carries their kind
+            SectionLabel { text: qsTr("Smart")
+                           visible: rail.showCollections }
+            Repeater {
+                model: {
+                    var out = []
+                    var all = taxonomy !== null ? taxonomy.smartCollections : []
+                    for (var i = 0; i < all.length; i++)
+                        if (all[i].item_kind === rail.paneKind)
+                            out.push(all[i])
+                    return out
+                }
+                RailItem {
+                    id: smartRow
+                    required property var modelData
+                    label: smartRow.modelData.name
+                    count: String(smartRow.modelData.n)
+                    accent: theme.tokens.hlInk
+                    active: rail.pane === 0
+                            ? (library !== null && library.activeSmart
+                               === String(smartRow.modelData.id))
+                            : rail.pane === 2
+                              ? (colors !== null && colors.smartFilter
+                                 === String(smartRow.modelData.id))
+                              : (code !== null && code.smartFilter
+                                 === String(smartRow.modelData.id))
+                    onPicked: {
+                        var sid = String(smartRow.modelData.id)
+                        if (rail.pane === 0 && library !== null)
+                            library.set_smart_collection(sid)
+                        else if (rail.pane === 2 && colors !== null)
+                            colors.set_smart(sid)
+                        else if (rail.pane === 3 && code !== null)
+                            code.set_smart(sid)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function (mouse) {
+                            smartMenu.target = smartRow.modelData
+                            smartMenu.popup()
+                        }
+                    }
+                }
+            }
+
+            // add/configure affordance for smart collections
+            Rectangle {
+                visible: rail.showCollections
+                Layout.fillWidth: true
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
+                height: 26
+                radius: 6
+                color: newSmartMa.containsMouse ? theme.tokens.surface2
+                                                : "transparent"
+                Behavior on color { ColorAnimation { duration: 90 } }
+                border.color: theme.tokens.border
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    spacing: 6
+                    IconImage { name: "zap"; px: 12; tint: theme.tokens.textMuted }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("New smart collection…")
+                        font.family: theme.uiFont
+                        font.pixelSize: 12
+                        color: theme.tokens.textMuted
+                    }
+                }
+                MouseArea {
+                    id: newSmartMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        smartDialog.editId = 0
+                        smartDialog.nameText = ""
+                        smartDialog.tagsText = ""
+                        smartDialog.qText = ""
+                        smartDialog.matchAll = false
+                        smartDialog.open()
+                    }
+                }
+            }
+
+            // saved libraries (tag sets) — Icons pane: they resolve to asset
+            // views; clicking one activates the multi-tag filter
+            SectionLabel { text: qsTr("Libraries")
+                           visible: rail.showIconSections }
+            Repeater {
+                model: taxonomy !== null ? taxonomy.libraryViews : []
+                RailItem {
+                    id: libRow
+                    required property var modelData
+                    visible: rail.showIconSections
+                    label: libRow.modelData.name
+                    count: String(libRow.modelData.n)
+                    accent: theme.tokens.accent
+                    active: library !== null
+                            && library.activeLibraryView
+                               === String(libRow.modelData.id)
+                    onPicked: library !== null && library.set_library_view(
+                        String(libRow.modelData.id))
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function (mouse) {
+                            libMenu.target = libRow.modelData
+                            libMenu.popup()
+                        }
+                    }
+                }
+            }
+            // "+ new library" row — the add/configure affordance for the
+            // section (creates and later edits via right-click)
+            Rectangle {
+                visible: rail.showIconSections
+                Layout.fillWidth: true
+                Layout.leftMargin: 8
+                Layout.rightMargin: 8
+                height: 26
+                radius: 6
+                color: newLibMa.containsMouse ? theme.tokens.surface2
+                                              : "transparent"
+                Behavior on color { ColorAnimation { duration: 90 } }
+                border.color: theme.tokens.border
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    spacing: 6
+                    IconImage { name: "plus"; px: 12; tint: theme.tokens.textMuted }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("New library…")
+                        font.family: theme.uiFont
+                        font.pixelSize: 12
+                        color: theme.tokens.textMuted
+                    }
+                }
+                MouseArea {
+                    id: newLibMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        libDialog.editId = 0
+                        libDialog.nameText = ""
+                        libDialog.tagsText = ""
+                        libDialog.matchAll = false
+                        libDialog.open()
+                    }
+                }
+            }
+
             SectionLabel { text: qsTr("Tags"); visible: rail.showIconSections }
             Repeater {
                 model: library.tags
                 RailItem {
+                    id: tagRow
                     visible: rail.showIconSections
                     required property var modelData
                     label: "#" + modelData.name
@@ -411,6 +585,15 @@ Rectangle {
                     active: library !== null && library.tagFilter === modelData.name
                     onPicked: library.set_tag(
                         library.tagFilter === modelData.name ? "" : modelData.name)
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function (mouse) {
+                            tagMenu.target = tagRow.modelData
+                            tagMenu.popup()
+                        }
+                    }
                 }
             }
             Text {
@@ -423,6 +606,323 @@ Rectangle {
                 font.pixelSize: 10
                 color: theme.tokens.textMuted
                 wrapMode: Text.Wrap
+            }
+
+            // right-click menus + dialogs for libraries / smart collections /
+            // tags (added with the taxonomy layer)
+            Menu {
+                id: libMenu
+                property var target: null
+                width: 190
+                padding: 4
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                MenuItem {
+                    text: qsTr("Configure…")
+                    height: 28
+                    enabled: libMenu.target !== null
+                    onTriggered: {
+                        libDialog.editId = libMenu.target.id
+                        libDialog.nameText = libMenu.target.name
+                        libDialog.tagsText = libMenu.target.tags || ""
+                        libDialog.matchAll = libMenu.target.match_all === 1
+                        libDialog.open()
+                    }
+                }
+                MenuItem {
+                    text: qsTr("Delete library")
+                    height: 28
+                    enabled: libMenu.target !== null
+                    onTriggered: taxonomy.delete_library_view(libMenu.target.id)
+                }
+            }
+            Menu {
+                id: smartMenu
+                property var target: null
+                width: 190
+                padding: 4
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                MenuItem {
+                    text: qsTr("Edit criteria…")
+                    height: 28
+                    enabled: smartMenu.target !== null
+                    onTriggered: {
+                        var crit = smartMenu.target.criteria || {}
+                        smartDialog.editId = smartMenu.target.id
+                        smartDialog.nameText = smartMenu.target.name
+                        smartDialog.tagsText = (crit.tags || []).join(", ")
+                        smartDialog.matchAll = !!crit.tag_match_all
+                        smartDialog.qText = crit.q || ""
+                        smartDialog.open()
+                    }
+                }
+                MenuItem {
+                    text: qsTr("Delete smart collection")
+                    height: 28
+                    enabled: smartMenu.target !== null
+                    onTriggered: taxonomy.delete_smart(smartMenu.target.id)
+                }
+            }
+            Menu {
+                id: tagMenu
+                property var target: null
+                width: 190
+                padding: 4
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                MenuItem {
+                    text: qsTr("Rename tag…")
+                    height: 28
+                    enabled: tagMenu.target !== null
+                    onTriggered: {
+                        renameDialog.oldName = tagMenu.target.name
+                        renameDialog.open()
+                    }
+                }
+                MenuItem {
+                    text: qsTr("Delete tag")
+                    height: 28
+                    enabled: tagMenu.target !== null
+                    onTriggered: library.delete_tag(tagMenu.target.name)
+                }
+            }
+
+            // shared create/configure dialog for saved libraries
+            Dialog {
+                id: libDialog
+                property int editId: 0
+                property string nameText: ""
+                property string tagsText: ""
+                property bool matchAll: false
+                width: rail.width - 24
+                padding: 10
+                modal: true
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                contentItem: ColumnLayout {
+                    spacing: 6
+                    Text {
+                        text: libDialog.editId ? qsTr("Configure library")
+                                               : qsTr("New library")
+                        font.family: theme.headingFont; font.pixelSize: 12
+                        color: theme.tokens.text
+                    }
+                    RailTextInput { id: libName; label: qsTr("name") }
+                    RailTextInput { id: libTags; label: qsTr("tags (comma-separated)") }
+                    RowLayout {
+                        CheckBox {
+                            id: libAll
+                            text: qsTr("match ALL tags (else any)")
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            checked: libDialog.matchAll
+                            contentItem: Text {
+                                text: libAll.text
+                                font: libAll.font
+                                color: theme.tokens.textMuted
+                                leftPadding: libAll.indicator.width + 6
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+                footer: RowLayout {
+                    spacing: 6
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: qsTr("Cancel")
+                        onClicked: libDialog.close()
+                        background: Rectangle { radius: 6; color: theme.tokens.surface2 }
+                        contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
+                    }
+                    Button {
+                        text: qsTr("Save")
+                        onClicked: {
+                            if (libName.text.trim() === "")
+                                return
+                            if (libDialog.editId)
+                                taxonomy.update_library_view(
+                                    libDialog.editId, libName.text,
+                                    libTags.text, libAll.checked)
+                            else
+                                taxonomy.create_library_view(
+                                    libName.text, libTags.text, libAll.checked)
+                            libDialog.close()
+                        }
+                        background: Rectangle { radius: 6; color: theme.tokens.accent }
+                        contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
+                    }
+                }
+                onOpened: { libName.text = libDialog.nameText; libTags.text = libDialog.tagsText; libAll.checked = libDialog.matchAll; libName.forceActiveFocus() }
+            }
+
+            // create/configure dialog for smart collections
+            Dialog {
+                id: smartDialog
+                property int editId: 0
+                property string nameText: ""
+                property string tagsText: ""
+                property bool matchAll: false
+                property string qText: ""
+                width: rail.width - 24
+                padding: 10
+                modal: true
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                contentItem: ColumnLayout {
+                    spacing: 6
+                    Text {
+                        text: smartDialog.editId ? qsTr("Edit smart collection")
+                                                 : qsTr("New smart collection")
+                        font.family: theme.headingFont; font.pixelSize: 12
+                        color: theme.tokens.text
+                    }
+                    RailTextInput { id: smartName; label: qsTr("name") }
+                    RailTextInput { id: smartTags; label: qsTr("tags (comma-separated)") }
+                    RailTextInput { id: smartQ; label: qsTr("name contains…") }
+                    CheckBox {
+                        id: smartAll
+                        text: qsTr("match ALL tags (else any)")
+                        font.family: theme.monoFont; font.pixelSize: 10
+                        checked: smartDialog.matchAll
+                        contentItem: Text {
+                            text: smartAll.text
+                            font: smartAll.font
+                            color: theme.tokens.textMuted
+                            leftPadding: smartAll.indicator.width + 6
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+                footer: RowLayout {
+                    spacing: 6
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: qsTr("Cancel")
+                        onClicked: smartDialog.close()
+                        background: Rectangle { radius: 6; color: theme.tokens.surface2 }
+                        contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
+                    }
+                    Button {
+                        text: qsTr("Save")
+                        onClicked: {
+                            if (smartName.text.trim() === "")
+                                return
+                            var crit = {
+                                tags: smartTags.text.split(",").map(
+                                    function (t) { return t.trim() }).filter(
+                                    function (t) { return t !== "" }),
+                                tag_match_all: smartAll.checked,
+                                q: smartQ.text.trim()
+                            }
+                            var critJson = JSON.stringify(crit)
+                            if (smartDialog.editId)
+                                taxonomy.update_smart(
+                                    smartDialog.editId, smartName.text, critJson)
+                            else
+                                taxonomy.create_smart(
+                                    smartName.text, rail.paneKind, critJson)
+                            smartDialog.close()
+                        }
+                        background: Rectangle { radius: 6; color: theme.tokens.accent }
+                        contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
+                    }
+                }
+                onOpened: {
+                    smartName.text = smartDialog.nameText
+                    smartTags.text = smartDialog.tagsText
+                    smartQ.text = smartDialog.qText
+                    smartAll.checked = smartDialog.matchAll
+                    smartName.forceActiveFocus()
+                }
+            }
+
+            // rename dialog for tags
+            Dialog {
+                id: renameDialog
+                property string oldName: ""
+                width: rail.width - 24
+                padding: 10
+                modal: true
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                contentItem: ColumnLayout {
+                    spacing: 6
+                    Text {
+                        text: qsTr("Rename tag")
+                        font.family: theme.headingFont; font.pixelSize: 12
+                        color: theme.tokens.text
+                    }
+                    RailTextInput { id: renameInput; label: qsTr("new name") }
+                }
+                footer: RowLayout {
+                    spacing: 6
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: qsTr("Cancel")
+                        onClicked: renameDialog.close()
+                        background: Rectangle { radius: 6; color: theme.tokens.surface2 }
+                        contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
+                    }
+                    Button {
+                        text: qsTr("Save")
+                        onClicked: {
+                            if (renameInput.text.trim() !== "")
+                                library.rename_tag(renameDialog.oldName,
+                                                   renameInput.text)
+                            renameDialog.close()
+                        }
+                        background: Rectangle { radius: 6; color: theme.tokens.accent }
+                        contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
+                    }
+                }
+                onOpened: { renameInput.text = renameDialog.oldName; renameInput.forceActiveFocus() }
+            }
+
+            // labeled single-line text input used by the dialogs above
+            component RailTextInput: Rectangle {
+                property alias label: railLabel.text
+                property alias text: railInput.text
+                function forceActiveFocus() { railInput.forceActiveFocus() }
+                Layout.fillWidth: true
+                height: 26
+                radius: 6
+                color: theme.tokens.surface2
+                border.color: railInput.activeFocus ? theme.tokens.accent
+                                                    : theme.tokens.border
+                TextInput {
+                    id: railInput
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: theme.monoFont
+                    font.pixelSize: 11
+                    color: theme.tokens.text
+                    clip: true
+                }
+                Text {
+                    id: railLabel
+                    visible: railInput.text === ""
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    verticalAlignment: Text.AlignVCenter
+                    font.family: theme.uiFont
+                    font.pixelSize: 10
+                    color: theme.tokens.textMuted
+                }
             }
 
             Item { Layout.fillHeight: true; Layout.minimumHeight: 8 }

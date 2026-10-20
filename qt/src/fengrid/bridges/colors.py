@@ -43,6 +43,8 @@ class Colors(QObject):
         self._variation = 0
         # optional collection filter for the side rail (palette kind)
         self._collection: int | None = None
+        # active smart collection (sidebar) — criteria filtered in Python
+        self._smart_id = 0
         self._refresh_palettes()
         # seed the pane with one roll so it never opens empty
         self._swatches = core_colors.generate(self._rule, [], mode="dark")
@@ -87,6 +89,19 @@ class Colors(QObject):
     @Property(str, notify=palettesChanged)
     def collectionFilter(self) -> str:
         return "" if self._collection is None else str(self._collection)
+
+    @Property(str, notify=palettesChanged)
+    def smartFilter(self) -> str:
+        return "" if not self._smart_id else str(self._smart_id)
+
+    @Slot(str)
+    def set_smart(self, sc_id: str) -> None:
+        """Toggle the sidebar smart-collection filter (palette kind)."""
+        sid = int(sc_id) if str(sc_id).strip().isdigit() else 0
+        if sid and sid == self._smart_id:
+            sid = 0
+        self._smart_id = sid
+        self._refresh_palettes()
 
     # ---------------------------------------------------------------- slots
     @Slot(str)
@@ -228,4 +243,31 @@ class Colors(QObject):
     def _refresh_palettes(self) -> None:
         self._palettes = core_colors.list_palettes(
             self._con, collection_id=self._collection)
+        if self._smart_id:
+            self._palettes = [p for p in self._palettes
+                              if _matches_smart(self._con, self._smart_id, p)]
         self.palettesChanged.emit()
+
+
+def _matches_smart(con, smart_id: int, row: dict) -> bool:
+    """Tag/q criteria match for a palette/snippet-style row (tags column)."""
+    import json as _json
+    r = con.execute("SELECT criteria FROM smart_collection WHERE id = ?",
+                    (smart_id,)).fetchone()
+    if r is None:
+        return True
+    try:
+        crit = _json.loads(r["criteria"] or "{}")
+    except ValueError:
+        return True
+    tags = [t.strip().lower() for t in crit.get("tags", []) if t.strip()]
+    row_tags = [t.strip().lower() for t in (row.get("tags") or "").split(",")
+                if t.strip()]
+    if tags:
+        hit = [t in row_tags for t in tags]
+        if not (all(hit) if crit.get("tag_match_all") else any(hit)):
+            return False
+    if crit.get("q") and str(crit["q"]).lower() not in str(
+            row.get("name") or row.get("title") or "").lower():
+        return False
+    return True

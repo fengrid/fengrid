@@ -28,6 +28,7 @@ from fengrid.bridges.library import Library
 from fengrid.bridges.projects import Projects
 from fengrid.bridges.termcolors import TermColors
 from fengrid.bridges.theme import Theme
+from fengrid.bridges.taxonomy import Taxonomy
 from fengrid.bridges.updater import Updater
 from fengrid.core import db as core_db
 from fengrid.glprobe import needs_software_fallback
@@ -146,6 +147,8 @@ def main(argv=None) -> int:
     ctx.setContextProperty("projects", projects_bridge)
     ctx.setContextProperty("demo", demo_bridge)
     ctx.setContextProperty("updater", updater_bridge)
+    taxonomy_bridge = Taxonomy(con)
+    ctx.setContextProperty("taxonomy", taxonomy_bridge)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the
     # Loader, which stays inactive there

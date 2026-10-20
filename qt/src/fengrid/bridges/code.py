@@ -38,6 +38,8 @@ class Code(QObject):
         self._sort = "updated"
         # optional collection filter for the side rail (snippet kind)
         self._collection: int | None = None
+        # active smart collection (sidebar) — criteria filtered in Python
+        self._smart_id = 0
         self._current_id: int | None = None
         self._current: dict = {}
         self._snippets: list = []
@@ -102,6 +104,20 @@ class Code(QObject):
     @Property(str, notify=filtersChanged)
     def collectionFilter(self) -> str:
         return "" if self._collection is None else str(self._collection)
+
+    @Property(str, notify=filtersChanged)
+    def smartFilter(self) -> str:
+        return "" if not self._smart_id else str(self._smart_id)
+
+    @Slot(str)
+    def set_smart(self, sc_id: str) -> None:
+        """Toggle the sidebar smart-collection filter (snippet kind)."""
+        sid = int(sc_id) if str(sc_id).strip().isdigit() else 0
+        if sid and sid == self._smart_id:
+            sid = 0
+        self._smart_id = sid
+        self.filtersChanged.emit()
+        self._refresh()
 
     @Property(str, notify=savedChanged)
     def lastSaved(self) -> str:
@@ -214,6 +230,10 @@ class Code(QObject):
             self._con, q=self._q, lang=self._lang, sort=self._sort,
             collection_id=self._collection)
         self._snippets = [dict(r) for r in rows]
+        if self._smart_id:
+            from .colors import _matches_smart
+            self._snippets = [s for s in self._snippets
+                              if _matches_smart(self._con, self._smart_id, s)]
         self._tags = [{"name": n, "count": c}
                       for n, c in core_snippets.tag_cloud(self._con)]
         self.snippetsChanged.emit()

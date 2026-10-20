@@ -310,6 +310,64 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, TAXONOMY LAYER (user feature request batch): custom
+  libraries, smart collections, custom fields + generated IDs, and typed
+  links — core/taxonomy.py + bridges/taxonomy.py + new tables.
+  1. SCHEMA: library_view (name UNIQUE, tags csv, match_all),
+     smart_collection (name UNIQUE, item_kind, criteria JSON),
+     asset_field (name UNIQUE, type text|number|bool|date|select|id,
+     options JSON), asset_field_value (PK asset_id+field_id, cascade),
+     asset_link (from_kind/from_id → to_kind/to_id, role, UNIQUE
+     incl. role, indexes both directions). All CREATE IF NOT EXISTS in
+     SCHEMA (executescript runs every connect → upgrades are automatic).
+  2. SAVED LIBRARIES: named tag sets; match_any (union) or match_all
+     (intersection); library_view_assets resolves to asset ids. The rail
+     gains a Libraries section (Icons pane) with a "+ New library…"
+     affordance and a Configure/Delete context menu; clicking a row
+     activates library.set_library_view → multi-tag grid filter
+     (EXISTS-per-tag for match_all, IN for any; toggles off on re-click;
+     single-tag picks and other activations supersede the overlay).
+  3. SMART COLLECTIONS: criteria JSON evaluated LIVE (no membership
+     rows). Icon criteria: tags (any/all), theme, context, ext, starred,
+     q (name/path LIKE). Snippet/palette criteria: tags + q against the
+     tags column. Rail shows a Smart subsection inside the collections
+     block on every pane that carries its kind (amber zap accent), with
+     a "New smart collection…" affordance + Edit/Delete context menu;
+     the criteria editor edits tags/match-all/q and previews nothing
+     stale because matching happens at query time. Clicking activates:
+     icons → library.set_smart_collection (criteria overlay in
+     _apply_filters), palettes/snippets → colors/code set_smart with a
+     python-side _matches_smart filter over their tag columns.
+  4. CUSTOM FIELDS: global definitions (text/number/bool/date/select/id);
+     per-asset values; missing values list as ''. The asset inspector
+     gains FIELDS + LINKS sections — type-appropriate editors (text
+     input; checkbox; choice combo; id gets a Generate button), a
+     "+ Field…" dialog (name/type/choices or prefix+pad), and
+     right-click-a-field-label → Delete field.
+  5. GENERATED IDs: id-type fields with {prefix, pad}; counter = highest
+     numeric suffix already minted with that prefix + 1 (suffix scan —
+     no separate sequence state to corrupt; manual high values push the
+     counter past them). Context menu on asset cards: Generate ID ▸
+     (one item per id field).
+  6. LINKS: directed, role-labelled, between any two of icon/font/
+     snippet/palette/collection/library/project/smart. One-to-many /
+     many-to-many are free; many-to-one = many sources on one target.
+     Asset-card context menu gains Link to… (live target list pulled
+     when the menu opens); the inspector lists links both directions
+     (→/← prefix, click a row to remove).
+  7. TAG MANAGEMENT: tags are right-clickable — Rename tag… / Delete tag
+     (core db.rename_tag/delete_tag; memberships follow the rename via
+     the FK; an active tag filter clears when its tag is deleted).
+  8. PROJECTS × COLLECTIONS: project_asset kind set extended with
+     'collection' — a project can collect an entire collection (its refs
+     follow live); Projects context menu gains Attach collection… ▸.
+  COLLECTIONS/KINDS NOTE: collections carry per-kind ref counts and are
+  shown per pane (interaction-refinement batch); libraries are asset
+  (icon) views; smart collections are per-kind. Projects span kinds.
+  Verified: +9 core tests (96 total; CRUD/matching/id-gen/links/tag
+  rename-delete/project-collection), bridge probes for view + smart
+  activation (3→toggle→3; smart 3→2; match-all →1), full QA gate green,
+  app loads offscreen with the new rail sections.
 - 2026-10-20, MONO FONT SWAP (user readability feedback): bundled
   Iosevka Mono (deliberately condensed — cramped at 9–13px UI sizes)
   replaced with Roboto Mono (Apache-2.0, googlefonts/RobotoMono static

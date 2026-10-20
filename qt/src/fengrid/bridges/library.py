@@ -119,6 +119,13 @@ class Library(QObject):
         self._ext = ""
         self._tag = ""
         self._collection = ""       # "" = all, otherwise collection id (str)
+        # multi-tag view filter (saved libraries) + active smart collection —
+        # both are taxonomy-layer overlays over the single-tag filter
+        self._tags_filter: list[str] = []
+        self._tags_all = False
+        self._active_view = 0       # library_view id, 0 = none
+        self._active_smart = 0      # smart_collection id, 0 = none
+        self._smart_crit: dict = {}
 
         self._scanning = False
         self._scan_count = 0
@@ -193,6 +200,14 @@ class Library(QObject):
         return self._tag
 
     @Property(str, notify=filtersChanged)
+    def activeLibraryView(self):
+        return "" if not self._active_view else str(self._active_view)
+
+    @Property(str, notify=filtersChanged)
+    def activeSmart(self):
+        return "" if not self._active_smart else str(self._active_smart)
+
+    @Property(str, notify=filtersChanged)
     def collectionFilter(self):
         return self._collection
 
@@ -244,6 +259,29 @@ class Library(QObject):
                     " OR lower(js) LIKE ? LIMIT 20",
                     ["%" + term.lower() + "%"] * 6).fetchall()]
 
+    @Slot(str, str)
+    def rename_tag(self, old: str, new: str) -> None:
+        if core_db.rename_tag(self._con, old, new):
+            self._refresh_lists()
+            self._apply_filters()
+            self.tagsRevision.emit()
+            self.message.emit(f"Tag renamed: {new.strip()}")
+        else:
+            self.message.emit("Rename failed (missing or duplicate name)")
+
+    @Slot(str)
+    def delete_tag(self, name: str) -> None:
+        if core_db.delete_tag(self._con, name):
+            self._refresh_lists()
+            if self._tag == name:
+                self._tag = ""
+                self.filtersChanged.emit()
+            self._apply_filters()
+            self.tagsRevision.emit()
+            self.message.emit(f"Tag deleted: {name}")
+        else:
+            self.message.emit("Tag not found")
+
     @Slot(str)
     def set_search(self, term: str) -> None:
         self._search = term or ""
@@ -270,6 +308,78 @@ class Library(QObject):
     @Slot(str)
     def set_tag(self, name: str) -> None:
         self._tag = "" if name == self._tag else (name or "")
+        # a single-tag pick supersedes any active view/smart overlay
+        self._tags_filter = []
+        self._active_view = 0
+        self._active_smart = 0
+        self.filtersChanged.emit()
+        self._apply_filters()
+
+    @Slot(str, bool)
+    def set_tags(self, tags_csv: str, match_all: bool) -> None:
+        """Multi-tag filter (a saved library's tag set)."""
+        tag_list = [t.strip() for t in (tags_csv or "").split(",")
+                    if t.strip()]
+        self._tags_filter = tag_list
+        self._tags_all = bool(match_all)
+        self._active_smart = 0
+        self.filtersChanged.emit()
+        self._apply_filters()
+
+    @Slot(str)
+    def set_library_view(self, view_id: str) -> None:
+        """Activate a saved library view (toggles off on a second click)."""
+        vid = int(view_id) if str(view_id).strip().isdigit() else 0
+        if vid and vid == self._active_view:
+            vid = 0
+        self._active_view = vid
+        self._active_smart = 0
+        if vid:
+            row = self._con.execute(
+                "SELECT tags, match_all FROM library_view WHERE id = ?",
+                (vid,)).fetchone()
+            if row is None:
+                self._active_view = 0
+                self._tags_filter = []
+            else:
+                self._tags_filter = [t.strip() for t in
+                                     (row["tags"] or "").split(",")
+                                     if t.strip()]
+                self._tags_all = bool(row["match_all"])
+                self._theme = self._context = self._ext = ""
+        else:
+            self._tags_filter = []
+            self._tags_all = False
+        self.filtersChanged.emit()
+        self._apply_filters()
+
+    @Slot(str)
+    def set_smart_collection(self, sc_id: str) -> None:
+        """Activate a smart collection: resets the single filters and applies
+        the stored criteria as the current view (toggles off on re-click)."""
+        sid = int(sc_id) if str(sc_id).strip().isdigit() else 0
+        if sid and sid == self._active_smart:
+            sid = 0
+        self._active_smart = sid
+        self._active_view = 0
+        self._tags_filter = []
+        self._tags_all = False
+        self._smart_crit = {}
+        self._theme = self._context = self._ext = ""
+        self._tag = ""
+        if sid:
+            row = self._con.execute(
+                "SELECT criteria FROM smart_collection WHERE id = ?",
+                (sid,)).fetchone()
+            if row is not None:
+                import json as _json
+                try:
+                    self._smart_crit = _json.loads(row["criteria"] or "{}")
+                except ValueError:
+                    self._smart_crit = {}
+                self._theme = str(self._smart_crit.get("theme") or "")
+                self._context = str(self._smart_crit.get("context") or "")
+                self._ext = str(self._smart_crit.get("ext") or "")
         self.filtersChanged.emit()
         self._apply_filters()
 
@@ -283,6 +393,11 @@ class Library(QObject):
     def clear_filters(self) -> None:
         self._theme = self._context = self._ext = ""
         self._tag = self._collection = ""
+        self._tags_filter = []
+        self._tags_all = False
+        self._active_view = 0
+        self._active_smart = 0
+        self._smart_crit = {}
         self.filtersChanged.emit()
         self._apply_filters()
 
@@ -615,6 +730,49 @@ class Library(QObject):
                        " JOIN tag t ON t.id = at.tag_id")
             where.append("t.name = ?")
             params.append(self._tag)
+        # saved-library multi-tag overlay (match_all = AND every tag)
+        if self._tags_filter:
+            if self._tags_all:
+                for t in self._tags_filter:
+                    where.append("EXISTS (SELECT 1 FROM asset_tag xt"
+                                 " JOIN tag xtn ON xtn.id = xt.tag_id"
+                                 " WHERE xt.asset_id = a.id AND xtn.name = ?)")
+                    params.append(t)
+            else:
+                marks = ",".join("?" * len(self._tags_filter))
+                where.append("a.id IN (SELECT yt.asset_id FROM asset_tag yt"
+                             " JOIN tag ytn ON ytn.id = yt.tag_id"
+                             f" WHERE ytn.name IN ({marks}))")
+                params += self._tags_filter
+        # active smart collection: tag/starred/q criteria ride on top (the
+        # theme/context/ext criteria were copied into the single filters
+        # when the smart row was activated)
+        if self._active_smart and self._smart_crit:
+            crit = self._smart_crit
+            sc_tags = [t.strip() for t in crit.get("tags", []) if t.strip()]
+            if sc_tags:
+                if crit.get("tag_match_all"):
+                    for t in sc_tags:
+                        where.append(
+                            "EXISTS (SELECT 1 FROM asset_tag zt"
+                            " JOIN tag ztn ON ztn.id = zt.tag_id"
+                            " WHERE zt.asset_id = a.id AND ztn.name = ?)")
+                        params.append(t)
+                else:
+                    marks2 = ",".join("?" * len(sc_tags))
+                    where.append("a.id IN (SELECT wt.asset_id FROM asset_tag wt"
+                                 " JOIN tag wtn ON wtn.id = wt.tag_id"
+                                 f" WHERE wtn.name IN ({marks2}))")
+                    params += sc_tags
+            if crit.get("starred"):
+                where.append(
+                    "a.id IN (SELECT st.asset_id FROM asset_tag st"
+                    " JOIN tag stn ON stn.id = st.tag_id"
+                    " WHERE stn.name = 'starred')")
+            if crit.get("q"):
+                where.append("(lower(a.name) LIKE ? OR lower(a.path) LIKE ?)")
+                like = "%" + str(crit["q"]).lower() + "%"
+                params += [like, like]
         if self._collection:
             sql.append("JOIN collection_ref cr ON cr.item_kind = 'icon'"
                        " AND cr.item_id = a.id")

@@ -34,7 +34,7 @@ DEFAULT_SETTINGS = {
     "preview": {"mode": "site", "snippetId": None},
 }
 
-ASSET_KINDS = ("icon", "font", "snippet", "palette")
+ASSET_KINDS = ("icon", "font", "snippet", "palette", "collection")
 
 _FONT_FORMATS = {"ttf": "truetype", "otf": "opentype", "woff": "woff",
                  "woff2": "woff2"}
@@ -118,7 +118,8 @@ def delete_project(con: sqlite3.Connection, pid: int) -> None:
 
 def add_asset(con: sqlite3.Connection, pid: int, kind: str, asset_id: int,
               label: str = "") -> bool:
-    """Attach an existing library row (asset/snippet/palette) to a project.
+    """Attach an existing library row (asset/snippet/palette — or a whole
+    collection) to a project.
 
     Returns False when the kind is unknown or the row does not exist —
     the 0.x server validated the same way before INSERT OR IGNORE.
@@ -130,6 +131,10 @@ def add_asset(con: sqlite3.Connection, pid: int, kind: str, asset_id: int,
                           (asset_id, kind)).fetchone()
     elif kind == "snippet":
         row = con.execute("SELECT id FROM snippet WHERE id = ?",
+                          (asset_id,)).fetchone()
+    elif kind == "collection":
+        # a project can collect an entire collection (its refs follow live)
+        row = con.execute("SELECT id FROM collection WHERE id = ?",
                           (asset_id,)).fetchone()
     else:
         row = con.execute("SELECT id FROM palette WHERE id = ?",

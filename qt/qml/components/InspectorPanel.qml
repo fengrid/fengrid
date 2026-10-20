@@ -14,12 +14,18 @@ Rectangle {
     property string exportFormat: "png"
     property string exportSize: "64"
     property var d: null
+    // taxonomy rows for the selected asset, snapshotted at reload time
+    property var fieldsModel: []
+    property var linksModel: []
 
     onIndexChanged: reload()
     onVisibleChanged: if (visible) reload()
 
     function reload() {
         d = (index >= 0 && library !== null) ? library.get_details(index) : null
+        fieldsModel = taxonomy !== null ? taxonomy.fields : []
+        linksModel = (taxonomy !== null && d) ? taxonomy.links_for("icon", d.id)
+                                              : []
     }
 
     function fmtBytes(n) {
@@ -43,6 +49,13 @@ Rectangle {
         target: library
         function onTagsRevision() { panel.reload() }
         function onListsChanged() { panel.reload() }
+    }
+    Connections {
+        target: taxonomy
+        function onFieldsChanged() { panel.reload() }
+        function onLinksChanged() { panel.reload() }
+        function onViewsChanged() { panel.reload() }
+        function onSmartsChanged() { panel.reload() }
     }
 
     component SectionHeader: Text {
@@ -236,6 +249,388 @@ Rectangle {
                             library.add_tag(panel.index, tagInput.text.trim())
                         tagInput.text = ""
                     }
+                }
+            }
+        }
+
+        // CUSTOM FIELDS (taxonomy layer): every defined field with this
+        // asset's value, edited in place — text/number/date/id as text
+        // inputs, bool as a checkbox, select as a choice combo; id fields
+        // gain a Generate button. "+ Field" defines a new global field.
+        SectionHeader { text: qsTr("FIELDS") }
+        Repeater {
+            model: fieldsModel
+            RowLayout {
+                id: fieldRow
+                required property var modelData
+                required property int index
+                spacing: 6
+                Layout.fillWidth: true
+                Text {
+                    text: fieldRow.modelData.name
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
+                    color: theme.tokens.textMuted
+                    Layout.preferredWidth: 86
+                    elide: Text.ElideRight
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        onClicked: fieldDeleteMenu.openFor(fieldRow.index,
+                                                           fieldRow.modelData)
+                    }
+                }
+                // type-appropriate editor
+                Loader {
+                    Layout.fillWidth: true
+                    sourceComponent: fieldRow.modelData.type === "bool"
+                                     ? boolEditor
+                                     : (fieldRow.modelData.type === "select"
+                                        ? selectEditor : textEditor)
+                }
+                Component {
+                    id: textEditor
+                    Rectangle {
+                        height: 24
+                        radius: 5
+                        color: theme.tokens.surface2
+                        border.color: fieldEdit.activeFocus
+                                      ? theme.tokens.accent : theme.tokens.border
+                        TextInput {
+                            id: fieldEdit
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            verticalAlignment: TextInput.AlignVCenter
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.text
+                            clip: true
+                            text: fieldRow.modelData.value
+                            onEditingFinished: taxonomy !== null
+                                && taxonomy.set_field_value(
+                                    d.id, fieldRow.modelData.id, text)
+                        }
+                    }
+                }
+                Component {
+                    id: boolEditor
+                    CheckBox {
+                        checked: fieldRow.modelData.value === "1"
+                        onClicked: taxonomy !== null && taxonomy.set_field_value(
+                            d.id, fieldRow.modelData.id, checked ? "1" : "0")
+                        contentItem: Text {
+                            text: qsTr("yes")
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            color: theme.tokens.textMuted
+                            leftPadding: parent.indicator.width + 6
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+                Component {
+                    id: selectEditor
+                    ComboBox {
+                        width: 140
+                        model: fieldRow.modelData.options.choices || []
+                        currentIndex: {
+                            var ch = fieldRow.modelData.options.choices || []
+                            return ch.indexOf(fieldRow.modelData.value)
+                        }
+                        onActivated: function (idx) {
+                            taxonomy !== null && taxonomy.set_field_value(
+                                d.id, fieldRow.modelData.id,
+                                model[idx])
+                        }
+                        background: Rectangle {
+                            radius: 5; color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: parent.displayText
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            color: theme.tokens.text
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 6
+                        }
+                    }
+                }
+                IconButton {
+                    visible: fieldRow.modelData.type === "id"
+                    icon_name: "zap"
+                    icon_px: 11
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    ToolTip.text: qsTr("Generate next ID")
+                    onClicked: taxonomy !== null && taxonomy.generate_id(
+                        d.id, fieldRow.modelData.id)
+                }
+            }
+        }
+        RowLayout {
+            spacing: 6
+            Layout.fillWidth: true
+            IconImage {
+                name: "plus"; px: 12; tint: theme.tokens.textMuted
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: fieldDialog.open()
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                text: qsTr("Add field…  (right-click a field label to delete)")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
+        }
+
+        // LINKS (taxonomy layer): typed links in and out of this asset
+        SectionHeader { text: qsTr("LINKS") }
+        Repeater {
+            model: linksModel
+            RowLayout {
+                id: linkRow
+                required property var modelData
+                required property int index
+                spacing: 6
+                Layout.fillWidth: true
+                Text {
+                    text: (linkRow.modelData.direction === "out"
+                           ? "→ " : "← ") + linkRow.modelData.label
+                          + (linkRow.modelData.role !== ""
+                             ? "  (" + linkRow.modelData.role + ")" : "")
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
+                    color: theme.tokens.textMuted
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: taxonomy !== null
+                                   && taxonomy.remove_link(linkRow.modelData.id)
+                    }
+                    ToolTip.visible: containsMouse
+                    ToolTip.text: qsTr("click to remove this link")
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: taxonomy !== null && taxonomy.links_for(
+                         "icon", d ? d.id : -1).length === 0
+            text: qsTr("Link to collections, libraries or projects from the"
+                       + " asset's right-click menu")
+            font.family: theme.uiFont
+            font.pixelSize: 10
+            color: theme.tokens.textMuted
+            wrapMode: Text.Wrap
+        }
+
+        // delete-field menu (right-click a field label)
+        Menu {
+            id: fieldDeleteMenu
+            property int targetFieldId: 0
+            function openFor(idx, field) {
+                targetFieldId = field.id
+                popup()
+            }
+            width: 160
+            padding: 4
+            background: Rectangle {
+                radius: 8; color: theme.tokens.surface
+                border.color: theme.tokens.border
+            }
+            MenuItem {
+                text: qsTr("Delete field")
+                height: 28
+                onTriggered: taxonomy !== null
+                             && taxonomy.delete_field(
+                                 fieldDeleteMenu.targetFieldId)
+                contentItem: Text {
+                    text: parent.text
+                    font.family: theme.uiFont; font.pixelSize: 11
+                    color: theme.tokens.text
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 10
+                }
+                background: Rectangle {
+                    color: parent.hovered ? theme.tokens.surface2
+                                          : "transparent"
+                    radius: 5
+                }
+            }
+        }
+
+        // new-field dialog: name + type + per-type options
+        Dialog {
+            id: fieldDialog
+            width: 260
+            padding: 10
+            modal: true
+            background: Rectangle {
+                radius: 8; color: theme.tokens.surface
+                border.color: theme.tokens.border
+            }
+            contentItem: ColumnLayout {
+                spacing: 6
+                Text {
+                    text: qsTr("New field")
+                    font.family: theme.headingFont; font.pixelSize: 12
+                    color: theme.tokens.text
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 26
+                    radius: 6
+                    color: theme.tokens.surface2
+                    border.color: fName.activeFocus ? theme.tokens.accent
+                                                    : theme.tokens.border
+                    TextInput {
+                        id: fName
+                        anchors.fill: parent
+                        anchors.leftMargin: 8; anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+                        font.family: theme.monoFont; font.pixelSize: 11
+                        color: theme.tokens.text
+                        clip: true
+                    }
+                    Text {
+                        visible: fName.text === ""
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        verticalAlignment: Text.AlignVCenter
+                        text: qsTr("field name…")
+                        font.family: theme.uiFont; font.pixelSize: 10
+                        color: theme.tokens.textMuted
+                    }
+                }
+                ComboBox {
+                    id: fType
+                    Layout.fillWidth: true
+                    model: ["text", "number", "bool", "date", "select", "id"]
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: fType.displayText
+                        font.family: theme.monoFont; font.pixelSize: 11
+                        color: theme.tokens.text
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 8
+                    }
+                }
+                Rectangle {
+                    visible: fType.currentIndex === 4
+                    Layout.fillWidth: true
+                    height: 26
+                    radius: 6
+                    color: theme.tokens.surface2
+                    border.color: fChoices.activeFocus ? theme.tokens.accent
+                                                       : theme.tokens.border
+                    TextInput {
+                        id: fChoices
+                        anchors.fill: parent
+                        anchors.leftMargin: 8; anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+                        font.family: theme.monoFont; font.pixelSize: 11
+                        color: theme.tokens.text
+                        clip: true
+                    }
+                    Text {
+                        visible: fChoices.text === ""
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        verticalAlignment: Text.AlignVCenter
+                        text: qsTr("choices, comma-separated")
+                        font.family: theme.uiFont; font.pixelSize: 10
+                        color: theme.tokens.textMuted
+                    }
+                }
+                RowLayout {
+                    visible: fType.currentIndex === 5
+                    spacing: 6
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 26
+                        radius: 6
+                        color: theme.tokens.surface2
+                        border.color: fPrefix.activeFocus
+                                      ? theme.tokens.accent : theme.tokens.border
+                        TextInput {
+                            id: fPrefix
+                            anchors.fill: parent
+                            anchors.leftMargin: 8; anchors.rightMargin: 8
+                            verticalAlignment: TextInput.AlignVCenter
+                            font.family: theme.monoFont; font.pixelSize: 11
+                            color: theme.tokens.text
+                            clip: true
+                        }
+                        Text {
+                            visible: fPrefix.text === ""
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            verticalAlignment: Text.AlignVCenter
+                            text: qsTr("prefix (e.g. ICON-)")
+                            font.family: theme.uiFont; font.pixelSize: 10
+                            color: theme.tokens.textMuted
+                        }
+                    }
+                    Rectangle {
+                        Layout.preferredWidth: 56
+                        height: 26
+                        radius: 6
+                        color: theme.tokens.surface2
+                        border.color: fPad.activeFocus ? theme.tokens.accent
+                                                       : theme.tokens.border
+                        TextInput {
+                            id: fPad
+                            anchors.fill: parent
+                            anchors.leftMargin: 8; anchors.rightMargin: 8
+                            verticalAlignment: TextInput.AlignVCenter
+                            font.family: theme.monoFont; font.pixelSize: 11
+                            color: theme.tokens.text
+                            clip: true
+                            text: "4"
+                        }
+                    }
+                }
+            }
+            footer: RowLayout {
+                spacing: 6
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: qsTr("Cancel")
+                    onClicked: fieldDialog.close()
+                    background: Rectangle { radius: 6; color: theme.tokens.surface2 }
+                    contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
+                }
+                Button {
+                    text: qsTr("Create")
+                    onClicked: {
+                        if (fName.text.trim() === "" || taxonomy === null)
+                            return
+                        var opts = {}
+                        if (fType.currentIndex === 4)
+                            opts.choices = fChoices.text.split(",").map(
+                                function (s) { return s.trim() }).filter(
+                                function (s) { return s !== "" })
+                        if (fType.currentIndex === 5) {
+                            opts.prefix = fPrefix.text.trim()
+                            opts.pad = parseInt(fPad.text) || 4
+                        }
+                        taxonomy.create_field(fName.text, fType.currentText,
+                                              JSON.stringify(opts))
+                        fName.text = ""
+                        fieldDialog.close()
+                    }
+                    background: Rectangle { radius: 6; color: theme.tokens.accent }
+                    contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
                 }
             }
         }
