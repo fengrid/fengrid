@@ -310,6 +310,23 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, editor keymap schemes: the Code pane's command layer is now
+  scheme-driven (Code bridge `keymap` property + `set_keymap` slot,
+  persisted on the `setting` table as `editor_keymap`, default vscode):
+  **vscode** — native TextArea behavior (Ctrl+A selects all, word motions
+  work natively), only Tab/Shift+Tab indent/dedent handled; **emacs** —
+  the ported 0.x layer (Ctrl+A/E/K/Y/D, Alt+B/F/D/Backspace, Ctrl+X
+  Ctrl+S); **vim** — the modal layer, enabled from launch (the VIM toggle
+  still overlays/escapes any scheme); **readline** — the emacs set plus
+  Ctrl+U (kill to line start) and Ctrl+W (kill word back), which stay out
+  of the emacs scheme because Ctrl+U is universal-argument there.
+  Shift+Tab dedent works in every scheme incl. vim insert mode
+  (`tabDedent`, snapshot-undo-aware). The picker lives next to the VIM
+  button in the editor toolbar; the help popup documents all four.
+  Note: emacs/readline intercept Ctrl+A — the QA keys harness therefore
+  sets the scheme explicitly per test; the default scheme is vscode.
+  QA gate: 62 tests + clean dark/light renders; pane-3 screenshot
+  confirms the combo renders unclipped next to VIM.
 - 2026-10-20, starring + context menu: `db.ensure_defaults()` runs at every
   connect() — the `starred` tag and `Starred Assets` collection exist from
   the first launch and are re-created on demand if a user deletes them
