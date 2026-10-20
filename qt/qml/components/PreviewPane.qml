@@ -3,15 +3,22 @@ import QtQuick
 
 // PreviewPane — the hardened embedded-Chromium surface (ADR-0001 §8/§9).
 //
-// Serves indexed assets through fengrid-asset:// (path allowlist enforced in
-// Python by AssetSchemeHandler); every other request is blocked by the
-// profile's interceptor. Off-the-record profile — no storage, no cache.
+// Two content modes:
+// - `assetPath`: serves an indexed file through fengrid-asset:// (path
+//   allowlist enforced in Python by AssetSchemeHandler).
+// - `document`: renders in-memory HTML (code playground / composer) via
+//   loadHtml with an fengrid-asset:// base URL, so relative references
+//   stay inside the sandboxed scheme.
 //
-// Startup contract: the scheme must be registered before QGuiApplication
-// (done unconditionally in __main__ via web.register_asset_scheme). When the
-// FIRST PreviewPane instance is ever shown, call QtWebEngineQuick.initialize()
-// in Python before the app object — the default shell does not instantiate
-// this component, so it stays out of the QA render path.
+// Every other request is blocked by the profile's interceptor. The profile
+// MUST be the hardened off-the-record one (`previewProfile` context
+// property, built by web.make_preview_profile) — the default profile has
+// no interceptor, so instantiating this component without one is a bug.
+//
+// Startup contract: the scheme is registered and QtWebEngineQuick.initialize()
+// runs before QGuiApplication (both in __main__); the component is only ever
+// instantiated inside a Loader that the shell activates on demand, so the
+// QA offscreen renders never pay the Chromium startup cost.
 WebEngineView {
     id: pane
 
@@ -21,7 +28,15 @@ WebEngineView {
             pane.url = "fengrid-asset://" + assetPath
     }
 
-    settings.showScrollBars: false
+    property string document: ""
+    onDocumentChanged: {
+        if (document !== "")
+            // baseUrl keeps relative resolution inside the sandboxed scheme;
+            // the interceptor still blocks everything unlisted
+            pane.loadHtml(pane.document, "fengrid-asset://playground/")
+    }
+
+    settings.showScrollBars: true
     settings.webGLEnabled: false
     settings.pluginsEnabled: false
     settings.javascriptCanAccessClipboard: false

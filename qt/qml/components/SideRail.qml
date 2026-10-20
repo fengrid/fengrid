@@ -110,6 +110,11 @@ Rectangle {
                 active: rail.pane === 2
                 onPicked: rail.panePicked(2)
             }
+            RailItem {
+                label: qsTr("Code")
+                active: rail.pane === 3
+                onPicked: rail.panePicked(3)
+            }
 
             SectionLabel { text: qsTr("Library") }
             RailItem {

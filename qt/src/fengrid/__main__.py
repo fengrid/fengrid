@@ -20,13 +20,15 @@ from PySide6.QtQuickControls2 import QQuickStyle
 
 from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
+from fengrid.bridges.code import Code
 from fengrid.bridges.colors import Colors
 from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.theme import Theme
 from fengrid.core import db as core_db
 from fengrid.glprobe import needs_software_fallback
-from fengrid.web import register_asset_scheme
+from fengrid.web import initialize_webengine, make_preview_profile, \
+    register_asset_scheme
 
 
 def _asset_dir(*parts: str) -> str:
@@ -63,6 +65,9 @@ def main(argv=None) -> int:
                         help="override the library database path")
     parser.add_argument("--no-scan", action="store_true",
                         help="skip the first-run auto scan")
+    parser.add_argument("--pane", type=int, default=0,
+                        help="initial pane: 0 icons, 1 fonts, 2 colors, 3 code"
+                             " (QA screenshots)")
     parser.add_argument("--version", action="version",
                         version=f"fengrid {__version__}")
     args = parser.parse_args(argv)
@@ -73,15 +78,18 @@ def main(argv=None) -> int:
     # respects explicit QT_* overrides, so the QA offscreen path is untouched.
     if needs_software_fallback():
         os.environ["QT_QUICK_BACKEND"] = "software"
+        os.environ["QT_XCB_GL_INTEGRATION"] = "none"
         print("warning: no usable hardware GL on this display —"
               " using the software renderer", file=sys.stderr)
 
     # scheme registration must precede QGuiApplication (flags are read at
-    # Chromium start); it spawns no threads, so it is always safe. QtWebEngine
-    # itself initializes lazily in the first surface that shows a view.
+    # Chromium start), and initialize_webengine() must also run before the
+    # app object exists — Chromium reads the command line during its
+    # construction. Both spawn no work when WebEngine is unavailable.
     if not register_asset_scheme():
         print("warning: QtWebEngineCore unavailable — preview surfaces"
               " disabled", file=sys.stderr)
+    initialize_webengine()
 
     # must precede QGuiApplication — controls are token-driven from QML
     QQuickStyle.setStyle("Basic")
@@ -109,6 +117,7 @@ def main(argv=None) -> int:
     library = Library(con, db_path, no_scan=args.no_scan)
     fonts = Fonts(con, db_path)
     colors_bridge = Colors(con)
+    code_bridge = Code(con)
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
@@ -116,7 +125,13 @@ def main(argv=None) -> int:
     ctx.setContextProperty("library", library)
     ctx.setContextProperty("fonts", fonts)
     ctx.setContextProperty("colors", colors_bridge)
+    ctx.setContextProperty("code", code_bridge)
+    preview_profile = make_preview_profile(con, app)
+    # None on platforms without WebEngine — QML binds it only inside the
+    # Loader, which stays inactive there
+    ctx.setContextProperty("previewProfile", preview_profile)
     ctx.setContextProperty("appVersion", __version__)
+    ctx.setContextProperty("initialPane", args.pane)
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
     if not engine.rootObjects():
         print("error: failed to load the QML shell", file=sys.stderr)

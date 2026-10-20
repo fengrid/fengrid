@@ -84,6 +84,19 @@ CREATE TABLE IF NOT EXISTS scan_state (
     fingerprint TEXT,
     last_seen   REAL
 );
+CREATE TABLE IF NOT EXISTS snippet (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    language    TEXT NOT NULL DEFAULT 'web',
+    html        TEXT NOT NULL DEFAULT '',
+    css         TEXT NOT NULL DEFAULT '',
+    js          TEXT NOT NULL DEFAULT '',
+    tags        TEXT NOT NULL DEFAULT '',
+    created     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_snippet_updated ON snippet(updated DESC);
 """
 
 # External-content FTS5 kept in sync by triggers (the indexer never UPDATEs

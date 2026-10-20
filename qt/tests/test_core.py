@@ -444,3 +444,92 @@ def test_fallback_probes_egl_on_wayland(monkeypatch):
     # whatever _egl_ok reports, the decision must follow it without crashing
     result = glprobe.needs_software_fallback()
     assert result is (not glprobe._egl_ok())
+
+
+# ------------------------------------------------------------------- snippets
+
+from fengrid.core import snippets as snp
+
+
+def test_map_language():
+    assert snp.map_language("html") == ("html", "web", None)
+    assert snp.map_language("md") == ("html", "markdown", None)
+    assert snp.map_language("TypeScript") == ("js", "web", None)
+    assert snp.map_language("javascriptreact") == ("js", "web", None)
+    assert snp.map_language("cobol") == ("js", "web", "cobol")
+    assert snp.map_language(None) == ("html", "web", None)
+
+
+def test_jsonc_loads():
+    text = ('{\n  // line comment\n  "a": {"prefix": "x", /* block */'
+            ' "body": ["line1", "line2",]},\n}')
+    data = snp.jsonc_loads(text)
+    assert data["a"]["prefix"] == "x"
+    assert data["a"]["body"] == ["line1", "line2"]
+
+
+def test_parse_vscode():
+    text = ('{ "make-a-button": {'
+            '"title": "Make a button", "scope": "html", "prefix": "btn",'
+            '"body": ["<button class=\\"x\\">hi</button>"] },'
+            ' "raw": {"prefix": "raw", "scope": "cobol",'
+            '"body": ["MOVE A TO B."]}}')
+    out = snp.parse_vscode(text)
+    assert len(out) == 2
+    assert out[0]["title"] == "Make a button"
+    assert out[0]["html"] == '<button class="x">hi</button>'
+    assert out[0]["language"] == "web"
+    assert "btn" in out[0]["tags"]
+    assert out[1]["js"] == "MOVE A TO B."          # unmapped → JS pane
+    assert "lang:cobol" in out[1]["tags"]
+
+
+def test_masscode_import(tmp_path):
+    import sqlite3 as s3
+    db_path = tmp_path / "db.sqlite"
+    conn = s3.connect(db_path)
+    conn.execute("CREATE TABLE snippets (id INTEGER PRIMARY KEY, name TEXT,"
+                 " content TEXT, tags TEXT, is_deleted INTEGER DEFAULT 0)")
+    conn.execute("CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT)")
+    conn.execute("CREATE TABLE snippet_tags (snippet_id INTEGER,"
+                 " tag_id INTEGER)")
+    conn.execute("INSERT INTO tags (id, name) VALUES (1, 'ui'), (2, 'css')")
+    frag = ('[{"language": "css", "value": "body{color:red}"},'
+            ' {"language": "javascript", "value": "console.log(1)"}]')
+    conn.execute("INSERT INTO snippets (name, content, tags) VALUES"
+                 " (?, ?, ?)", ("my snippet", frag, "[1, 2]"))
+    conn.execute("INSERT INTO snippets (name, content) VALUES (?, ?)",
+                 ("plain note", "just text"))
+    conn.commit()
+    conn.close()
+
+    out = snp.parse_masscode_db(db_path)
+    assert len(out) == 2
+    assert out[0]["title"] == "my snippet"
+    assert out[0]["css"] == "body{color:red}"
+    assert out[0]["js"] == "console.log(1)"
+    assert "ui" in out[0]["tags"] and "css" in out[0]["tags"]
+    # plain-text row lands in the JS pane (0.x behaviour)
+    assert out[1]["js"] == "just text"
+
+
+def test_snippet_crud(lib):
+    sid = snp.create_snippet(lib, "T", "d", "web", "<p>", "", "", "a, b")
+    row = snp.get_snippet(lib, sid)
+    assert row["title"] == "T" and row["tags"] == "a, b"
+    snp.update_snippet(lib, sid, "T2", "d", "web", "", "", "", "")
+    assert snp.get_snippet(lib, sid)["title"] == "T2"
+    assert len(snp.list_snippets(lib, q="t2")) == 1
+    assert len(snp.list_snippets(lib, lang="markdown")) == 0
+    assert len(snp.list_snippets(lib, sort="title")) == 1
+    snp.delete_snippet(lib, sid)
+    assert snp.get_snippet(lib, sid) is None
+
+
+def test_snippet_tag_cloud(lib):
+    snp.create_snippet(lib, "A", "", "web", "", "", "", "x, y")
+    snp.create_snippet(lib, "B", "", "web", "", "", "", "x")
+    cloud = snp.tag_cloud(lib)
+    names = [n for n, _ in cloud]
+    assert names[0] == "x"          # highest count first
+    assert dict(cloud)["y"] == 1

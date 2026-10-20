@@ -9,52 +9,71 @@ Design, locked in the ADR:
 - No QWebChannel bridge exists inside previewed content; privileged
   channels belong to the app's own surfaces only.
 
-Startup ordering notes:
-- `register_asset_scheme()` must run before QGuiApplication is created
-  (scheme flags are read at Chromium start). It does NOT spawn threads, so
-  it is safe to call unconditionally in __main__.
-- QtWebEngineQuick.initialize() is intentionally NOT called here: it spins
-  up Chromium infrastructure on every launch, and the qa_render gate
-  hard-fails on stray QThread noise. Call it in the surface that first
-  instantiates a WebEngineView (M3 playground / M4 composer), after the
-  scheme registration that already happened at startup.
+Startup ordering (all enforced in __main__):
+1. `register_asset_scheme()` — before QGuiApplication; scheme flags are
+   read at Chromium start. Spawns no threads.
+2. `initialize_webengine()` — before QGuiApplication. A Qt 6 requirement:
+   Chromium reads the command line while the application object is being
+   constructed, and a later initialize() is rejected ("must be called
+   before constructing the application object"). Skipped under
+   QT_QPA_PLATFORM=offscreen, where QA renders never show a preview — the
+   gate hard-fails on the stray QThread teardown noise that Chromium
+   infrastructure produces at exit.
+3. `make_preview_profile()` — after the app exists, before the first
+   WebEngineView is instantiated; exposed to QML as a context property.
+
+Import safety: QtWebEngineCore has no wheels on some platforms (Windows
+ARM64). Every Qt-bound class lives in `web/handlers.py`, imported here
+only after `webengine_available()` succeeds — the source tree itself
+never crashes at import time on a preview-less platform.
 """
 
 from __future__ import annotations
 
-import mimetypes
+import os
 
 from PySide6.QtCore import QUrl
-from PySide6.QtWebEngineCore import (QWebEngineProfile,
-                                     QWebEngineUrlRequestInterceptor,
-                                     QWebEngineUrlRequestJob,
-                                     QWebEngineUrlScheme,
-                                     QWebEngineUrlSchemeHandler)
 
 SCHEME = "fengrid-asset"
-_SCHEME_BYTES = SCHEME.encode()
+SCHEME_BYTES = SCHEME.encode()
 
-_MIME_OVERRIDES = {".svg": "image/svg+xml", ".ico": "image/x-icon",
-                   ".xpm": "image/x-xpixmap"}
+
+def webengine_available() -> bool:
+    try:
+        from PySide6 import QtWebEngineCore  # noqa: F401 — links the module
+    except ImportError:
+        return False
+    return True
 
 
 def register_asset_scheme() -> bool:
     """Register the custom scheme before the app object exists.
 
-    Returns False when QtWebEngineCore is unavailable (wheel missing on the
-    platform — e.g. Windows ARM64); callers degrade to preview-less shells.
+    Returns False when QtWebEngineCore is unavailable; callers degrade to
+    preview-less shells.
     """
-    try:
-        from PySide6 import QtWebEngineCore  # noqa: F401 — links the module
-    except ImportError:
+    if not webengine_available():
         return False
-    scheme = QWebEngineUrlScheme(_SCHEME_BYTES)
+    from PySide6.QtWebEngineCore import QWebEngineUrlScheme
+
+    scheme = QWebEngineUrlScheme(SCHEME_BYTES)
     scheme.setSyntax(QWebEngineUrlScheme.Syntax.Path)
     scheme.setFlags(QWebEngineUrlScheme.Flag.SecureScheme
                     | QWebEngineUrlScheme.Flag.LocalScheme
                     | QWebEngineUrlScheme.Flag.LocalAccessAllowed
                     | QWebEngineUrlScheme.Flag.NoAccessAllowed)
     QWebEngineUrlScheme.registerScheme(scheme)
+    return True
+
+
+def initialize_webengine() -> bool:
+    """Call QtWebEngineQuick.initialize() — MUST run before QGuiApplication."""
+    if not webengine_available():
+        return False
+    if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        return False
+    from PySide6.QtWebEngineQuick import QtWebEngineQuick
+    QtWebEngineQuick.initialize()
     return True
 
 
@@ -66,68 +85,14 @@ def asset_url(path: str) -> QUrl:
     return url
 
 
-class AssetSchemeHandler(QWebEngineUrlSchemeHandler):
-    """Serves whitelisted (indexed) paths with correct MIME types."""
-
-    def __init__(self, con, parent=None):
-        super().__init__(parent)
-        self._con = con
-
-    def requestStarted(self, job: QWebEngineUrlRequestJob) -> None:
-        url = job.requestUrl()
-        if url.scheme() != SCHEME:
-            job.fail(QWebEngineUrlRequestJob.Error.RequestDenied)
-            return
-        path = url.path()
-        # allowlist: only files the scan index knows about resolve
-        row = self._con.execute(
-            "SELECT 1 FROM asset WHERE path = ?", (path,)).fetchone()
-        if row is None:
-            job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
-            return
-        mime = (_MIME_OVERRIDES.get(_ext(path))
-                or mimetypes.guess_type(path)[0]
-                or "application/octet-stream")
-        job.reply(mime.encode(), _open_local(path))
-
-
-def _ext(path: str) -> str:
-    dot = path.rfind(".")
-    return path[dot:].lower() if dot >= 0 else ""
-
-
-def _open_local(path: str):
-    from PySide6.QtCore import QFile
-    f = QFile(path)
-    f.open(QFile.OpenModeFlag.ReadOnly)
-    return f
-
-
-class PreviewRequestInterceptor(QWebEngineUrlRequestInterceptor):
-    """Blocks every request that is not the asset scheme.
-
-    Network access from preview content is denied by construction — the
-    threat model is 'user pastes a hostile snippet' (ADR §9), so preview
-    panes behave like a browser tab with no special powers.
-    """
-
-    def interceptRequest(self, info) -> None:
-        if info.requestUrl().scheme() != SCHEME:
-            info.block(True)
-
-
-def make_preview_profile(con, parent=None) -> QWebEngineProfile:
+def make_preview_profile(con, parent=None):
     """Off-the-record profile wired to the allowlist scheme + interceptor.
 
+    Returns None when QtWebEngineCore is unavailable (preview-less shell).
     The interceptor and handler are parented to the profile so they live
     and die with it (Python GC must not outlive Chromium's references).
     """
-    profile = QWebEngineProfile(parent)  # default ctor = off-the-record
-    profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.NoCache)
-    profile.setPersistentCookiesPolicy(
-        QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies)
-    interceptor = PreviewRequestInterceptor(profile)
-    profile.setUrlRequestInterceptor(interceptor)
-    handler = AssetSchemeHandler(con, profile)
-    profile.installUrlSchemeHandler(_SCHEME_BYTES, handler)
-    return profile
+    if not webengine_available():
+        return None
+    from .handlers import make_preview_profile as _make
+    return _make(con, parent)

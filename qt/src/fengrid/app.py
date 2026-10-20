@@ -22,6 +22,9 @@ DARK = {
     "accent": "#39B8C4",   # teal — pane outlines, active states
     "lit_pane": "#F5C25C",  # amber — the lit asset, selection highlights
     "success": "#5BB98B",
+    # syntax-highlight tokens (code pane); values from the 0.x pane CSS
+    "hl_ink": "#F5C25C",    # attributes / CSS props / numbers
+    "ink_faint": "#5F6C78", # comments
 }
 
 # Light theme (secondary); surface2 derived from the brand palette sheet.
@@ -35,4 +38,6 @@ LIGHT = {
     "accent": "#0E7C86",
     "lit_pane": "#F5B841",
     "success": "#2E7D4F",
+    "hl_ink": "#A16207",    # raw amber on white is 1.78:1 — use the ink tone
+    "ink_faint": "#9AA6B0",
 }
