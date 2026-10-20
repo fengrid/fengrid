@@ -90,6 +90,10 @@ class Fonts(QObject):
         self._db_path = db_path
         self._model = FamilyModel(self)
         self._filter = ""
+        self._family_filter = ""     # rail: exact family
+        self._type_filter = ""       # rail: file extension (ttf/otf/…)
+        self._families: list = []
+        self._types: list = []
         self._selected = ""
         self._scanning = False
         self._scan_count = 0
@@ -119,6 +123,37 @@ class Fonts(QObject):
     @Property(int, notify=familiesChanged)
     def totalFamilies(self):
         return self._model.rowCount()
+
+    # rail-facing lists (Fonts pane's own left-panel content) + filters
+    @Property("QVariantList", notify=familiesChanged)
+    def families(self):
+        return self._families
+
+    @Property("QVariantList", notify=familiesChanged)
+    def fontTypes(self):
+        return self._types
+
+    @Property(str, notify=familiesChanged)
+    def familyFilter(self):
+        return self._family_filter
+
+    @Property(str, notify=familiesChanged)
+    def typeFilter(self):
+        return self._type_filter
+
+    @Slot(str)
+    def set_family_filter(self, family: str) -> None:
+        """Rail filter: exact family (toggles off when re-picked)."""
+        name = (family or "").strip()
+        self._family_filter = "" if name == self._family_filter else name
+        self._refresh()
+
+    @Slot(str)
+    def set_type_filter(self, ext: str) -> None:
+        """Rail filter: only families with a file of this extension."""
+        name = (ext or "").strip().lower()
+        self._type_filter = "" if name == self._type_filter else name
+        self._refresh()
 
     @Property(bool, notify=scanningChanged)
     def scanning(self):
@@ -213,9 +248,27 @@ class Fonts(QObject):
             f" {report['pruned']} pruned ({report['total']} files)")
 
     def _refresh(self) -> None:
+        all_fams = core_fonts.families(self._con)
+        self._families = [{"name": f["family"], "n": f["n"]}
+                          for f in all_fams]
+        self._types = [{"name": r[0], "n": r[1]} for r in self._con.execute(
+            "SELECT ext, COUNT(*) FROM asset"
+            " WHERE kind = 'font' AND ext IS NOT NULL"
+            " GROUP BY ext ORDER BY ext")]
+        # type filter: families that own at least one file with the ext
+        type_fams: set[str] = set()
+        if self._type_filter:
+            type_fams = {r["family"] for r in self._con.execute(
+                "SELECT DISTINCT family FROM asset"
+                " WHERE kind = 'font' AND ext = ?",
+                (self._type_filter,))}
         rows = []
-        for fam in core_fonts.families(self._con):
+        for fam in all_fams:
             if self._filter and self._filter not in fam["family"].lower():
+                continue
+            if self._family_filter and fam["family"] != self._family_filter:
+                continue
+            if self._type_filter and fam["family"] not in type_fams:
                 continue
             files = core_fonts.family_files(self._con, fam["family"])
             weights = sorted({f["weight"] for f in files

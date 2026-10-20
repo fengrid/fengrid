@@ -158,6 +158,13 @@ class Library(QObject):
     def totalAssets(self):
         return self._con.execute("SELECT COUNT(*) FROM asset").fetchone()[0]
 
+    @Property(int, notify=listsChanged)
+    def iconCount(self):
+        # icon-only count for the rail's "All assets" row (totalAssets
+        # includes font rows and would inflate the icons-pane figure)
+        return self._con.execute(
+            "SELECT COUNT(*) FROM asset WHERE kind = 'icon'").fetchone()[0]
+
     @Property(bool, notify=listsChanged)
     def needsScan(self):
         return self.totalAssets == 0
@@ -651,19 +658,27 @@ class Library(QObject):
 
     def _refresh_lists(self) -> None:
         con = self._con
+        # icon-scoped: font rows live in the same asset table and would
+        # otherwise pollute the icon rail with "truetype"/"opentype" themes
+        # and ttf/otf type entries (user report 2026-10-20)
         themes = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT theme, COUNT(*) FROM asset WHERE theme IS NOT NULL"
+            "SELECT theme, COUNT(*) FROM asset"
+            " WHERE kind = 'icon' AND theme IS NOT NULL"
             " GROUP BY theme ORDER BY theme")]
         contexts = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT context, COUNT(*) FROM asset WHERE context IS NOT NULL"
+            "SELECT context, COUNT(*) FROM asset"
+            " WHERE kind = 'icon' AND context IS NOT NULL"
             " GROUP BY context ORDER BY context")]
         exts = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT ext, COUNT(*) FROM asset WHERE ext IS NOT NULL"
+            "SELECT ext, COUNT(*) FROM asset"
+            " WHERE kind = 'icon' AND ext IS NOT NULL"
             " GROUP BY ext ORDER BY ext")]
         tags = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT t.name, COUNT(at.asset_id) AS n FROM tag t"
-            " LEFT JOIN asset_tag at ON at.tag_id = t.id"
-            " GROUP BY t.id ORDER BY t.name")]
+            "SELECT t.name,"
+            " (SELECT COUNT(*) FROM asset_tag at2"
+            "  JOIN asset a2 ON a2.id = at2.asset_id"
+            "  WHERE at2.tag_id = t.id AND a2.kind = 'icon') AS n"
+            " FROM tag t GROUP BY t.id ORDER BY t.name")]
         # collections v2: tree order + per-kind counts from collection_ref
         counts: dict[int, dict] = {}
         for r in con.execute(
@@ -704,7 +719,7 @@ class Library(QObject):
                " SELECT 1 FROM asset_tag sat JOIN tag st ON st.id = sat.tag_id"
                " WHERE sat.asset_id = a.id AND st.name = 'starred')"
                " AS starred FROM asset a"]
-        where: list[str] = []
+        where: list[str] = ["a.kind = 'icon'"]   # this pane is icons only
         params: list = []
 
         term = (self._search or "").strip()

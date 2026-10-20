@@ -155,11 +155,69 @@ Rectangle {
                 onPicked: rail.panePicked(4)
             }
 
+            // FONTS-pane rail content — font families and file types live
+            // here, not in the Icons pane's theme/type lists
+            SectionLabel { text: qsTr("Fonts"); visible: rail.pane === 1 }
+            RailItem {
+                visible: rail.pane === 1
+                label: qsTr("All fonts")
+                accent: theme.tokens.accentFont
+                count: fonts !== null ? String(fonts.totalFonts) : ""
+                active: fonts !== null && fonts.familyFilter === ""
+                        && fonts.typeFilter === ""
+                onPicked: {
+                    if (fonts === null)
+                        return
+                    fonts.set_family_filter("")
+                    fonts.set_type_filter("")
+                }
+            }
+            SectionLabel {
+                text: qsTr("Families")
+                visible: rail.pane === 1 && fonts !== null
+                         && fonts.families.length > 0
+            }
+            Repeater {
+                model: fonts !== null && rail.pane === 1 ? fonts.families : []
+                RailItem {
+                    id: famNavRow
+                    visible: rail.pane === 1
+                    required property var modelData
+                    label: famNavRow.modelData.name
+                    count: String(famNavRow.modelData.n)
+                    accent: theme.tokens.accentFont
+                    active: fonts !== null && fonts.familyFilter
+                            === String(famNavRow.modelData.name)
+                    onPicked: fonts !== null && fonts.set_family_filter(
+                        String(famNavRow.modelData.name))
+                }
+            }
+            SectionLabel {
+                text: qsTr("Types")
+                visible: rail.pane === 1 && fonts !== null
+                         && fonts.fontTypes.length > 0
+            }
+            Repeater {
+                model: fonts !== null && rail.pane === 1 ? fonts.fontTypes : []
+                RailItem {
+                    id: fontTypeRow
+                    visible: rail.pane === 1
+                    required property var modelData
+                    label: fontTypeRow.modelData.name.toUpperCase()
+                    count: String(fontTypeRow.modelData.n)
+                    accent: theme.tokens.accentFont
+                    active: fonts !== null && fonts.typeFilter
+                            === String(fontTypeRow.modelData.name)
+                    onPicked: fonts !== null && fonts.set_type_filter(
+                        String(fontTypeRow.modelData.name))
+                }
+            }
+
             SectionLabel { text: qsTr("Library"); visible: rail.showIconSections }
             RailItem {
                 visible: rail.showIconSections
                 label: qsTr("All assets")
-                count: library !== null ? String(library.totalAssets) : ""
+                count: library !== null ? String(library.iconCount) : ""
                 active: library !== null && library.themeFilter === ""
                         && library.contextFilter === "" && library.extFilter === ""
                 onPicked: {
