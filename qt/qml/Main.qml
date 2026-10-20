@@ -207,6 +207,7 @@ ApplicationWindow {
         spacing: 0
 
         SideRail {
+            id: sideRail
             Layout.preferredWidth: 210
             Layout.fillHeight: true
             pane: root.pane
@@ -246,6 +247,22 @@ ApplicationWindow {
             gridView: grid
             index: grid.currentIndex
             visible: root.pane === 0 && grid.currentIndex >= 0
+        }
+        // universal Properties panel for the other asset kinds (fonts,
+        // color schemes, code snippets) — tags, custom fields, links
+        PropertiesPanel {
+            id: propsPanel
+            Layout.preferredWidth: 300
+            Layout.fillHeight: true
+            itemKind: root.pane === 1 ? "font"
+                      : root.pane === 2 ? "palette" : "snippet"
+            itemId: root.pane === 1
+                    ? (fonts !== null
+                       ? fonts.family_primary_id(fonts.selectedFamily) : -1)
+                    : root.pane === 2
+                      ? (colors !== null ? colors.paletteId : -1)
+                      : (code !== null ? code.currentId : -1)
+            visible: root.pane >= 1 && root.pane <= 3 && itemId >= 0
         }
     }
 
@@ -317,6 +334,23 @@ ApplicationWindow {
         sequence: "Escape"
         enabled: grid.currentIndex >= 0
         onActivated: grid.currentIndex = -1
+    }
+
+    // QA: --dialog <name> opens a registered modal after load — delayed so
+    // the window is mapped first (a Popup opened pre-show never appears)
+    function openQaModal(name) {
+        var dlg = (sideRail && sideRail.qaModals
+                   && sideRail.qaModals[name])
+                  ? sideRail.qaModals[name]
+                  : (inspectorPanel && inspectorPanel.qaModals
+                     ? inspectorPanel.qaModals[name] : null)
+        if (dlg)
+            dlg.open()
+    }
+    Timer {
+        interval: 400
+        running: typeof qaOpenModal !== "undefined" && qaOpenModal !== ""
+        onTriggered: openQaModal(qaOpenModal)
     }
 
     Toast { id: toast }

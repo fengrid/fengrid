@@ -19,6 +19,13 @@ Rectangle {
     // pane's own ref kind (icon, palette, snippet) with per-kind counts.
     // Fonts and Projects don't carry collection refs yet, so those panes
     // hide the collections block entirely.
+    // QA modal registry (--dialog <name>) — popups are unreachable from
+    // the QObject tree, so Main.qml resolves them through this map
+    readonly property var qaModals: ({
+        "libDialog": libDialog, "smartDialog": smartDialog,
+        "renameDialog": renameDialog, "subDialog": subDialog
+    })
+
     property string paneKind: pane === 0 ? "icon"
                               : pane === 2 ? "palette"
                               : pane === 3 ? "snippet" : ""
@@ -362,21 +369,34 @@ Rectangle {
                 }
             }
             // shared name/tags input for new sub-collections + tag edits
-            Popup {
+            Dialog {
                 id: subDialog
+                objectName: "subDialog"
                 property int parentId: 0
                 property bool tagMode: false
-                width: rail.width - 24
-                padding: 10
+                width: 300
+                padding: 16
+                modal: true
+                dim: true
+                parent: Overlay.overlay
+                anchors.centerIn: parent
                 background: Rectangle {
-                    radius: 8; color: theme.tokens.surface
+                    radius: 12; color: theme.tokens.surface
                     border.color: theme.tokens.border
                 }
                 contentItem: ColumnLayout {
-                    spacing: 6
+                    spacing: 8
                     Text {
-                        text: subDialog.tagMode ? qsTr("Collection tags (comma-separated)")
+                        text: subDialog.tagMode ? qsTr("Edit collection tags")
                                                 : qsTr("New sub-collection")
+                        font.family: theme.headingFont; font.pixelSize: 13
+                        font.letterSpacing: 1.2
+                        font.capitalization: Font.AllUppercase
+                        color: theme.tokens.text
+                    }
+                    Text {
+                        visible: subDialog.tagMode
+                        text: qsTr("comma-separated")
                         font.family: theme.monoFont; font.pixelSize: 10
                         color: theme.tokens.textMuted
                     }
@@ -418,6 +438,48 @@ Rectangle {
                     subInput.forceActiveFocus()
                 }
                 onClosed: tagMode = false
+
+                // footer actions — the other form dialogs all expose
+                // explicit Cancel/primary buttons; Enter-only commit was
+                // inconsistent with them
+                footer: RowLayout {
+                    spacing: 8
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: qsTr("Cancel")
+                        onClicked: subDialog.close()
+                        background: Rectangle {
+                            radius: 6; color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: theme.tokens.text
+                            font.family: theme.uiFont; font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 14; rightPadding: 14
+                        }
+                    }
+                    Button {
+                        enabled: subInput.text.trim() !== ""
+                        text: subDialog.tagMode ? qsTr("Save") : qsTr("Create")
+                        onClicked: subDialog.commit()
+                        background: Rectangle {
+                            radius: 6
+                            color: subInput.text.trim() !== ""
+                                   ? theme.tokens.accent : theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            color: theme.tokens.bg
+                            font.family: theme.uiFont; font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 14; rightPadding: 14
+                        }
+                    }
+                }
             }
             Rectangle {
                 visible: rail.showCollections
@@ -552,10 +614,10 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         smartDialog.editId = 0
-                        smartDialog.nameText = ""
-                        smartDialog.tagsText = ""
-                        smartDialog.qText = ""
-                        smartDialog.matchAll = false
+                        smartDialog.stashName = ""
+                        smartDialog.stashTags = ""
+                        smartDialog.stashQ = ""
+                        smartDialog.stashAll = false
                         smartDialog.open()
                     }
                 }
@@ -623,9 +685,9 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         libDialog.editId = 0
-                        libDialog.nameText = ""
-                        libDialog.tagsText = ""
-                        libDialog.matchAll = false
+                        libDialog.stashName = ""
+                        libDialog.stashTags = ""
+                        libDialog.stashAll = false
                         libDialog.open()
                     }
                 }
@@ -683,9 +745,9 @@ Rectangle {
                     enabled: libMenu.target !== null
                     onTriggered: {
                         libDialog.editId = libMenu.target.id
-                        libDialog.nameText = libMenu.target.name
-                        libDialog.tagsText = libMenu.target.tags || ""
-                        libDialog.matchAll = libMenu.target.match_all === 1
+                        libDialog.stashName = libMenu.target.name
+                        libDialog.stashTags = libMenu.target.tags || ""
+                        libDialog.stashAll = libMenu.target.match_all === 1
                         libDialog.open()
                     }
                 }
@@ -712,10 +774,10 @@ Rectangle {
                     onTriggered: {
                         var crit = smartMenu.target.criteria || {}
                         smartDialog.editId = smartMenu.target.id
-                        smartDialog.nameText = smartMenu.target.name
-                        smartDialog.tagsText = (crit.tags || []).join(", ")
-                        smartDialog.matchAll = !!crit.tag_match_all
-                        smartDialog.qText = crit.q || ""
+                        smartDialog.stashName = smartMenu.target.name
+                        smartDialog.stashTags = (crit.tags || []).join(", ")
+                        smartDialog.stashAll = !!crit.tag_match_all
+                        smartDialog.stashQ = crit.q || ""
                         smartDialog.open()
                     }
                 }
@@ -752,235 +814,123 @@ Rectangle {
                 }
             }
 
-            // shared create/configure dialog for saved libraries
-            Dialog {
+            // dialogs use the shared FormDialog/FormInput shell — fixed
+            // width, centered on the window, themed footer buttons
+            FormDialog {
                 id: libDialog
+                objectName: "libDialog"
+                heading: editId ? qsTr("Configure library") : qsTr("New library")
+                acceptEnabled: libName.text.trim() !== ""
                 property int editId: 0
-                property string nameText: ""
-                property string tagsText: ""
-                property bool matchAll: false
-                width: rail.width - 24
-                padding: 10
-                modal: true
-                background: Rectangle {
-                    radius: 8; color: theme.tokens.surface
-                    border.color: theme.tokens.border
-                }
-                contentItem: ColumnLayout {
-                    spacing: 6
-                    Text {
-                        text: libDialog.editId ? qsTr("Configure library")
-                                               : qsTr("New library")
-                        font.family: theme.headingFont; font.pixelSize: 12
-                        color: theme.tokens.text
-                    }
-                    RailTextInput { id: libName; label: qsTr("name") }
-                    RailTextInput { id: libTags; label: qsTr("tags (comma-separated)") }
-                    RowLayout {
-                        CheckBox {
-                            id: libAll
-                            text: qsTr("match ALL tags (else any)")
-                            font.family: theme.monoFont; font.pixelSize: 10
-                            checked: libDialog.matchAll
-                            contentItem: Text {
-                                text: libAll.text
-                                font: libAll.font
-                                color: theme.tokens.textMuted
-                                leftPadding: libAll.indicator.width + 6
-                                verticalAlignment: Text.AlignVCenter
-                            }
-                        }
-                    }
-                }
-                footer: RowLayout {
-                    spacing: 6
-                    Item { Layout.fillWidth: true }
-                    Button {
-                        text: qsTr("Cancel")
-                        onClicked: libDialog.close()
-                        background: Rectangle { radius: 6; color: theme.tokens.surface2 }
-                        contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
-                    }
-                    Button {
-                        text: qsTr("Save")
-                        onClicked: {
-                            if (libName.text.trim() === "")
-                                return
-                            if (libDialog.editId)
-                                taxonomy.update_library_view(
-                                    libDialog.editId, libName.text,
-                                    libTags.text, libAll.checked)
-                            else
-                                taxonomy.create_library_view(
-                                    libName.text, libTags.text, libAll.checked)
-                            libDialog.close()
-                        }
-                        background: Rectangle { radius: 6; color: theme.tokens.accent }
-                        contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
-                    }
-                }
-                onOpened: { libName.text = libDialog.nameText; libTags.text = libDialog.tagsText; libAll.checked = libDialog.matchAll; libName.forceActiveFocus() }
-            }
+                // stash slots the callers write before open(); fields are
+                // seeded imperatively onOpened (bindings would break after
+                // the first user edit and go stale on the next open)
+                property string stashName: ""
+                property string stashTags: ""
+                property bool stashAll: false
 
-            // create/configure dialog for smart collections
-            Dialog {
-                id: smartDialog
-                property int editId: 0
-                property string nameText: ""
-                property string tagsText: ""
-                property bool matchAll: false
-                property string qText: ""
-                width: rail.width - 24
-                padding: 10
-                modal: true
-                background: Rectangle {
-                    radius: 8; color: theme.tokens.surface
-                    border.color: theme.tokens.border
-                }
-                contentItem: ColumnLayout {
-                    spacing: 6
-                    Text {
-                        text: smartDialog.editId ? qsTr("Edit smart collection")
-                                                 : qsTr("New smart collection")
-                        font.family: theme.headingFont; font.pixelSize: 12
-                        color: theme.tokens.text
+                fields: [
+                    FormInput {
+                        id: libName
+                        label: qsTr("name")
+                    },
+                    FormInput {
+                        id: libTags
+                        label: qsTr("tags (comma-separated)")
+                    },
+                    FormCheck {
+                        id: libAll
+                        checkLabel: qsTr("match ALL tags (else any)")
                     }
-                    RailTextInput { id: smartName; label: qsTr("name") }
-                    RailTextInput { id: smartTags; label: qsTr("tags (comma-separated)") }
-                    RailTextInput { id: smartQ; label: qsTr("name contains…") }
-                    CheckBox {
-                        id: smartAll
-                        text: qsTr("match ALL tags (else any)")
-                        font.family: theme.monoFont; font.pixelSize: 10
-                        checked: smartDialog.matchAll
-                        contentItem: Text {
-                            text: smartAll.text
-                            font: smartAll.font
-                            color: theme.tokens.textMuted
-                            leftPadding: smartAll.indicator.width + 6
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
-                footer: RowLayout {
-                    spacing: 6
-                    Item { Layout.fillWidth: true }
-                    Button {
-                        text: qsTr("Cancel")
-                        onClicked: smartDialog.close()
-                        background: Rectangle { radius: 6; color: theme.tokens.surface2 }
-                        contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
-                    }
-                    Button {
-                        text: qsTr("Save")
-                        onClicked: {
-                            if (smartName.text.trim() === "")
-                                return
-                            var crit = {
-                                tags: smartTags.text.split(",").map(
-                                    function (t) { return t.trim() }).filter(
-                                    function (t) { return t !== "" }),
-                                tag_match_all: smartAll.checked,
-                                q: smartQ.text.trim()
-                            }
-                            var critJson = JSON.stringify(crit)
-                            if (smartDialog.editId)
-                                taxonomy.update_smart(
-                                    smartDialog.editId, smartName.text, critJson)
-                            else
-                                taxonomy.create_smart(
-                                    smartName.text, rail.paneKind, critJson)
-                            smartDialog.close()
-                        }
-                        background: Rectangle { radius: 6; color: theme.tokens.accent }
-                        contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
-                    }
-                }
+                ]
                 onOpened: {
-                    smartName.text = smartDialog.nameText
-                    smartTags.text = smartDialog.tagsText
-                    smartQ.text = smartDialog.qText
-                    smartAll.checked = smartDialog.matchAll
-                    smartName.forceActiveFocus()
+                    libName.text = libDialog.stashName
+                    libTags.text = libDialog.stashTags
+                    libAll.checked = libDialog.stashAll
+                    libName.forceActiveFocus()
+                }
+                onApply: {
+                    if (editId)
+                        taxonomy.update_library_view(editId, libName.text,
+                                                     libTags.text,
+                                                     libAll.checked)
+                    else
+                        taxonomy.create_library_view(libName.text,
+                                                     libTags.text,
+                                                     libAll.checked)
                 }
             }
 
-            // rename dialog for tags
-            Dialog {
+            FormDialog {
+                id: smartDialog
+                objectName: "smartDialog"
+                heading: editId ? qsTr("Edit smart collection")
+                              : qsTr("New smart collection")
+                acceptEnabled: smartName.text.trim() !== ""
+                property int editId: 0
+                property string stashName: ""
+                property string stashTags: ""
+                property string stashQ: ""
+                property bool stashAll: false
+
+                fields: [
+                    FormInput {
+                        id: smartName
+                        label: qsTr("name")
+                    },
+                    FormInput {
+                        id: smartTags
+                        label: qsTr("tags (comma-separated)")
+                    },
+                    FormInput {
+                        id: smartQ
+                        label: qsTr("name contains…")
+                    },
+                    FormCheck {
+                        id: smartAll
+                        checkLabel: qsTr("match ALL tags (else any)")
+                    }
+                ]
+                onApply: {
+                    var crit = {
+                        tags: smartTags.text.split(",").map(
+                            function (t) { return t.trim() }).filter(
+                            function (t) { return t !== "" }),
+                        tag_match_all: smartAll.checked,
+                        q: smartQ.text.trim()
+                    }
+                    var critJson = JSON.stringify(crit)
+                    if (smartDialog.editId)
+                        taxonomy.update_smart(smartDialog.editId,
+                                              smartName.text, critJson)
+                    else
+                        taxonomy.create_smart(smartName.text, rail.paneKind,
+                                              critJson)
+                }
+            }
+
+            FormDialog {
                 id: renameDialog
+                objectName: "renameDialog"
+                heading: qsTr("Rename tag")
+                acceptLabel: qsTr("Rename")
+                acceptEnabled: renameInput.text.trim() !== ""
+                               && renameInput.text.trim()
+                                  !== renameDialog.oldName
                 property string oldName: ""
-                width: rail.width - 24
-                padding: 10
-                modal: true
-                background: Rectangle {
-                    radius: 8; color: theme.tokens.surface
-                    border.color: theme.tokens.border
-                }
-                contentItem: ColumnLayout {
-                    spacing: 6
-                    Text {
-                        text: qsTr("Rename tag")
-                        font.family: theme.headingFont; font.pixelSize: 12
-                        color: theme.tokens.text
-                    }
-                    RailTextInput { id: renameInput; label: qsTr("new name") }
-                }
-                footer: RowLayout {
-                    spacing: 6
-                    Item { Layout.fillWidth: true }
-                    Button {
-                        text: qsTr("Cancel")
-                        onClicked: renameDialog.close()
-                        background: Rectangle { radius: 6; color: theme.tokens.surface2 }
-                        contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
-                    }
-                    Button {
-                        text: qsTr("Save")
-                        onClicked: {
-                            if (renameInput.text.trim() !== "")
-                                library.rename_tag(renameDialog.oldName,
-                                                   renameInput.text)
-                            renameDialog.close()
-                        }
-                        background: Rectangle { radius: 6; color: theme.tokens.accent }
-                        contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
-                    }
-                }
-                onOpened: { renameInput.text = renameDialog.oldName; renameInput.forceActiveFocus() }
-            }
 
-            // labeled single-line text input used by the dialogs above
-            component RailTextInput: Rectangle {
-                property alias label: railLabel.text
-                property alias text: railInput.text
-                function forceActiveFocus() { railInput.forceActiveFocus() }
-                Layout.fillWidth: true
-                height: 26
-                radius: 6
-                color: theme.tokens.surface2
-                border.color: railInput.activeFocus ? theme.tokens.accent
-                                                    : theme.tokens.border
-                TextInput {
-                    id: railInput
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    verticalAlignment: TextInput.AlignVCenter
-                    font.family: theme.monoFont
-                    font.pixelSize: 11
-                    color: theme.tokens.text
-                    clip: true
+                fields: [
+                    FormInput {
+                        id: renameInput
+                        label: qsTr("new name")
+                    }
+                ]
+                onOpened: {
+                    renameInput.text = renameDialog.oldName
+                    renameInput.forceActiveFocus()
                 }
-                Text {
-                    id: railLabel
-                    visible: railInput.text === ""
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    verticalAlignment: Text.AlignVCenter
-                    font.family: theme.uiFont
-                    font.pixelSize: 10
-                    color: theme.tokens.textMuted
-                }
+                onApply: library.rename_tag(renameDialog.oldName,
+                                            renameInput.text)
             }
 
             Item { Layout.fillHeight: true; Layout.minimumHeight: 8 }

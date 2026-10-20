@@ -183,6 +183,17 @@ class Fonts(QObject):
         return core_fonts.family_files(self._con, family) \
             if family else []
 
+    @Slot(str, result=int)
+    def family_primary_id(self, family: str) -> int:
+        """The family's first indexed asset row id — the Properties panel
+        target for tags/fields/links on the Fonts pane."""
+        if not family:
+            return -1
+        row = self._con.execute(
+            "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
+            " ORDER BY id LIMIT 1", (family,)).fetchone()
+        return row[0] if row else -1
+
     @Slot(str, str)
     def export_css(self, family: str, dest_dir: str) -> None:
         self._export(core_fonts.export_family_css, family, dest_dir, "css")

@@ -23,15 +23,17 @@ def export_state(con: sqlite3.Connection) -> dict:
     tags: dict[str, list[str]] = {}
     for row in con.execute(
         "SELECT t.name AS tag, a.name AS asset FROM tag t"
-        " JOIN asset_tag at ON at.tag_id = t.id"
-        " JOIN asset a ON a.id = at.asset_id ORDER BY t.name, a.name"
+        " JOIN item_tag it ON it.tag_id = t.id"
+        " JOIN asset a ON a.id = it.item_id AND it.item_kind = a.kind"
+        " ORDER BY t.name, a.name"
     ):
         tags.setdefault(row["tag"], []).append(row["asset"])
     colls: dict[str, list[str]] = {}
     for row in con.execute(
         "SELECT c.name AS col, a.name AS asset FROM collection c"
-        " JOIN collection_item ci ON ci.collection_id = c.id"
-        " JOIN asset a ON a.id = ci.asset_id ORDER BY c.name, a.name"
+        " JOIN collection_ref cr ON cr.collection_id = c.id"
+        " JOIN asset a ON a.id = cr.item_id AND cr.item_kind = a.kind"
+        " ORDER BY c.name, a.name"
     ):
         colls.setdefault(row["col"], []).append(row["asset"])
     return {"tags": tags, "collections": colls}
@@ -56,7 +58,8 @@ def import_state(con: sqlite3.Connection, data: dict) -> dict:
                 counts["unmatched"] += 1
                 continue
             con.execute(
-                "INSERT OR IGNORE INTO asset_tag(asset_id, tag_id) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO item_tag(item_id, item_kind, tag_id)"
+                " VALUES (?, 'icon', ?)",
                 (aid, tag_id),
             )
             counts["tag_links"] += con.total_changes  # proxy; recounted below
@@ -74,17 +77,17 @@ def import_state(con: sqlite3.Connection, data: dict) -> dict:
                 counts["unmatched"] += 1
                 continue
             con.execute(
-                "INSERT OR IGNORE INTO collection_item(collection_id, asset_id,"
-                " position) VALUES (?, ?, ?)",
-                (coll_id, aid, pos),
+                "INSERT OR IGNORE INTO collection_ref(collection_id, item_kind,"
+                " item_id) VALUES (?, 'icon', ?)",
+                (coll_id, aid),
             )
             counts["collection_links"] += 1
 
     con.commit()
     # replace the proxy counters with real ones
-    counts["tag_links"] = con.execute("SELECT COUNT(*) FROM asset_tag").fetchone()[0]
+    counts["tag_links"] = con.execute("SELECT COUNT(*) FROM item_tag").fetchone()[0]
     counts["collection_links"] = con.execute(
-        "SELECT COUNT(*) FROM collection_item").fetchone()[0]
+        "SELECT COUNT(*) FROM collection_ref").fetchone()[0]
     return counts
 
 

@@ -128,17 +128,18 @@ class Taxonomy(QObject):
         return core_tax.smart_asset_ids(self._con, item_kind, crit)
 
     # -------------------------------------------------------- custom fields
-    @Slot(str, str, str)
-    def create_field(self, name: str, ftype: str, options_json: str) -> None:
+    @Slot(str, str, str, result=int)
+    def create_field(self, name: str, ftype: str, options_json: str) -> int:
         try:
             opts = json.loads(options_json or "{}")
-            core_tax.create_field(self._con, name, ftype, opts)
+            fid = core_tax.create_field(self._con, name, ftype, opts)
         except (ValueError, json.JSONDecodeError) as e:
             self.message.emit(str(e))
-            return
+            return -1
         self._refresh()
         self.fieldsChanged.emit()
         self.message.emit(f"Field created: {name.strip()}")
+        return fid
 
     @Slot(int)
     def delete_field(self, field_id: int) -> None:
@@ -147,20 +148,23 @@ class Taxonomy(QObject):
         self.fieldsChanged.emit()
         self.message.emit("Field deleted")
 
-    @Slot(int, int, str)
-    def set_field_value(self, asset_id: int, field_id: int,
-                        value: str) -> None:
+    @Slot(int, int, str, str)
+    def set_field_value(self, item_id: int, field_id: int,
+                        value: str, kind: str = "icon") -> None:
         try:
-            core_tax.set_field_value(self._con, asset_id, field_id, value)
+            core_tax.set_field_value(self._con, item_id, field_id, value,
+                                     kind)
         except ValueError as e:
             self.message.emit(str(e))
             return
         self.fieldsChanged.emit()
 
-    @Slot(int, int)
-    def generate_id(self, asset_id: int, field_id: int) -> None:
+    @Slot(int, int, str)
+    def generate_id(self, item_id: int, field_id: int,
+                    kind: str = "icon") -> None:
         try:
-            nxt = core_tax.generate_field_id(self._con, asset_id, field_id)
+            nxt = core_tax.generate_field_id(self._con, item_id, field_id,
+                                             kind)
         except ValueError as e:
             self.message.emit(str(e))
             return
@@ -188,6 +192,46 @@ class Taxonomy(QObject):
     @Slot(str, int, result="QVariantList")
     def links_for(self, kind: str, item_id: int) -> list:
         return core_tax.links_for(self._con, kind, item_id, "both")
+
+    # ------------------------------------------------- generic tag operations
+    # (any asset kind — the Properties panel's shared editing surface)
+    @Slot(str, int, result="QVariantList")
+    def tags_for(self, kind: str, item_id: int) -> list:
+        return core_db.tags_for(self._con, item_id, kind)
+
+    @Slot(str, int, str)
+    def add_tag(self, kind: str, item_id: int, name: str) -> None:
+        if core_db.add_tag(self._con, item_id, name, kind):
+            self.message.emit(f"Tagged #{name.strip()}")
+        self.fieldsChanged.emit()
+
+    @Slot(str, int, str)
+    def remove_tag(self, kind: str, item_id: int, name: str) -> None:
+        core_db.remove_tag(self._con, item_id, name, kind)
+        self.fieldsChanged.emit()
+
+    @Slot(str, int, bool)
+    def set_starred(self, kind: str, item_id: int, starred: bool) -> None:
+        core_db.set_starred(self._con, item_id, bool(starred), kind)
+        self.fieldsChanged.emit()
+
+    @Slot(str, int, result=bool)
+    def is_starred(self, kind: str, item_id: int) -> bool:
+        return core_db.is_starred(self._con, item_id, kind)
+
+    # ------------------------------------------------------------ item details
+    @Slot(str, int, result="QVariantMap")
+    def item_properties(self, kind: str, item_id: int) -> dict:
+        """Everything the Properties panel renders for one item: tags,
+        custom field values (with definitions), and links — for any kind."""
+        if not core_tax._item_exists(self._con, kind, item_id):
+            return {}
+        tags = core_db.tags_for(self._con, item_id, kind)
+        fields = core_tax.asset_field_values(self._con, item_id, kind)
+        links = core_tax.links_for(self._con, kind, item_id, "both")
+        return {"kind": kind, "id": item_id, "tags": tags,
+                "fields": fields, "links": links,
+                "starred": core_db.is_starred(self._con, item_id, kind)}
 
     # ---------------------------------------------------------- link targets
     @Slot(result="QVariantList")

@@ -213,6 +213,59 @@ def _migrate(con: sqlite3.Connection) -> None:
                 raise
     con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
     _migrate_collections(con)
+    _migrate_taxonomy_items(con)
+
+
+def _migrate_taxonomy_items(con: sqlite3.Connection) -> None:
+    """Taxonomy v3: tags and custom fields become kind-aware, covering every
+    asset kind — icon, font, snippet, palette — instead of only rows in
+    `asset`. Legacy asset_tag / asset_field_value rows are copied in as
+    'icon'/'font' item rows once; the old tables stay for downgrade safety."""
+    con.execute("""CREATE TABLE IF NOT EXISTS item_tag (
+        item_id   INTEGER NOT NULL,
+        item_kind TEXT NOT NULL DEFAULT 'icon',
+        tag_id    INTEGER NOT NULL REFERENCES tag(id) ON DELETE CASCADE,
+        PRIMARY KEY (item_id, item_kind, tag_id)
+    )""")
+    con.execute("""CREATE TABLE IF NOT EXISTS item_field_value (
+        item_id   INTEGER NOT NULL,
+        item_kind TEXT NOT NULL DEFAULT 'icon',
+        field_id  INTEGER NOT NULL REFERENCES asset_field(id) ON DELETE CASCADE,
+        value     TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (item_id, item_kind, field_id)
+    )""")
+    n = con.execute("SELECT COUNT(*) AS c FROM item_tag").fetchone()["c"]
+    if n == 0:
+        # legacy icon rows carry the asset row's own kind, so fonts survive too
+        con.execute("""INSERT OR IGNORE INTO item_tag (item_id, item_kind, tag_id)
+            SELECT a.id, a.kind, at.tag_id FROM asset_tag at
+            JOIN asset a ON a.id = at.asset_id""")
+    # snippet / palette rows carry legacy comma-separated tags columns —
+    # import those into item_tag as well so the Properties panel sees them
+    for table, kind in (("snippet", "snippet"), ("palette", "palette")):
+        for r in con.execute(
+                f"SELECT id, tags FROM {table} WHERE tags != ''").fetchall():
+            for t in (r["tags"] or "").split(","):
+                t = t.strip()
+                if not t:
+                    continue
+                trow = con.execute("SELECT id FROM tag WHERE name = ?",
+                                   (t,)).fetchone()
+                tid = trow[0] if trow else con.execute(
+                    "INSERT INTO tag(name) VALUES (?)", (t,)).lastrowid
+                con.execute(
+                    "INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
+                    " tag_id) VALUES (?, ?, ?)", (r["id"], kind, int(tid or 0)))
+
+    n = con.execute(
+        "SELECT COUNT(*) AS c FROM item_field_value").fetchone()["c"]
+    if n == 0:
+        con.execute("""INSERT OR IGNORE INTO item_field_value
+            (item_id, item_kind, field_id, value)
+            SELECT a.id, a.kind, afv.field_id, afv.value
+            FROM asset_field_value afv
+            JOIN asset a ON a.id = afv.asset_id""")
+    con.commit()
 
 
 def _migrate_collections(con: sqlite3.Connection) -> None:
@@ -270,22 +323,24 @@ def _starred_ids(con: sqlite3.Connection) -> tuple[int, int]:
     return tid, cid
 
 
-def set_starred(con: sqlite3.Connection, asset_id: int, starred: bool) -> None:
-    """Star/unstar one asset: toggles the 'starred' tag AND membership in
-    the 'Starred Assets' collection — one action, two side effects, so the
+def set_starred(con: sqlite3.Connection, item_id: int, starred: bool,
+                kind: str = "icon") -> None:
+    """Star/unstar any asset kind: toggles the 'starred' tag AND membership
+    in the 'Starred Assets' collection — one action, two side effects, so the
     tag filter and the collection navigator always agree."""
     tid, cid = _starred_ids(con)
     if starred:
-        con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
-                    " VALUES (?, ?)", (asset_id, tid))
+        con.execute("INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
+                    " tag_id) VALUES (?, ?, ?)", (item_id, kind, tid))
         con.execute(
             "INSERT OR IGNORE INTO collection_ref(collection_id, item_kind,"
-            " item_id) VALUES (?, 'icon', ?)", (cid, asset_id))
+            " item_id) VALUES (?, ?, ?)", (cid, kind, item_id))
     else:
-        con.execute("DELETE FROM asset_tag WHERE asset_id = ? AND tag_id = ?",
-                    (asset_id, tid))
+        con.execute("DELETE FROM item_tag WHERE item_id = ? AND item_kind = ?"
+                    " AND tag_id = ?", (item_id, kind, tid))
         con.execute("DELETE FROM collection_ref WHERE collection_id = ?"
-                    " AND item_kind = 'icon' AND item_id = ?", (cid, asset_id))
+                    " AND item_kind = ? AND item_id = ?",
+                    (cid, kind, item_id))
     con.commit()
 
 
@@ -405,10 +460,12 @@ def refs_for(con: sqlite3.Connection, coll_id: int,
     return [dict(r) for r in con.execute(sql, params)]
 
 
-def is_starred(con: sqlite3.Connection, asset_id: int) -> bool:
+def is_starred(con: sqlite3.Connection, item_id: int,
+               kind: str = "icon") -> bool:
     row = con.execute(
-        "SELECT 1 FROM asset_tag at JOIN tag t ON t.id = at.tag_id"
-        " WHERE at.asset_id = ? AND t.name = ?", (asset_id, STARRED_TAG),
+        "SELECT 1 FROM item_tag it JOIN tag t ON t.id = it.tag_id"
+        " WHERE it.item_id = ? AND it.item_kind = ? AND t.name = ?",
+        (item_id, kind, STARRED_TAG),
     ).fetchone()
     return row is not None
 
@@ -482,11 +539,61 @@ def set_setting(con: sqlite3.Connection, key: str, value) -> None:
     con.commit()
 
 
-def tags_for(con: sqlite3.Connection, asset_id: int) -> list[str]:
+def add_tag(con: sqlite3.Connection, item_id: int, name: str,
+            kind: str = "icon") -> bool:
+    """Attach a tag (creating it when new) to any asset kind. Returns
+    False for a blank name or an unknown item."""
+    name = (name or "").lstrip("#").strip()
+    if not name:
+        return False
+    from . import taxonomy as core_tax
+    if not core_tax._item_exists(con, kind, item_id):
+        return False
+    row = con.execute("SELECT id FROM tag WHERE name = ?", (name,)).fetchone()
+    tid = row[0] if row else con.execute(
+        "INSERT INTO tag(name) VALUES (?)", (name,)).lastrowid
+    con.execute("INSERT OR IGNORE INTO item_tag(item_id, item_kind, tag_id)"
+                " VALUES (?, ?, ?)", (item_id, kind, int(tid or 0)))
+    con.commit()
+    return True
+
+
+def remove_tag(con: sqlite3.Connection, item_id: int, name: str,
+               kind: str = "icon") -> None:
+    con.execute(
+        "DELETE FROM item_tag WHERE item_id = ? AND item_kind = ?"
+        " AND tag_id = (SELECT id FROM tag WHERE name = ?)",
+        (item_id, kind, name))
+    con.commit()
+
+
+def sync_item_tags(con: sqlite3.Connection, item_id: int, kind: str,
+                   tags_csv: str) -> None:
+    """Make item_tag the single source of truth for an editor save.
+
+    Mirrors the CSV `tags` column into item_tag: attaches every tag in
+    the CSV and detaches any item_tag rows not in it. Call after the
+    editor's create/update so both representations agree going forward.
+    """
+    names = {t.lstrip("#").strip() for t in (tags_csv or "").split(",")
+             if t.lstrip("#").strip()}
+    current = set(tags_for(con, item_id, kind))
+    for name in names - current:
+        add_tag(con, item_id, name, kind)
+    for name in current - names:
+        remove_tag(con, item_id, name, kind)
+
+
+# Back-compat alias used by the editor bridges (code.py / colors.py).
+_sync_item_tags = sync_item_tags
+
+
+def tags_for(con: sqlite3.Connection, asset_id: int,
+             kind: str = "icon") -> list[str]:
     rows = con.execute(
-        "SELECT t.name FROM tag t JOIN asset_tag at ON at.tag_id = t.id "
-        "WHERE at.asset_id = ? ORDER BY t.name",
-        (asset_id,),
+        "SELECT t.name FROM tag t JOIN item_tag it ON it.tag_id = t.id "
+        "WHERE it.item_id = ? AND it.item_kind = ? ORDER BY t.name",
+        (asset_id, kind),
     ).fetchall()
     return [r[0] for r in rows]
 

@@ -14,6 +14,8 @@ Rectangle {
     property string exportFormat: "png"
     property string exportSize: "64"
     property var d: null
+    // QA modal registry (--dialog <name>)
+    readonly property var qaModals: ({ "fieldDialog": fieldDialog })
     // taxonomy rows for the selected asset, snapshotted at reload time
     property var fieldsModel: []
     property var linksModel: []
@@ -469,23 +471,38 @@ Rectangle {
         // new-field dialog: name + type + per-type options
         Dialog {
             id: fieldDialog
-            width: 260
-            padding: 10
+            objectName: "fieldDialog"
+            width: 320
+            padding: 16
             modal: true
+            dim: true
+            parent: Overlay.overlay
+            anchors.centerIn: parent
             background: Rectangle {
-                radius: 8; color: theme.tokens.surface
+                radius: 12; color: theme.tokens.surface
                 border.color: theme.tokens.border
             }
             contentItem: ColumnLayout {
-                spacing: 6
+                spacing: 10
                 Text {
                     text: qsTr("New field")
-                    font.family: theme.headingFont; font.pixelSize: 12
+                    font.family: theme.headingFont; font.pixelSize: 15
+                    font.letterSpacing: 1.4
+                    font.capitalization: Font.AllUppercase
                     color: theme.tokens.text
+                    Layout.bottomMargin: 2
+                }
+                Text {
+                    text: qsTr("field")
+                    font.family: theme.monoFont; font.pixelSize: 10
+                    font.letterSpacing: 0.8
+                    font.capitalization: Font.AllUppercase
+                    color: theme.tokens.textMuted
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 26
+                    implicitWidth: 240
+                    implicitHeight: 30
                     radius: 6
                     color: theme.tokens.surface2
                     border.color: fName.activeFocus ? theme.tokens.accent
@@ -493,25 +510,25 @@ Rectangle {
                     TextInput {
                         id: fName
                         anchors.fill: parent
-                        anchors.leftMargin: 8; anchors.rightMargin: 8
+                        anchors.leftMargin: 9; anchors.rightMargin: 9
                         verticalAlignment: TextInput.AlignVCenter
-                        font.family: theme.monoFont; font.pixelSize: 11
+                        font.family: theme.monoFont; font.pixelSize: 12
                         color: theme.tokens.text
                         clip: true
+                        selectByMouse: true
                     }
-                    Text {
-                        visible: fName.text === ""
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        verticalAlignment: Text.AlignVCenter
-                        text: qsTr("field name…")
-                        font.family: theme.uiFont; font.pixelSize: 10
-                        color: theme.tokens.textMuted
-                    }
+                }
+                Text {
+                    text: qsTr("type")
+                    font.family: theme.monoFont; font.pixelSize: 10
+                    font.letterSpacing: 0.8
+                    font.capitalization: Font.AllUppercase
+                    color: theme.tokens.textMuted
                 }
                 ComboBox {
                     id: fType
                     Layout.fillWidth: true
+                    implicitHeight: 30
                     model: ["text", "number", "bool", "date", "select", "id"]
                     background: Rectangle {
                         radius: 6; color: theme.tokens.surface2
@@ -519,16 +536,25 @@ Rectangle {
                     }
                     contentItem: Text {
                         text: fType.displayText
-                        font.family: theme.monoFont; font.pixelSize: 11
+                        font.family: theme.monoFont; font.pixelSize: 12
                         color: theme.tokens.text
                         verticalAlignment: Text.AlignVCenter
-                        leftPadding: 8
+                        leftPadding: 9
                     }
+                }
+                Text {
+                    visible: fType.currentIndex === 4
+                    text: qsTr("choices (comma-separated)")
+                    font.family: theme.monoFont; font.pixelSize: 10
+                    font.letterSpacing: 0.8
+                    font.capitalization: Font.AllUppercase
+                    color: theme.tokens.textMuted
                 }
                 Rectangle {
                     visible: fType.currentIndex === 4
                     Layout.fillWidth: true
-                    height: 26
+                    implicitWidth: 240
+                    implicitHeight: 30
                     radius: 6
                     color: theme.tokens.surface2
                     border.color: fChoices.activeFocus ? theme.tokens.accent
@@ -536,85 +562,102 @@ Rectangle {
                     TextInput {
                         id: fChoices
                         anchors.fill: parent
-                        anchors.leftMargin: 8; anchors.rightMargin: 8
+                        anchors.leftMargin: 9; anchors.rightMargin: 9
                         verticalAlignment: TextInput.AlignVCenter
-                        font.family: theme.monoFont; font.pixelSize: 11
+                        font.family: theme.monoFont; font.pixelSize: 12
                         color: theme.tokens.text
                         clip: true
-                    }
-                    Text {
-                        visible: fChoices.text === ""
-                        anchors.fill: parent
-                        anchors.leftMargin: 8
-                        verticalAlignment: Text.AlignVCenter
-                        text: qsTr("choices, comma-separated")
-                        font.family: theme.uiFont; font.pixelSize: 10
-                        color: theme.tokens.textMuted
+                        selectByMouse: true
                     }
                 }
                 RowLayout {
                     visible: fType.currentIndex === 5
-                    spacing: 6
-                    Rectangle {
+                    spacing: 8
+                    ColumnLayout {
+                        spacing: 3
                         Layout.fillWidth: true
-                        height: 26
-                        radius: 6
-                        color: theme.tokens.surface2
-                        border.color: fPrefix.activeFocus
-                                      ? theme.tokens.accent : theme.tokens.border
-                        TextInput {
-                            id: fPrefix
-                            anchors.fill: parent
-                            anchors.leftMargin: 8; anchors.rightMargin: 8
-                            verticalAlignment: TextInput.AlignVCenter
-                            font.family: theme.monoFont; font.pixelSize: 11
-                            color: theme.tokens.text
-                            clip: true
-                        }
                         Text {
-                            visible: fPrefix.text === ""
-                            anchors.fill: parent
-                            anchors.leftMargin: 8
-                            verticalAlignment: Text.AlignVCenter
-                            text: qsTr("prefix (e.g. ICON-)")
-                            font.family: theme.uiFont; font.pixelSize: 10
+                            text: qsTr("id prefix")
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            font.letterSpacing: 0.8
+                            font.capitalization: Font.AllUppercase
                             color: theme.tokens.textMuted
                         }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 30
+                            radius: 6
+                            color: theme.tokens.surface2
+                            border.color: fPrefix.activeFocus
+                                          ? theme.tokens.accent
+                                          : theme.tokens.border
+                            TextInput {
+                                id: fPrefix
+                                anchors.fill: parent
+                                anchors.leftMargin: 9; anchors.rightMargin: 9
+                                verticalAlignment: TextInput.AlignVCenter
+                                font.family: theme.monoFont; font.pixelSize: 12
+                                color: theme.tokens.text
+                                clip: true
+                                selectByMouse: true
+                            }
+                        }
                     }
-                    Rectangle {
-                        Layout.preferredWidth: 56
-                        height: 26
-                        radius: 6
-                        color: theme.tokens.surface2
-                        border.color: fPad.activeFocus ? theme.tokens.accent
-                                                       : theme.tokens.border
-                        TextInput {
-                            id: fPad
-                            anchors.fill: parent
-                            anchors.leftMargin: 8; anchors.rightMargin: 8
-                            verticalAlignment: TextInput.AlignVCenter
-                            font.family: theme.monoFont; font.pixelSize: 11
-                            color: theme.tokens.text
-                            clip: true
-                            text: "4"
+                    ColumnLayout {
+                        spacing: 3
+                        Layout.preferredWidth: 76
+                        Text {
+                            text: qsTr("padding")
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            font.letterSpacing: 0.8
+                            font.capitalization: Font.AllUppercase
+                            color: theme.tokens.textMuted
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 30
+                            radius: 6
+                            color: theme.tokens.surface2
+                            border.color: fPad.activeFocus
+                                          ? theme.tokens.accent
+                                          : theme.tokens.border
+                            TextInput {
+                                id: fPad
+                                anchors.fill: parent
+                                anchors.leftMargin: 9; anchors.rightMargin: 9
+                                verticalAlignment: TextInput.AlignVCenter
+                                font.family: theme.monoFont; font.pixelSize: 12
+                                color: theme.tokens.text
+                                clip: true
+                                selectByMouse: true
+                                text: "4"
+                            }
                         }
                     }
                 }
             }
             footer: RowLayout {
-                spacing: 6
+                spacing: 8
                 Item { Layout.fillWidth: true }
                 Button {
                     text: qsTr("Cancel")
-                    onClicked: fieldDialog.close()
-                    background: Rectangle { radius: 6; color: theme.tokens.surface2 }
-                    contentItem: Text { text: parent.text; color: theme.tokens.text; font.family: theme.uiFont; font.pixelSize: 11 }
+                    onClicked: fieldDialog.reject()
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: parent.text; color: theme.tokens.text
+                        font.family: theme.uiFont; font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 14; rightPadding: 14
+                    }
                 }
                 Button {
                     text: qsTr("Create")
+                    enabled: fName.text.trim() !== ""
                     onClicked: {
-                        if (fName.text.trim() === "" || taxonomy === null)
-                            return
                         var opts = {}
                         if (fType.currentIndex === 4)
                             opts.choices = fChoices.text.split(",").map(
@@ -627,13 +670,25 @@ Rectangle {
                         taxonomy.create_field(fName.text, fType.currentText,
                                               JSON.stringify(opts))
                         fName.text = ""
-                        fieldDialog.close()
+                        fChoices.text = ""
+                        fieldDialog.accept()
                     }
-                    background: Rectangle { radius: 6; color: theme.tokens.accent }
-                    contentItem: Text { text: parent.text; color: theme.tokens.bg; font.family: theme.uiFont; font.pixelSize: 11 }
+                    background: Rectangle {
+                        radius: 6
+                        color: fName.text.trim() !== ""
+                               ? theme.tokens.accent : theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: parent.text; color: theme.tokens.bg
+                        font.family: theme.uiFont; font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 14; rightPadding: 14
+                    }
                 }
             }
         }
+
 
         Item { Layout.fillHeight: true }
 

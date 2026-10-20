@@ -490,8 +490,9 @@ def _install(con: sqlite3.Connection, demo_dir: Path, fonts_dir: str,
             (source_id, str(path), name, theme, context, size, now))
         icon_rows[name] = int(row.lastrowid)
         ids["assets"].append(icon_rows[name])
-        con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
-                    " VALUES (?, ?)", (icon_rows[name], demo_tag_id))
+        con.execute("INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
+                    " tag_id) VALUES (?, 'icon', ?)",
+                    (icon_rows[name], demo_tag_id))
 
     # -- font row (real metadata columns from the family's faces)
     font_path = _write_font(demo_dir, fonts_dir)
@@ -505,8 +506,9 @@ def _install(con: sqlite3.Connection, demo_dir: Path, fonts_dir: str,
             (source_id, str(font_path), font_path.stat().st_size, now))
         font_row_id = int(row.lastrowid)
         ids["assets"].append(font_row_id)
-        con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
-                    " VALUES (?, ?)", (font_row_id, demo_tag_id))
+        con.execute("INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
+                    " tag_id) VALUES (?, 'font', ?)",
+                    (font_row_id, demo_tag_id))
 
     # -- palettes
     palette_rows: list[int] = []
@@ -665,7 +667,7 @@ def remove(con: sqlite3.Connection, demo_dir: str,
         # the 'demo' tag only exists for our rows; drop it too if now unused
         leftover = con.execute(
             "SELECT t.id FROM tag t WHERE t.name = ? AND NOT EXISTS"
-            " (SELECT 1 FROM asset_tag at WHERE at.tag_id = t.id)",
+            " (SELECT 1 FROM item_tag it WHERE it.tag_id = t.id)",
             (DEMO_TAG,)).fetchone()
         if leftover:
             con.execute("DELETE FROM tag WHERE id = ?", (leftover["id"],))

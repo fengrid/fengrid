@@ -185,6 +185,9 @@ class Code(QObject):
             core_snippets.update_snippet(
                 self._con, self._current_id, title, description, language,
                 html, css, js, tags)
+        # keep item_tag in sync with the editor's CSV tags (single
+        # source of truth going forward)
+        core_db._sync_item_tags(self._con, self._current_id, "snippet", tags)
         self._current = dict(core_snippets.get_snippet(self._con,
                                                        self._current_id) or {})
         self._last_saved = self._current.get("title", "")

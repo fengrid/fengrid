@@ -86,6 +86,12 @@ class Colors(QObject):
     def palettes(self) -> list:
         return self._palettes
 
+    @Property(int, notify=palettesChanged)
+    def paletteId(self) -> int:
+        """The working palette's saved row id (-1 when unsaved) — the
+        Properties panel targets this for tags/fields/links."""
+        return self._palette_id if self._palette_id is not None else -1
+
     @Property(str, notify=palettesChanged)
     def collectionFilter(self) -> str:
         return "" if self._collection is None else str(self._collection)
@@ -194,6 +200,11 @@ class Colors(QObject):
         name = self._name or "Untitled palette"
         self._palette_id = core_colors.save_palette(
             self._con, name, hexes, tags, self._palette_id, locked=locks)
+        # keep item_tag in sync with the editor's CSV tags (single
+        # source of truth going forward)
+        if self._palette_id:
+            core_db._sync_item_tags(self._con, self._palette_id,
+                                    "palette", tags)
         self._refresh_palettes()
         self.message.emit(f"Saved: {name}")
 

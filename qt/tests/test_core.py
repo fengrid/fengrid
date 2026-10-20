@@ -452,8 +452,8 @@ def _tag_asset(con, asset_id, tagname):
     con.execute("INSERT OR IGNORE INTO tag(name) VALUES (?)", (tagname,))
     tid = con.execute("SELECT id FROM tag WHERE name = ?",
                       (tagname,)).fetchone()[0]
-    con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
-                " VALUES (?, ?)", (asset_id, tid))
+    con.execute("INSERT OR IGNORE INTO item_tag(item_id, item_kind, tag_id)"
+                " VALUES (?, ?, ?)", (asset_id, 'icon', tid))
     con.commit()
 
 
@@ -600,15 +600,15 @@ def test_tag_rename_delete(lib):
     tid = lib.execute("SELECT id FROM tag WHERE name = 'newname'").fetchone()
     assert tid is not None
     # memberships follow the rename
-    n = lib.execute("SELECT COUNT(*) FROM asset_tag at JOIN tag t"
-                    " ON t.id = at.tag_id WHERE t.name = 'newname'"
-                    " AND at.asset_id = ?", (a,)).fetchone()[0]
+    n = lib.execute("SELECT COUNT(*) FROM item_tag it JOIN tag t"
+                    " ON t.id = it.tag_id WHERE t.name = 'newname'"
+                    " AND it.item_id = ? AND it.item_kind = 'icon'", (a,)).fetchone()[0]
     assert n == 1
     assert db.rename_tag(lib, "oldname", "newname") is False  # missing
     assert db.rename_tag(lib, "newname", "") is False         # blank
     assert db.delete_tag(lib, "newname") is True
     assert db.delete_tag(lib, "newname") is False
-    assert lib.execute("SELECT COUNT(*) FROM asset_tag WHERE asset_id = ?",
+    assert lib.execute("SELECT COUNT(*) FROM item_tag WHERE item_id = ? AND item_kind = 'icon'",
                        (a,)).fetchone()[0] == 0
 
 
@@ -1191,8 +1191,8 @@ def test_star_toggles_tag_and_collection(lib, tmp_path):
     db.set_starred(lib, aid, True)
     assert db.is_starred(lib, aid) is True
     tags = {r["name"] for r in lib.execute(
-        "SELECT t.name FROM tag t JOIN asset_tag at ON at.tag_id = t.id"
-        " WHERE at.asset_id = ?", (aid,))}
+        "SELECT t.name FROM tag t JOIN item_tag it ON it.tag_id = t.id"
+        " WHERE it.item_id = ? AND it.item_kind = 'icon'", (aid,))}
     assert "starred" in tags
     colls = {r["name"] for r in lib.execute(
         "SELECT c.name FROM collection c JOIN collection_ref cr"
@@ -1228,7 +1228,7 @@ def test_star_is_idempotent(lib, tmp_path):
     aid = _seed_asset(lib, tmp_path, "third.svg")
     db.set_starred(lib, aid, True)
     db.set_starred(lib, aid, True)
-    assert lib.execute("SELECT COUNT(*) c FROM asset_tag WHERE asset_id = ?",
+    assert lib.execute("SELECT COUNT(*) c FROM item_tag WHERE item_id = ? AND item_kind = 'icon'",
                        (aid,)).fetchone()["c"] == 1
     assert lib.execute("SELECT COUNT(*) c FROM collection_ref"
                        " WHERE item_kind = 'icon' AND item_id = ?",
@@ -1239,15 +1239,17 @@ def test_starred_role_in_model_rows(lib, tmp_path):
     """The grid model's `starred` role reflects the DB, before and after."""
     aid = _seed_asset(lib, tmp_path, "roled.svg")
     rows = lib.execute("SELECT EXISTS("
-                       " SELECT 1 FROM asset_tag sat JOIN tag st"
-                       " ON st.id = sat.tag_id WHERE sat.asset_id = a.id"
+                       " SELECT 1 FROM item_tag sat JOIN tag st"
+                       " ON st.id = sat.tag_id WHERE sat.item_id = a.id"
+                       " AND sat.item_kind = 'icon'"
                        " AND st.name = 'starred') AS starred FROM asset a"
                        " WHERE a.id = ?", (aid,)).fetchone()
     assert rows["starred"] == 0
     db.set_starred(lib, aid, True)
     rows = lib.execute("SELECT EXISTS("
-                       " SELECT 1 FROM asset_tag sat JOIN tag st"
-                       " ON st.id = sat.tag_id WHERE sat.asset_id = a.id"
+                       " SELECT 1 FROM item_tag sat JOIN tag st"
+                       " ON st.id = sat.tag_id WHERE sat.item_id = a.id"
+                       " AND sat.item_kind = 'icon'"
                        " AND st.name = 'starred') AS starred FROM asset a"
                        " WHERE a.id = ?", (aid,)).fetchone()
     assert rows["starred"] == 1

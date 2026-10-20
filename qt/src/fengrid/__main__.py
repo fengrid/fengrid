@@ -73,6 +73,13 @@ def main(argv=None) -> int:
     parser.add_argument("--pane", type=int, default=0,
                         help="initial pane: 0 icons, 1 fonts, 2 colors, 3 code"
                              " (QA screenshots)")
+    parser.add_argument("--qa-select", default="",
+                        help="pre-select an item for QA screenshots"
+                             " (font family / palette / snippet name)")
+    parser.add_argument("--dialog", default="",
+                        help="open a named modal for QA screenshots"
+                             " (libDialog, smartDialog, renameDialog,"
+                             " subDialog, fieldDialog)")
     parser.add_argument("--term", action="store_true",
                         help="open the Colors pane on the Terminal designer"
                              " (QA screenshots)")
@@ -160,6 +167,29 @@ def main(argv=None) -> int:
     if not engine.rootObjects():
         print("error: failed to load the QML shell", file=sys.stderr)
         return 1
+
+    # QA affordance: --dialog names a modal; Main.qml opens it after load
+    # (popups are not reachable from the QObject tree, so the registry is
+    # QML-side — see Main.openQaModal)
+    ctx.setContextProperty("qaOpenModal", args.dialog)
+
+    # QA affordance: --qa-select <name> pre-selects an item so the
+    # Properties panel has a target in screenshots
+    if args.qa_select:
+        if args.pane == 1:
+            fonts.select(args.qa_select)
+        elif args.pane == 2:
+            row = con.execute(
+                "SELECT id FROM palette WHERE name LIKE ?",
+                (f"%{args.qa_select}%",)).fetchone()
+            if row:
+                colors_bridge.open_palette(row["id"])
+        elif args.pane == 3:
+            row = con.execute(
+                "SELECT id FROM snippet WHERE title LIKE ?",
+                (f"%{args.qa_select}%",)).fetchone()
+            if row:
+                code_bridge.open_snippet(row["id"])
 
     if not args.no_scan and library.totalAssets == 0:
         # first run: index the platform icon roots automatically

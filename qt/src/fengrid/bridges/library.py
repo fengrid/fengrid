@@ -25,6 +25,7 @@ from PySide6.QtSvg import QSvgRenderer
 from .. import __version__
 from ..core import db as core_db
 from ..core import export as core_export
+from ..core import taxonomy as core_tax
 from ..core import indexer, migrate, scanner, search as core_search
 from ..core import settings
 from ..core.export import ExportError
@@ -422,9 +423,12 @@ class Library(QObject):
         if not row:
             return {}
         d = dict(row)
-        d["tags"] = core_db.tags_for(self._con, row["id"])
+        d["kind"] = "icon"
+        d["tags"] = core_db.tags_for(self._con, row["id"], kind="icon")
         d["variants"] = core_db.variants_for(self._con, row["id"])
-        d["starred"] = core_db.is_starred(self._con, row["id"])
+        d["starred"] = core_db.is_starred(self._con, row["id"], kind="icon")
+        d["fields"] = core_tax.asset_field_values(self._con, row["id"],
+                                                  kind="icon")
         return d
 
     @Slot(int, result=int)
@@ -437,14 +441,14 @@ class Library(QObject):
         row = self._model.row(index)
         if not row:
             return False
-        return core_db.is_starred(self._con, row["id"])
+        return core_db.is_starred(self._con, row["id"], kind="icon")
 
     @Slot(int, bool)
     def set_starred(self, index: int, starred: bool) -> None:
         row = self._model.row(index)
         if not row:
             return
-        core_db.set_starred(self._con, row["id"], bool(starred))
+        core_db.set_starred(self._con, row["id"], bool(starred), kind="icon")
         self._refresh_lists()
         self.tagsRevision.emit()
         self._apply_filters()
@@ -465,8 +469,8 @@ class Library(QObject):
             tid = tid[0]
         else:
             tid = con.execute("INSERT INTO tag(name) VALUES (?)", (name,)).lastrowid
-        con.execute("INSERT OR IGNORE INTO asset_tag(asset_id, tag_id) VALUES (?, ?)",
-                    (row["id"], tid))
+        con.execute("INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
+                    " tag_id) VALUES (?, 'icon', ?)", (row["id"], tid))
         con.commit()
         self._refresh_lists()
         self.tagsRevision.emit()
@@ -478,8 +482,9 @@ class Library(QObject):
         if not row:
             return
         self._con.execute(
-            "DELETE FROM asset_tag WHERE asset_id = ? AND tag_id ="
-            " (SELECT id FROM tag WHERE name = ?)", (row["id"], name))
+            "DELETE FROM item_tag WHERE item_id = ? AND item_kind = 'icon'"
+            " AND tag_id = (SELECT id FROM tag WHERE name = ?)",
+            (row["id"], name))
         self._con.commit()
         self._refresh_lists()
         self.tagsRevision.emit()
@@ -675,9 +680,8 @@ class Library(QObject):
             " GROUP BY ext ORDER BY ext")]
         tags = [{"name": r[0], "n": r[1]} for r in con.execute(
             "SELECT t.name,"
-            " (SELECT COUNT(*) FROM asset_tag at2"
-            "  JOIN asset a2 ON a2.id = at2.asset_id"
-            "  WHERE at2.tag_id = t.id AND a2.kind = 'icon') AS n"
+            " (SELECT COUNT(*) FROM item_tag it"
+            "  WHERE it.tag_id = t.id AND it.item_kind = 'icon') AS n"
             " FROM tag t GROUP BY t.id ORDER BY t.name")]
         # collections v2: tree order + per-kind counts from collection_ref
         counts: dict[int, dict] = {}
@@ -716,8 +720,9 @@ class Library(QObject):
         # `starred` rides along as a computed role so card badges and the
         # context menu need no extra query per delegate
         sql = ["SELECT a.*, EXISTS("
-               " SELECT 1 FROM asset_tag sat JOIN tag st ON st.id = sat.tag_id"
-               " WHERE sat.asset_id = a.id AND st.name = 'starred')"
+               " SELECT 1 FROM item_tag sit JOIN tag st ON st.id = sit.tag_id"
+               " WHERE sit.item_id = a.id AND sit.item_kind = 'icon'"
+               " AND st.name = 'starred')"
                " AS starred FROM asset a"]
         where: list[str] = ["a.kind = 'icon'"]   # this pane is icons only
         params: list = []
@@ -741,23 +746,27 @@ class Library(QObject):
             where.append("a.ext = ?")
             params.append(self._ext)
         if self._tag:
-            sql.append("JOIN asset_tag at ON at.asset_id = a.id"
-                       " JOIN tag t ON t.id = at.tag_id")
+            sql.append("JOIN item_tag it ON it.item_id = a.id"
+                       " AND it.item_kind = 'icon'"
+                       " JOIN tag t ON t.id = it.tag_id")
             where.append("t.name = ?")
             params.append(self._tag)
         # saved-library multi-tag overlay (match_all = AND every tag)
         if self._tags_filter:
             if self._tags_all:
                 for t in self._tags_filter:
-                    where.append("EXISTS (SELECT 1 FROM asset_tag xt"
+                    where.append("EXISTS (SELECT 1 FROM item_tag xt"
                                  " JOIN tag xtn ON xtn.id = xt.tag_id"
-                                 " WHERE xt.asset_id = a.id AND xtn.name = ?)")
+                                 " WHERE xt.item_id = a.id"
+                                 " AND xt.item_kind = 'icon'"
+                                 " AND xtn.name = ?)")
                     params.append(t)
             else:
                 marks = ",".join("?" * len(self._tags_filter))
-                where.append("a.id IN (SELECT yt.asset_id FROM asset_tag yt"
+                where.append("a.id IN (SELECT yt.item_id FROM item_tag yt"
                              " JOIN tag ytn ON ytn.id = yt.tag_id"
-                             f" WHERE ytn.name IN ({marks}))")
+                             " WHERE yt.item_kind = 'icon'"
+                             f" AND ytn.name IN ({marks}))")
                 params += self._tags_filter
         # active smart collection: tag/starred/q criteria ride on top (the
         # theme/context/ext criteria were copied into the single filters
@@ -769,21 +778,25 @@ class Library(QObject):
                 if crit.get("tag_match_all"):
                     for t in sc_tags:
                         where.append(
-                            "EXISTS (SELECT 1 FROM asset_tag zt"
+                            "EXISTS (SELECT 1 FROM item_tag zt"
                             " JOIN tag ztn ON ztn.id = zt.tag_id"
-                            " WHERE zt.asset_id = a.id AND ztn.name = ?)")
+                            " WHERE zt.item_id = a.id"
+                            " AND zt.item_kind = 'icon'"
+                            " AND ztn.name = ?)")
                         params.append(t)
                 else:
                     marks2 = ",".join("?" * len(sc_tags))
-                    where.append("a.id IN (SELECT wt.asset_id FROM asset_tag wt"
+                    where.append("a.id IN (SELECT wt.item_id FROM item_tag wt"
                                  " JOIN tag wtn ON wtn.id = wt.tag_id"
-                                 f" WHERE wtn.name IN ({marks2}))")
+                                 " WHERE wt.item_kind = 'icon'"
+                                 f" AND wtn.name IN ({marks2}))")
                     params += sc_tags
             if crit.get("starred"):
                 where.append(
-                    "a.id IN (SELECT st.asset_id FROM asset_tag st"
+                    "a.id IN (SELECT st.item_id FROM item_tag st"
                     " JOIN tag stn ON stn.id = st.tag_id"
-                    " WHERE stn.name = 'starred')")
+                    " WHERE st.item_kind = 'icon'"
+                    " AND stn.name = 'starred')")
             if crit.get("q"):
                 where.append("(lower(a.name) LIKE ? OR lower(a.path) LIKE ?)")
                 like = "%" + str(crit["q"]).lower() + "%"

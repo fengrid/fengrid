@@ -82,13 +82,15 @@ def library_view_assets(con: sqlite3.Connection, view_id: int) -> list[int]:
         return []
     marks = ",".join("?" * len(tags))
     if row["match_all"]:
-        sql = ("SELECT a.id FROM asset a JOIN asset_tag at ON at.asset_id = a.id"
-               " JOIN tag t ON t.id = at.tag_id WHERE t.name IN (%s)"
+        sql = ("SELECT a.id FROM asset a JOIN item_tag it"
+               " ON it.item_id = a.id AND it.item_kind = a.kind"
+               " JOIN tag t ON t.id = it.tag_id WHERE t.name IN (%s)"
                " GROUP BY a.id HAVING COUNT(DISTINCT t.name) = ?" % marks)
         params = tags + [len(tags)]
     else:
-        sql = ("SELECT DISTINCT a.id FROM asset a JOIN asset_tag at"
-               " ON at.asset_id = a.id JOIN tag t ON t.id = at.tag_id"
+        sql = ("SELECT DISTINCT a.id FROM asset a JOIN item_tag it"
+               " ON it.item_id = a.id AND it.item_kind = a.kind"
+               " JOIN tag t ON t.id = it.tag_id"
                " WHERE t.name IN (%s)" % marks)
         params = tags
     return [r["id"] for r in con.execute(sql, params)]
@@ -184,8 +186,9 @@ def _smart_icon_ids(con: sqlite3.Connection, crit: dict) -> list[int]:
     tags = [t.strip() for t in crit.get("tags", []) if t.strip()]
     if tags:
         marks = ",".join("?" * len(tags))
-        sub = ("SELECT at.asset_id FROM asset_tag at JOIN tag t"
-               f" ON t.id = at.tag_id WHERE t.name IN ({marks})")
+        sub = ("SELECT it.item_id FROM item_tag it JOIN tag t"
+               f" ON t.id = it.tag_id WHERE it.item_kind = 'icon'"
+               f" AND t.name IN ({marks})")
         if crit.get("tag_match_all"):
             sub += (" GROUP BY at.asset_id"
                     f" HAVING COUNT(DISTINCT t.name) = {len(tags)}")
@@ -249,29 +252,45 @@ def delete_field(con: sqlite3.Connection, field_id: int) -> None:
     con.commit()  # values cascade
 
 
-def set_field_value(con: sqlite3.Connection, asset_id: int, field_id: int,
-                    value: str) -> None:
-    if con.execute("SELECT 1 FROM asset WHERE id = ?",
-                   (asset_id,)).fetchone() is None:
-        raise ValueError(f"unknown asset: {asset_id}")
+def _item_exists(con: sqlite3.Connection, kind: str, item_id: int) -> bool:
+    """True when a (kind, id) pair names a real row — icons/fonts live in
+    `asset`, snippets and palettes in their own tables."""
+    if kind in ("icon", "font"):
+        return con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
+                           (item_id, kind)).fetchone() is not None
+    if kind == "snippet":
+        return con.execute("SELECT 1 FROM snippet WHERE id = ?",
+                           (item_id,)).fetchone() is not None
+    if kind == "palette":
+        return con.execute("SELECT 1 FROM palette WHERE id = ?",
+                           (item_id,)).fetchone() is not None
+    return False
+
+
+def set_field_value(con: sqlite3.Connection, item_id: int, field_id: int,
+                    value: str, kind: str = "icon") -> None:
+    if not _item_exists(con, kind, item_id):
+        raise ValueError(f"unknown {kind}: {item_id}")
     if con.execute("SELECT 1 FROM asset_field WHERE id = ?",
                    (field_id,)).fetchone() is None:
         raise ValueError(f"unknown field: {field_id}")
     con.execute(
-        "INSERT INTO asset_field_value(asset_id, field_id, value)"
-        " VALUES (?, ?, ?) ON CONFLICT(asset_id, field_id)"
-        " DO UPDATE SET value = excluded.value", (asset_id, field_id, value))
+        "INSERT INTO item_field_value(item_id, item_kind, field_id, value)"
+        " VALUES (?, ?, ?, ?) ON CONFLICT(item_id, item_kind, field_id)"
+        " DO UPDATE SET value = excluded.value",
+        (item_id, kind, field_id, value))
     con.commit()
 
 
-def asset_field_values(con: sqlite3.Connection, asset_id: int) -> list[dict]:
-    """Every defined field joined with this asset's value (missing = '')."""
+def asset_field_values(con: sqlite3.Connection, item_id: int,
+                       kind: str = "icon") -> list[dict]:
+    """Every defined field joined with this item's value (missing = '')."""
     rows = con.execute(
         "SELECT f.id, f.name, f.type, f.options,"
         " COALESCE(v.value, '') AS value"
-        " FROM asset_field f LEFT JOIN asset_field_value v"
-        " ON v.field_id = f.id AND v.asset_id = ?"
-        " ORDER BY f.name COLLATE NOCASE", (asset_id,)).fetchall()
+        " FROM asset_field f LEFT JOIN item_field_value v"
+        " ON v.field_id = f.id AND v.item_id = ? AND v.item_kind = ?"
+        " ORDER BY f.name COLLATE NOCASE", (item_id, kind)).fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -286,8 +305,8 @@ def asset_field_values(con: sqlite3.Connection, asset_id: int) -> list[dict]:
 _ID_RE = re.compile(r"^(.*?)0*(\d+)$")
 
 
-def generate_field_id(con: sqlite3.Connection, asset_id: int,
-                      field_id: int) -> str:
+def generate_field_id(con: sqlite3.Connection, item_id: int,
+                      field_id: int, kind: str = "icon") -> str:
     """Assign the next formatted ID for an `id`-type field.
 
     Counter = highest numeric suffix already minted with this field's
@@ -306,7 +325,7 @@ def generate_field_id(con: sqlite3.Connection, asset_id: int,
     pad = int(opts.get("pad", 4))
     highest = 0
     for (val,) in con.execute(
-            "SELECT value FROM asset_field_value WHERE field_id = ?",
+            "SELECT value FROM item_field_value WHERE field_id = ?",
             (field_id,)):
         m = _ID_RE.match(str(val or ""))
         if m and m.group(1) == prefix:
@@ -315,7 +334,7 @@ def generate_field_id(con: sqlite3.Connection, asset_id: int,
             except ValueError:
                 pass
     nxt = f"{prefix}{highest + 1:0{pad}d}"
-    set_field_value(con, asset_id, field_id, nxt)
+    set_field_value(con, item_id, field_id, nxt, kind)
     return nxt
 
 
