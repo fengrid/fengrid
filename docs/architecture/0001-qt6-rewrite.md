@@ -310,6 +310,23 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, RAIL CONTENT FOLLOWS THE PANE (fonts split): the icons
+  rail was showing font-derived entries — Themes/Contexts/Types queried
+  the whole asset table without a kind filter, so font rows surfaced as
+  "truetype"/"opentype" themes and ttf/otf Types, while the Fonts pane
+  rail had nothing. Fixes: _refresh_lists scopes every list to
+  kind='icon' (tags count via a correlated subquery so zero-count tags
+  stay visible); new iconCount property backs the rail's "All assets"
+  row (totalAssets keeps counting all kinds for the footer/needsScan);
+  _apply_filters pins a.kind='icon' so the icons grid can never list
+  font files; the Fonts bridge gains rail lists (families + fontTypes
+  by ext) and filters (familyFilter exact-match, typeFilter by
+  extension — families matching = own a file of that ext); the rail
+  grows a Fonts-pane block: All fonts / Families / Types, each row
+  click-to-filter with toggle-off, violet accent. Verified: 96 tests,
+  DB probe (0 font-named icon themes; icon exts svg/png/xpm/ico/bmp
+  only; font exts ttf only), vision on both rails (Fonts pane shows
+  All fonts 7 / five families / TTF 7; Icons Themes clean).
 - 2026-10-20, TAXONOMY LAYER (user feature request batch): custom
   libraries, smart collections, custom fields + generated IDs, and typed
   links — core/taxonomy.py + bridges/taxonomy.py + new tables.
