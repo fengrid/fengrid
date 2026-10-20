@@ -239,10 +239,31 @@ ApplicationWindow {
             }
             Item { Layout.fillWidth: true }
             Text {
-                text: "fengrid " + appVersion
+                id: versionText
+                // shows the version; flips to an amber notice when the
+                // background release probe finds something newer — click
+                // either state to re-check / open the releases page
+                text: updater !== null && updater.updateAvailable
+                      ? qsTr("update available: ") + updater.latestVersion
+                      + " — click to open"
+                      : "fengrid " + appVersion
                 font.family: theme.monoFont
                 font.pixelSize: 11
-                color: theme.tokens.textMuted
+                color: updater !== null && updater.updateAvailable
+                       ? theme.tokens.hlInk : theme.tokens.textMuted
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (updater === null)
+                            return
+                        if (updater.updateAvailable)
+                            Qt.openUrlExternally(updater.releasesUrl)
+                        else
+                            updater.check()
+                    }
+                }
             }
         }
     }

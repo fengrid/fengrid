@@ -657,6 +657,66 @@ def test_project_tokens_and_export(lib, tmp_path):
         assert "css/tokens.css" in t.getnames()
 
 
+# -------------------------------------------------------------------- updater
+
+from fengrid.core import updater as upd
+
+
+def test_version_parsing_and_comparison():
+    assert upd.parse_version("v0.3.2") == (0, 3, 2)
+    assert upd.parse_version("0.3.10") == (0, 3, 10)
+    assert upd.parse_version("v1.0.0-rc.1") == (1, 0, 0)
+    assert upd.parse_version("garbage") is None
+    assert upd.parse_version("") is None
+    assert upd.is_newer("v0.3.1", "0.3.0.dev0") is True
+    assert upd.is_newer("v0.3.0", "0.3.0.dev0") is False   # same base
+    assert upd.is_newer("v0.2.9", "0.3.0") is False
+    assert upd.is_newer("bogus", "0.3.0") is False
+
+
+def test_ls_remote_tag_parsing():
+    out = ("aabb\trefs/tags/v0.2.3\n"
+           "ccdd\trefs/tags/v0.3.1\n"
+           "ccdd\trefs/tags/v0.3.1^{}\n"        # peeled annotated tag
+           "eeff\trefs/tags/nightly\n")          # not a version tag
+    assert upd.parse_ls_remote(out) == "v0.3.1"
+    assert upd.parse_ls_remote("") is None
+
+
+def test_probe_reads_github_api(monkeypatch):
+    calls = []
+
+    def fake_get(url, timeout=6.0):
+        calls.append(url)
+        return {"tag_name": "v0.9.0"}
+
+    monkeypatch.setattr(upd, "_http_get_json", fake_get)
+    assert upd.probe() == "v0.9.0"
+    assert calls == [upd.API_URL]
+
+
+def test_probe_falls_back_to_git(monkeypatch):
+    monkeypatch.setattr(upd, "_http_get_json", lambda *a, **k: None)
+
+    def fake_run(argv, **kwargs):
+        class R:
+            stdout = "deadbeef\trefs/tags/v0.4.0\n"
+        return R()
+
+    monkeypatch.setattr(upd.subprocess, "run", fake_run)
+    assert upd.probe() == "v0.4.0"
+
+
+def test_probe_offline_is_none(monkeypatch):
+    monkeypatch.setattr(upd, "_http_get_json", lambda *a, **k: None)
+
+    def boom(*a, **k):
+        raise OSError("offline")
+
+    monkeypatch.setattr(upd.subprocess, "run", boom)
+    assert upd.probe() is None
+
+
 def test_project_preview_snippet_page(lib, tmp_path):
     con = lib
     pid, _ = _seed_project(con, tmp_path)

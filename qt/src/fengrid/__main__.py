@@ -26,6 +26,7 @@ from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.projects import Projects
 from fengrid.bridges.theme import Theme
+from fengrid.bridges.updater import Updater
 from fengrid.core import db as core_db
 from fengrid.glprobe import needs_software_fallback
 from fengrid.web import initialize_webengine, make_preview_profile, \
@@ -120,6 +121,10 @@ def main(argv=None) -> int:
     colors_bridge = Colors(con)
     code_bridge = Code(con)
     projects_bridge = Projects(con)
+    # the release probe must never fire in QA/offscreen runs
+    _offline_qa = bool(args.screenshot) \
+        or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+    updater_bridge = Updater(app, auto_check_delay_ms=0 if _offline_qa else 4000)
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
@@ -129,6 +134,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("colors", colors_bridge)
     ctx.setContextProperty("code", code_bridge)
     ctx.setContextProperty("projects", projects_bridge)
+    ctx.setContextProperty("updater", updater_bridge)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the
     # Loader, which stays inactive there
