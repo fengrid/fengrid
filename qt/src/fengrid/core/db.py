@@ -97,6 +97,24 @@ CREATE TABLE IF NOT EXISTS snippet (
     updated     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_snippet_updated ON snippet(updated DESC);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    tags        TEXT NOT NULL DEFAULT '',
+    settings    TEXT NOT NULL DEFAULT '{}',
+    created     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS project_asset (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    asset_kind TEXT NOT NULL,        -- 'icon' | 'font' | 'snippet' | 'palette'
+    asset_id   INTEGER NOT NULL,     -- row id in asset / snippet / palette
+    label      TEXT NOT NULL DEFAULT '',
+    UNIQUE(project_id, asset_kind, asset_id)
+);
 """
 
 # External-content FTS5 kept in sync by triggers (the indexer never UPDATEs

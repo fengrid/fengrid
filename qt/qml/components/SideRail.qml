@@ -115,6 +115,11 @@ Rectangle {
                 active: rail.pane === 3
                 onPicked: rail.panePicked(3)
             }
+            RailItem {
+                label: qsTr("Projects")
+                active: rail.pane === 4
+                onPicked: rail.panePicked(4)
+            }
 
             SectionLabel { text: qsTr("Library") }
             RailItem {

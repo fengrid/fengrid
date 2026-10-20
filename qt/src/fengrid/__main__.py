@@ -24,6 +24,7 @@ from fengrid.bridges.code import Code
 from fengrid.bridges.colors import Colors
 from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
+from fengrid.bridges.projects import Projects
 from fengrid.bridges.theme import Theme
 from fengrid.core import db as core_db
 from fengrid.glprobe import needs_software_fallback
@@ -118,6 +119,7 @@ def main(argv=None) -> int:
     fonts = Fonts(con, db_path)
     colors_bridge = Colors(con)
     code_bridge = Code(con)
+    projects_bridge = Projects(con)
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
@@ -126,6 +128,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("fonts", fonts)
     ctx.setContextProperty("colors", colors_bridge)
     ctx.setContextProperty("code", code_bridge)
+    ctx.setContextProperty("projects", projects_bridge)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the
     # Loader, which stays inactive there

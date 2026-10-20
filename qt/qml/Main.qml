@@ -198,6 +198,7 @@ ApplicationWindow {
             Fonts {}
             Colors {}
             Code {}
+            Projects {}
         }
 
         Rectangle {
@@ -289,5 +290,11 @@ ApplicationWindow {
         target: code
         function onMessage(msg) { toast.show(msg) }
         function onImportFailed(err) { toast.show(qsTr("Import failed: %1").arg(err)) }
+    }
+    Connections {
+        target: projects
+        function onMessage(msg) { toast.show(msg) }
+        function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
+        function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
     }
 }

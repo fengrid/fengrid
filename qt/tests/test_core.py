@@ -4,6 +4,8 @@ Pure headless — no Qt imports (the core is Qt-free by design). Run with:
     cd qt && .venv/bin/python -m pytest -q
 """
 
+import json
+
 import pytest
 from PIL import Image
 
@@ -533,3 +535,140 @@ def test_snippet_tag_cloud(lib):
     names = [n for n, _ in cloud]
     assert names[0] == "x"          # highest count first
     assert dict(cloud)["y"] == 1
+
+
+# -------------------------------------------------------------------- projects
+
+from fengrid.core import projects as prj
+
+
+def _seed_project(con, tmp_path):
+    """A project with one icon + one font + one snippet + one palette."""
+    from fengrid.core import colors as core_colors
+    font = tmp_path / "fonts" / "TestFam" / "TestFam-Regular.ttf"
+    font.parent.mkdir(parents=True, exist_ok=True)
+    font.write_bytes(b"x")                       # bytes content is irrelevant
+    icon = tmp_path / "icons" / "mark.svg"
+    icon.parent.mkdir(parents=True, exist_ok=True)
+    icon.write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    # a source row first — the asset FK points at it (PRAGMA foreign_keys=ON)
+    con.execute("INSERT OR IGNORE INTO source (id, kind, path, label)"
+                " VALUES (1, 'folder', '/tmp/seed', 'seed')")
+    cur = con.execute(
+        "INSERT INTO asset (source_id, kind, path, name, ext, family)"
+        " VALUES (1, 'font', ?, 'TestFam-Regular', 'ttf', 'TestFam')",
+        (str(font),))
+    font_id = cur.lastrowid
+    cur = con.execute(
+        "INSERT INTO asset (source_id, kind, path, name, ext)"
+        " VALUES (1, 'icon', ?, 'mark', 'svg')", (str(icon),))
+    icon_id = cur.lastrowid
+    pal_id = core_colors.save_palette(con, "Seed palette",
+                                      ["#101418", "#39B8C4"])
+    snip_id = snp.create_snippet(con, "Hero", "demo", "web",
+                                 "<h1>hi</h1>", "h1{color:red}", "", "")
+    pid = prj.create_project(con, "Demo", "a demo", "ui")
+    assert prj.add_asset(con, pid, "font", font_id, "TestFam")
+    assert prj.add_asset(con, pid, "icon", icon_id, "mark")
+    assert prj.add_asset(con, pid, "snippet", snip_id)
+    assert prj.add_asset(con, pid, "palette", pal_id)
+    assert not prj.add_asset(con, pid, "car", 1)     # unknown kind rejected
+    return pid, {"font": font, "icon": icon}
+
+
+def test_project_crud_and_assets(lib, tmp_path):
+    con = lib
+    pid, _ = _seed_project(con, tmp_path)
+    proj = prj.get_project(con, pid)
+    assert proj["name"] == "Demo"
+    assert len(proj["assets"]) == 4
+    assert proj["settings"]["prefix"] == "fg"        # defaults merged
+    assert {a["asset_kind"] for a in proj["assets"]} == \
+        {"icon", "font", "snippet", "palette"}
+    assert prj.list_projects(con, q="demo")[0]["id"] == pid
+    assert len(prj.list_projects(con, q="zzz")) == 0
+
+    prj.update_project(con, pid, name="Renamed")
+    assert prj.get_project(con, pid)["name"] == "Renamed"
+
+    # duplicate attach is ignored (INSERT OR IGNORE)
+    asset = proj["assets"][0]
+    prj.add_asset(con, pid, asset["asset_kind"], asset["asset_id"])
+    assert len(prj.get_project(con, pid)["assets"]) == 4
+
+    row_id = proj["assets"][2]["id"]
+    prj.remove_asset(con, pid, row_id)
+    assert len(prj.get_project(con, pid)["assets"]) == 3
+
+    prj.delete_project(con, pid)
+    assert prj.get_project(con, pid) is None
+    assert con.execute("SELECT COUNT(*) c FROM project_asset").fetchone()["c"] == 0
+
+
+def test_project_tokens_and_export(lib, tmp_path):
+    con = lib
+    pid, files = _seed_project(con, tmp_path)
+    proj = prj.get_project(con, pid)
+    s = proj["settings"]
+    s["type"]["body"] = "TestFam"
+    s["type"]["baseSize"] = 16
+    s["type"]["scale"] = 1.25
+    prj.update_project(con, pid, settings=s)
+    proj = prj.get_project(con, pid)
+
+    # live preview: tokens inlined, icons/fonts point at fengrid-asset://
+    g = prj._gather(con, proj)
+    html = prj.build_site_html(con, proj, g, inline_css=True)
+    assert "--fg-bg: #101418;" in html            # role 0 ← palette position 0
+    assert "--fg-accent: #39B8C4;" in html        # role 2 ← palette position 2
+    assert "--fg-fs-hero: 39.1px;" in html        # 16 * 1.25^4
+    assert "font-family: 'TestFam'" in html       # @font-face inlined
+    assert "fengrid-asset://" not in html         # that rewrite is the bridge's
+
+    dest = tmp_path / "out" / "demo.zip"
+    info = prj.export_project(con, proj, str(dest), "zip")
+    assert info["files"] >= 8
+    assert dest.exists() and dest.stat().st_size > 500
+    import zipfile
+    names = zipfile.ZipFile(dest).namelist()
+    for want in ("manifest.json", "README.md", "css/tokens.css",
+                 "css/fonts.css", "css/icons.css", "js/icons.js",
+                 "index.html", "palettes.json", "assets/icons/mark.svg",
+                 "assets/fonts/TestFam/TestFam-Regular.ttf"):
+        assert want in names, want
+    with zipfile.ZipFile(dest) as z:
+        tokens = z.read("css/tokens.css").decode()
+        assert "--fg-radius: 10px;" in tokens
+        assert "--fg-font-body: 'TestFam', system-ui, sans-serif;" in tokens
+        fonts_css = z.read("css/fonts.css").decode()
+        assert "url('assets/fonts/TestFam/TestFam-Regular.ttf')" in fonts_css
+        assert "format('truetype')" in fonts_css
+        idx = z.read("index.html").decode()
+        assert "css/tokens.css" in idx and "font-family:var(--fg-font-body)" in idx
+        manifest = json.loads(z.read("manifest.json").decode())
+        assert manifest["generator"] == "fengrid"
+        assert len(manifest["assets"]) == 4
+
+    # tar.gz variant
+    tgz = tmp_path / "out" / "demo.tar.gz"
+    prj.export_project(con, proj, str(tgz), "targz")
+    import tarfile
+    with tarfile.open(tgz) as t:
+        assert "css/tokens.css" in t.getnames()
+
+
+def test_project_preview_snippet_page(lib, tmp_path):
+    con = lib
+    pid, _ = _seed_project(con, tmp_path)
+    proj = prj.get_project(con, pid)
+    snip = [a for a in proj["assets"] if a["asset_kind"] == "snippet"][0]
+    s = proj["settings"]
+    s["preview"] = {"mode": "snippet", "snippetId": snip["asset_id"]}
+    prj.update_project(con, pid, settings=s)
+    proj = prj.get_project(con, pid)
+    g = prj._gather(con, proj)
+    entry = prj.build_snippet_page(con, proj, g, "fg")
+    assert entry is not None
+    assert entry[0].startswith("snippets/")
+    assert "<h1>hi</h1>" in entry[1]
+    assert "var(--fg-bg)" in entry[1]
