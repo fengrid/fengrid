@@ -484,7 +484,9 @@ Rectangle {
                 id: fontCol
                 width: panel.width - 24
                 x: 12
-                spacing: 10
+                // one even rhythm for header, controls and every variant
+                // card — 27-weight families read as distinct blocks
+                spacing: 14
 
                 Item { Layout.fillWidth: true; Layout.preferredHeight: 4 }
 
@@ -573,10 +575,11 @@ Rectangle {
                 // glyph sentence
                 Rectangle {
                     Layout.fillWidth: true
-                    // plain Column stacks the wrapped Texts and reports the
-                    // true height — anchored Texts inside a layout kept a
-                    // stale one-line measurement and clipped mid-glyph
-                    height: glCol.implicitHeight + 20
+                    // implicitHeight (not height): the layout owns the
+                    // geometry — a hand-bound `height` raced the layout's
+                    // own sizing pass and could freeze a stale, too-small
+                    // measurement (the clipped specimen line)
+                    implicitHeight: glCol.implicitHeight + 20
                     radius: 8
                     color: panel.darkBg ? "#101418" : "#FFFFFF"
                     border.color: theme.tokens.border
@@ -587,7 +590,7 @@ Rectangle {
                         anchors.right: parent.right
                         anchors.top: parent.top
                         anchors.margins: 10
-                        spacing: 2
+                        spacing: 4
                         Text {
                             width: parent.width
                             text: panel.sample
@@ -618,10 +621,13 @@ Rectangle {
                         id: varRow
                         required property var modelData
                         Layout.fillWidth: true
-                        // plain Column + clip: the sample's true wrapped
-                        // height sets the box; no bleed-through into the
-                        // next row
-                        height: vrCol.implicitHeight + 20
+                        // implicitHeight, NOT height: the ColumnLayout
+                        // queries implicitHeight whenever the wrapped
+                        // sample, face weight or panel width changes and
+                        // re-lays out — a direct `height` binding could
+                        // keep a stale one-line measurement, slicing the
+                        // specimen mid-glyph (seen on 27-weight families)
+                        implicitHeight: vrCol.implicitHeight + 24
                         radius: 8
                         color: panel.darkBg ? "#101418" : "#FFFFFF"
                         border.color: theme.tokens.border
@@ -631,8 +637,8 @@ Rectangle {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            anchors.margins: 10
-                            spacing: 6
+                            anchors.margins: 12
+                            spacing: 8
                             Text {
                                 width: parent.width
                                 text: (varRow.modelData.style || "Regular")

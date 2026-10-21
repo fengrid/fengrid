@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Font details cramped in the properties panel** — variant cards for
+  many-weight families (27+ variants) rendered flush against each other
+  with clipped specimen lines: cards hand-bound `height` (racing the
+  layout's sizing pass and freezing stale one-line measurements) at a
+  10 px column spacing that vanished against the near-identical darks.
+  Cards now size via `implicitHeight` (layout-owned, re-queried on every
+  font/weight/width change) with an even 14 px column rhythm, 12 px card
+  padding and 8 px internal gaps.
 - **Linux bundle failed to launch** (`ImportError: libxcb-9065bb12.so.1.1.0`
   out of `PIL/Image.py`) — the GLX-crash strip in `build-linux.sh`
   removed Pillow's *auditwheel-hashed* vendored `libxcb`/`libXau` copies,
