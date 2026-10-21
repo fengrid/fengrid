@@ -161,6 +161,24 @@ class Code(QObject):
                          "tags": "", "created": "", "updated": ""}
         self.currentChanged.emit()
 
+    @Slot(str, int, result="QVariantList")
+    def palette_search(self, query: str, limit: int = 8) -> list:
+        """Command-bar snippet lookup (Dash/Alfred-style) over title,
+        description, tags and body — independent of the pane's filters."""
+        q = (query or "").strip()
+        if not q:
+            return []
+        like = f"%{q}%"
+        rows = self._con.execute(
+            "SELECT id, title, language FROM snippet"
+            " WHERE title LIKE ? OR description LIKE ? OR tags LIKE ?"
+            " OR html LIKE ? OR css LIKE ? OR js LIKE ?"
+            " ORDER BY (title LIKE ?) DESC, LENGTH(title), title LIMIT ?",
+            (like, like, like, like, like, like, q + "%",
+             max(1, min(int(limit), 30)))).fetchall()
+        return [{"id": r["id"], "title": r["title"],
+                 "language": r["language"]} for r in rows]
+
     @Slot(int)
     def open_snippet(self, sid: int) -> None:
         row = core_snippets.get_snippet(self._con, sid)

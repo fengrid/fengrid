@@ -276,6 +276,33 @@ Rectangle {
 
                         SettingRow {
                             section: "general"
+                            label: qsTr("Command bar hotkey")
+                            desc: qsTr("Opens the command bar — search assets and snippets, run commands, jump anywhere. Default Alt + `.")
+                            keys: "command bar palette hotkey shortcut key sequence spotlight alfred vscode search jump"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                Layout.alignment: Qt.AlignVCenter
+                                ShortcutCapture {
+                                    Layout.preferredWidth: 170
+                                    Layout.preferredHeight: 30
+                                    onSequenceEdited: function (seq) {
+                                        prefs !== null
+                                            && prefs.set_command_shortcut(seq)
+                                    }
+                                }
+                                SettingsButton {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: qsTr("Reset")
+                                    onClicked: prefs !== null
+                                               && prefs.set_command_shortcut(
+                                                   "Alt+`")
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "general"
                             label: qsTr("Startup pane")
                             desc: qsTr("Which pane opens when Fengrid starts.")
                             keys: "startup pane launch start default open"
@@ -1087,6 +1114,8 @@ Rectangle {
 
     Shortcut {
         sequence: "Escape"
+        // palette over settings / armed shortcut capture own Escape
+        enabled: !Shell.paletteOpen && !Shell.capturing
         onActivated: settingsRoot.closed()
     }
 }

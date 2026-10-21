@@ -25,7 +25,11 @@ class Prefs(QObject):
     startupPaneChanged = Signal()
     updateCheckChanged = Signal()
     firstRunNeededChanged = Signal()
+    commandShortcutChanged = Signal()
     message = Signal(str)
+
+    # Alt+` (Option+` on macs — Qt maps Alt to Option in sequences)
+    DEFAULT_COMMAND_SHORTCUT = "Alt+`"
 
     def __init__(self, con: sqlite3.Connection, db_path: str, parent=None):
         super().__init__(parent)
@@ -37,6 +41,9 @@ class Prefs(QObject):
         self._update_check = settings.get_bool(con, "update_check", True)
         self._first_run_needed = not settings.get_bool(
             con, "first_run_done", False)
+        self._command_shortcut = (
+            settings.get(con, "command_shortcut", "")
+            or self.DEFAULT_COMMAND_SHORTCUT)
         # detected at construction, resolved so they string-match the
         # source rows the scanner registers (which are stored resolved)
         self._system_icon_paths = [
@@ -110,6 +117,31 @@ class Prefs(QObject):
         self._first_run_needed = True
         settings.set_bool(self._con, "first_run_done", False)
         self.firstRunNeededChanged.emit()
+
+    # ------------------------------------------------------------- command bar
+    @Property(str, notify=commandShortcutChanged)
+    def commandShortcut(self) -> str:
+        """Raw QKeySequence text ('Alt+`') — QML Shortcut binds this,
+        so rebinding is live on every change."""
+        return self._command_shortcut
+
+    @Property(str, notify=commandShortcutChanged)
+    def formattedShortcut(self) -> str:
+        """Human-readable tip for placeholders: 'Alt + `'."""
+        return " + ".join(self._command_shortcut.split("+"))
+
+    @Slot(str)
+    def set_command_shortcut(self, seq: str) -> None:
+        seq = (seq or "").strip()
+        if not seq:
+            # never allow empty — the placeholder tip would lie and the
+            # Shortcut would silently stop firing
+            seq = self.DEFAULT_COMMAND_SHORTCUT
+        if seq == self._command_shortcut:
+            return
+        self._command_shortcut = seq
+        settings.set(self._con, "command_shortcut", seq)
+        self.commandShortcutChanged.emit()
 
     # ------------------------------------------------------------ system paths
     @Property("QVariantList", constant=True)

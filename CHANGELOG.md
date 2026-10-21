@@ -8,6 +8,23 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Command bar / palette** (dev-qt) — a Spotlight/Alfred/VS-Code-style
+  command bar over the main UI: opens with **Alt+`** (Option+` on macs)
+  or the header's magnifier, grouped results for commands (navigate,
+  rescan, theme, settings categories, database management), assets
+  (searching the SQLite catalog without disturbing the grid's own
+  search/filters — picking an asset reveals it, clearing filters if
+  needed), snippets (title + body search), and recent databases; a
+  no-match query falls through to the grid's quick search. The hotkey
+  is user-rebindable and persisted as a GLOBAL pref
+  (`command_shortcut` in the app registry, so it survives database
+  switches); it is configured in **first-run setup** (Behavior
+  section) and Settings → General via a custom `ShortcutCapture` box
+  (click → press combination; KeySequenceEdit is absent from the
+  PySide6 6.9.3 Controls build), with the current binding advertised
+  in the header placeholder ("search assets ( / ) · Alt + `") and in
+  the palette's own input.
+
 - **Multiple databases** (dev-qt) — one Fengrid database (one SQLite
   file holding projects, libraries, collections, assets and metadata)
   active at a time. A new app registry (`registry.db` beside the

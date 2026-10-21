@@ -310,6 +310,53 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-21, COMMAND BAR / PALETTE (user spec: search+configure+command
+  bar at the top, Alt+` primary hotkey, user-definable, first-run
+  preference, placeholder advertises the shortcut, VS Code palette ×
+  macOS Spotlight × Dash/Alfred): qml/components/CommandPalette.qml
+  (new) — overlay Item (reparented via parent: Overlay.overlay so the
+  32% backdrop dims header/status bar too; setupLoader stays above at
+  z 60) with a TextField + debounced (120 ms) ListModel rebuild into
+  ListView sections (Navigate/Actions/Preferences/Databases/Assets/
+  Snippets), arrow/Enter/Escape key handling, and a signal-out design:
+  activated(kind, payload-JSON) — the palette cannot see Main's ids,
+  so Main.paletteAction/runCommand/revealAsset own every action.
+  Commands: pane jumps, per-category Settings (openSettings now
+  consumes pendingCategory when already open), rescan, theme toggle,
+  generate palette, check updates, database new/open/star/clear,
+  re-run setup. Asset reveal = library.index_of_path (row in the
+  CURRENT model; -1 → clear_filters + set_search("") + re-locate) →
+  grid.currentIndex; font hits go to fonts.select(family). Fallback
+  activation = the pre-existing header quick-search flow. Search slots
+  are deliberately independent of grid state: Library.palette_search /
+  Code.palette_search (prefix-ranked LIKE, no filter coupling).
+  prefs.command_shortcut/formatting + GLOBAL_KEYS += command_shortcut
+  (registry-routed — survives DB switches; empty rebind rejected so
+  the placeholder tip can't lie); QML Shortcut binds the raw sequence,
+  so rebinding is live. Header placeholder and palette input both
+  advertise the formatted binding. ShortcutCapture.qml (new):
+  KeySequenceEdit does not exist in our PySide6 6.9.3 Controls build
+  ("is not a type" at load) — click-to-arm box assembling Ctrl/Alt/
+  Shift/Meta+KEY (printables via event.text, else Qt.keyToString),
+  modifier-or-F-key required so letters stay typeable, Escape cancels;
+  Shell.capturing gates every window Shortcut (incl. Escape in
+  Settings/FirstRun) while armed — Qt Quick consults the shortcut map
+  before the focused item, so un-gated sequences would fire mid-capture.
+  Pitfalls corrected during QA: SettingRow filter state is
+  rowMatches (plain data), NOT visible — an instance-level visible:
+  binding kills the internal visible: rowMatches binding and starves
+  SettingsSection's any-row-visible feed (query test caught the
+  general section surviving a non-matching query); ListModel delegate
+  roles must be declared as required properties (title/sub) or they
+  read undefined → invisible rows; Text has no background property
+  (chip must be a Rectangle); theme token names are camelCase Python
+  dict keys (litPane exists, "red" does not). Validation: 126 tests
+  (new tests/test_command_bar.py ×7 + registry routing + first-run
+  capture-box test), qa_render.sh green (dark/light), explicit
+  --dialog commandBar/settings/firstRun renders clean in both themes,
+  vision PASS on palette rows/contrast (pixel sampling confirmed the
+  backdrop: 0.68× brightness across header, sidebar, status bar).
+
 - 2026-10-21, MULTI-DATABASE + STORAGE BACKENDS (user spec: one active
   Fengrid database at a time with Recent/Quick-Access switching;
   local/SMB/NFS/SSHFS/S3 storage backends + a "personal cloud sync

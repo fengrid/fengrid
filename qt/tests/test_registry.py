@@ -57,6 +57,7 @@ def test_global_keys_route_to_registry(tmp_path):
         settings.set(con, "theme", "light")            # global
         settings.set(con, "last_scan", "12:34:00")     # per-DB
         settings.set_bool(con, "update_check", False)  # global
+        settings.set(con, "command_shortcut", "Ctrl+K")  # global
 
         assert get_setting(reg, "theme", None) == "light"
         assert get_setting(con, "theme", None) is None, \
@@ -64,6 +65,9 @@ def test_global_keys_route_to_registry(tmp_path):
         assert get_setting(con, "last_scan", None) == "12:34:00"
         assert get_setting(reg, "last_scan", None) is None
         assert settings.get_bool(con, "update_check", True) is False
+        assert get_setting(reg, "command_shortcut", None) == "Ctrl+K"
+        assert get_setting(con, "command_shortcut", None) is None, \
+            "command bar hotkey must survive a database switch"
         # reads follow the same routing
         assert settings.get(con, "theme", "dark") == "light"
     finally:

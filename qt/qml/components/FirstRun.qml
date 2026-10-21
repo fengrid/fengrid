@@ -505,6 +505,32 @@ Rectangle {
 
                         SettingRow {
                             section: "behavior"
+                            label: qsTr("Command bar hotkey")
+                            desc: qsTr("Opens the command bar from anywhere — search assets and snippets, run commands. Default Alt + `.")
+                            keys: "command bar palette hotkey shortcut key sequence spotlight alfred vscode search jump"
+                            RowLayout {
+                                spacing: 8
+                                Layout.alignment: Qt.AlignVCenter
+                                ShortcutCapture {
+                                    Layout.preferredWidth: 170
+                                    Layout.preferredHeight: 30
+                                    onSequenceEdited: function (seq) {
+                                        prefs !== null
+                                            && prefs.set_command_shortcut(seq)
+                                    }
+                                }
+                                SettingsButton {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: qsTr("Reset")
+                                    onClicked: prefs !== null
+                                               && prefs.set_command_shortcut(
+                                                   "Alt+`")
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "behavior"
                             label: qsTr("Search mode")
                             desc: qsTr("Default matching style of the asset search box.")
                             keys: "search smart fuzzy regex content mode"
@@ -714,6 +740,8 @@ Rectangle {
     // flag persists only here, and defaults are valid either way)
     Shortcut {
         sequence: "Escape"
+        // shortcut capture inside this screen owns Escape while armed
+        enabled: !Shell.capturing
         onActivated: setupRoot.finished()
     }
 }

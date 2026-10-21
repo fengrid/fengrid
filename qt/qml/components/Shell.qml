@@ -8,4 +8,6 @@ import QtQuick
 // in an overlay's search field (regenerating a palette mid-word).
 QtObject {
     property bool overlayOpen: false
+    property bool paletteOpen: false
+    property bool capturing: false
 }

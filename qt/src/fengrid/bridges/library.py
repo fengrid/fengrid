@@ -425,6 +425,35 @@ class Library(QObject):
         self.filtersChanged.emit()
         self._apply_filters()
 
+    @Slot(str, int, result="QVariantList")
+    def palette_search(self, query: str, limit: int = 12) -> list:
+        """Command-bar asset lookup (Spotlight-style) — deliberately
+        independent of the grid's search/filters: typing in the palette
+        must not mutate the current view, picking a result reveals it."""
+        q = (query or "").strip()
+        if not q:
+            return []
+        like = f"%{q}%"
+        rows = self._con.execute(
+            "SELECT id, name, path, kind, family FROM asset"
+            " WHERE name LIKE ? OR path LIKE ?"
+            " ORDER BY (name LIKE ?) DESC, LENGTH(name), name LIMIT ?",
+            (like, like, q + "%", max(1, min(int(limit), 50)))).fetchall()
+        return [{"id": r["id"], "name": r["name"], "path": r["path"],
+                 "kind": r["kind"], "family": r["family"] or ""}
+                for r in rows]
+
+    @Slot(str, result=int)
+    def index_of_path(self, path: str) -> int:
+        """Row of `path` in the CURRENT (filtered) model — the palette's
+        reveal target (grid.currentIndex is a plain model row); -1 when
+        the active filters hide it."""
+        for i in range(self._model.rowCount()):
+            row = self._model.row(i)
+            if row and row.get("path") == path:
+                return i
+        return -1
+
     @Slot(int)
     def copy_name(self, index: int) -> None:
         row = self._model.row(index)

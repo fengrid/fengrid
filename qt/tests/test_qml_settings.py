@@ -228,6 +228,17 @@ def test_first_run_shows_all_four_sections(setup_ui):
     assert hidden == [], f"hidden setup sections: {hidden}"
 
 
+def test_first_run_carries_the_command_bar_hotkey_row(setup_ui):
+    """The palette hotkey is a first-run preference (one of the primary
+    navigation mechanisms) — its custom capture box must be present
+    and showing the default binding. KeySequenceEdit does not exist in
+    our Qt 6.9.3 Controls build, hence ShortcutCapture."""
+    root = setup_ui["root"]
+    caps = _by_class(root, "ShortcutCapture")
+    assert len(caps) >= 1, "first-run is missing the shortcut capture box"
+    assert caps[0].property("seqRaw") == "Alt+`"
+
+
 def test_first_run_content_is_scrollable(setup_ui):
     """If contentHeight doesn't exceed the viewport, section 4 sits
     below an unreachable fold."""

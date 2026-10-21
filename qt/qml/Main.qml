@@ -36,6 +36,13 @@ ApplicationWindow {
     property bool setupOpen: typeof initialFirstRun !== "undefined"
                              && initialFirstRun
     property string pendingCategory: ""
+    property bool paletteOpen: false
+
+    function updateOverlayGate() {
+        Shell.overlayOpen = root.settingsOpen || root.setupOpen
+                            || root.paletteOpen
+        Shell.paletteOpen = root.paletteOpen
+    }
 
     header: Rectangle {
         height: 52
@@ -283,12 +290,27 @@ ApplicationWindow {
                     anchors.rightMargin: 8
                     spacing: 6
 
-                    IconImage { name: "search"; px: 15; tint: theme.tokens.textMuted }
+                    IconImage {
+                        name: "search"
+                        px: 15
+                        tint: theme.tokens.textMuted
+                        // magnifier = mouse entry into the command bar
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -7
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: commandPalette.show("")
+                        }
+                    }
 
                     TextField {
                         id: searchField
                         Layout.fillWidth: true
-                        placeholderText: qsTr("search assets  ( / )")
+                        // the tip for the command-bar hotkey rides in
+                        // the placeholder and follows the user's binding
+                        placeholderText: qsTr("search assets  ( / )  ·  %1")
+                            .arg(prefs !== null ? prefs.formattedShortcut
+                                                 : "Alt + `")
                         color: theme.tokens.text
                         placeholderTextColor: theme.tokens.textMuted
                         background: null
@@ -547,6 +569,105 @@ ApplicationWindow {
     function openSettings(category) {
         root.pendingCategory = category || ""
         root.settingsOpen = true
+        // already open → onLoaded never fires again; consume here
+        if (settingsLoader.active && settingsLoader.item
+                && root.pendingCategory !== "") {
+            settingsLoader.item.showCategory(root.pendingCategory)
+            root.pendingCategory = ""
+        }
+    }
+
+    // ── command bar dispatch (the palette signals; every action lives
+    // here because the palette file cannot see Main's ids) ──
+    function paletteAction(kind, payload) {
+        var d = {}
+        try {
+            d = JSON.parse(payload)
+        } catch (e) {
+            d = {}
+        }
+        if (kind === "command")
+            root.runCommand(d.id || "")
+        else if (kind === "asset")
+            root.revealAsset(d)
+        else if (kind === "snippet") {
+            root.pane = 3
+            code.open_snippet(d.id)
+        } else if (kind === "db")
+            dbs.switchTo(d.path)
+        else if (kind === "fallback") {
+            root.pane = 0
+            // hand the query to the header quick search (pre-existing
+            // debounce flow — Enter in the palette = old search)
+            library.set_search(d.query || "")
+            searchField.text = d.query || ""
+        }
+    }
+
+    function runCommand(id) {
+        if (id.indexOf("settings-") === 0) {
+            openSettings(id.slice("settings-".length))
+            return
+        }
+        switch (id) {
+        case "go-icons": root.pane = 0; break
+        case "go-fonts": root.pane = 1; break
+        case "go-colors": root.pane = 2; break
+        case "go-code": root.pane = 3; break
+        case "go-projects": root.pane = 4; break
+        case "open-settings": openSettings(); break
+        case "run-setup":
+            prefs.start_first_run()   // flips setupOpen via Connections
+            break
+        case "command-shortcut": openSettings("general"); break
+        case "rescan-library": library.rescan(); break
+        case "rescan-fonts": fonts.rescan(); break
+        case "toggle-theme": theme.toggle(); break
+        case "generate-palette":
+            root.pane = 2
+            colors.generate()
+            break
+        case "check-updates":
+            if (updater !== null) {
+                updater.check()
+                toast.show(qsTr("Checking for updates…"))
+            }
+            break
+        case "new-db": newDbDialog.open(); break
+        case "open-db": openDbDialog.open(); break
+        case "star-db":
+            if (dbs !== null)
+                dbs.starCurrent()
+            break
+        case "clear-recent":
+            if (dbs !== null)
+                dbs.clearRecent()
+            break
+        default:
+            toast.show(qsTr("Unknown command: %1").arg(id))
+        }
+    }
+
+    function revealAsset(d) {
+        if (d.kind === "font") {
+            root.pane = 1
+            if (d.family)
+                fonts.select(d.family)
+            return
+        }
+        root.pane = 0
+        var i = library.index_of_path(d.path)
+        if (i < 0) {
+            // current search/filters hide it — clear both, re-locate
+            library.set_search("")
+            library.clear_filters()
+            searchField.text = ""
+            i = library.index_of_path(d.path)
+        }
+        if (i >= 0)
+            grid.currentIndex = i
+        else
+            toast.show(qsTr("Not in the current view: %1").arg(d.path))
     }
 
     // ── first-run setup: full-window modal overlay (covers header and
@@ -576,18 +697,42 @@ ApplicationWindow {
     // (Colors' Space, Code's Ctrl+S) gate on the Shell singleton
     Connections {
         target: root
-        function onSettingsOpenChanged() {
-            Shell.overlayOpen = root.settingsOpen || root.setupOpen
+        function onSettingsOpenChanged() { root.updateOverlayGate() }
+        function onSetupOpenChanged() { root.updateOverlayGate() }
+    }
+
+    // ── command bar: opens with the configured sequence (Alt+` by
+    // default, rebindable in Settings / first-run). Lives in the
+    // overlay so its backdrop dims the header and status bar too ──
+    CommandPalette {
+        id: commandPalette
+        parent: Overlay.overlay
+        z: 55
+        onOpened: {
+            root.paletteOpen = true
+            root.updateOverlayGate()
         }
-        function onSetupOpenChanged() {
-            Shell.overlayOpen = root.settingsOpen || root.setupOpen
+        onClosed: {
+            root.paletteOpen = false
+            root.updateOverlayGate()
         }
+        onActivated: function (kind, payload) {
+            root.paletteAction(kind, payload)
+        }
+    }
+
+    Shortcut {
+        sequence: prefs !== null ? prefs.commandShortcut : "Alt+`"
+        enabled: !root.setupOpen && !Shell.capturing
+        onActivated: commandPalette.open ? commandPalette.hide()
+                                         : commandPalette.show("")
     }
 
     Shortcut {
         sequence: "/"
         enabled: !searchField.activeFocus && !root.settingsOpen
-                 && !root.setupOpen
+                 && !root.setupOpen && !root.paletteOpen
+                 && !Shell.capturing
         onActivated: {
             searchField.forceActiveFocus()
             searchField.selectAll()
@@ -596,27 +741,29 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+C"
         enabled: grid.currentIndex >= 0 && !root.settingsOpen
-                 && !root.setupOpen
+                 && !root.setupOpen && !root.paletteOpen
+                 && !Shell.capturing
         onActivated: library.copy_name(grid.currentIndex)
     }
     Shortcut {
         sequence: "Escape"
         enabled: grid.currentIndex >= 0 && !root.settingsOpen
-                 && !root.setupOpen
+                 && !root.setupOpen && !root.paletteOpen
+                 && !Shell.capturing
         onActivated: grid.currentIndex = -1
     }
     // Ctrl+, — settings (toggle); blocked while setup is modal
     Shortcut {
         sequence: "Ctrl+,"
-        enabled: !root.setupOpen
+        enabled: !root.setupOpen && !root.paletteOpen && !Shell.capturing
         onActivated: root.settingsOpen = !root.settingsOpen
     }
     // Ctrl+1..5 — quick pane switching matching the top-bar order
-    Shortcut { sequence: "Ctrl+1"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 0 }
-    Shortcut { sequence: "Ctrl+2"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 1 }
-    Shortcut { sequence: "Ctrl+3"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 2 }
-    Shortcut { sequence: "Ctrl+4"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 3 }
-    Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 4 }
+    Shortcut { sequence: "Ctrl+1"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 0 }
+    Shortcut { sequence: "Ctrl+2"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 1 }
+    Shortcut { sequence: "Ctrl+3"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 2 }
+    Shortcut { sequence: "Ctrl+4"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 3 }
+    Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 4 }
 
     // ── database pickers (menu → New/Open database…) ──
     FileDialog {
@@ -657,6 +804,10 @@ ApplicationWindow {
         }
         if (name === "menu") {
             mainMenu.open()
+            return
+        }
+        if (name === "commandBar") {
+            commandPalette.show("")
             return
         }
         var dlg = (sideRail && sideRail.qaModals
