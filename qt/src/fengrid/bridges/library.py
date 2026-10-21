@@ -82,19 +82,25 @@ class _ScanWorker(QObject):
 
     @Slot()
     def run(self):
-        con = core_db.connect(self._db_path)
         try:
-            roots = scanner.platform_candidates()
-            # "folder" must be in kinds — user-added sources are kind
-            # 'folder' and were silently skipped by the default ("system",)
-            sources = indexer.ensure_sources(con, roots,
-                                             kinds=("system", "folder"))
-            report = indexer.scan(
-                con, sources,
-                progress=lambda n, p: self.progress.emit(n))
+            con = core_db.connect(self._db_path)
+            try:
+                roots = scanner.platform_candidates()
+                # "folder" must be in kinds — user-added sources are kind
+                # 'folder' and were silently skipped by the default ("system",)
+                sources = indexer.ensure_sources(con, roots,
+                                                 kinds=("system", "folder"))
+                report = indexer.scan(
+                    con, sources,
+                    progress=lambda n, p: self.progress.emit(n))
+            finally:
+                con.close()
+            self.done.emit(report)
         finally:
-            con.close()
-        self.done.emit(report)
+            # one-shot worker: after the slot returns the thread's event
+            # loop would idle forever — quit it so the QThread finishes
+            # (destroying a still-running thread aborts the process)
+            QThread.currentThread().quit()
 
 
 class Library(QObject):
@@ -631,6 +637,22 @@ class Library(QObject):
         return out
 
     @Slot(str)
+    def remove_folder_path(self, path: str) -> None:
+        """Detach path used by Storage: forget the source feeding a
+        removed mount (resolve first — sources store resolved paths)."""
+        try:
+            resolved = str(Path(path).expanduser().resolve())
+        except OSError:
+            resolved = path
+        row = self._con.execute("SELECT id FROM source WHERE path = ?",
+                                (resolved,)).fetchone() \
+            or self._con.execute("SELECT id FROM source WHERE path = ?",
+                                 (path,)).fetchone()
+        if row is None:
+            return
+        self.remove_folder(row["id"])
+
+    @Slot(str)
     def import_state_json(self, path: str) -> None:
         try:
             data = migrate.load_json(path)
@@ -687,21 +709,26 @@ class Library(QObject):
         self.scanningChanged.emit()
         self.scanStarted.emit()
 
-        self._thread = QThread(self)
-        self._worker = _ScanWorker(self._db_path)
-        self._worker.moveToThread(self._thread)
-        self._worker.progress.connect(self._on_scan_progress)
-        self._worker.done.connect(self._on_scan_done)
-        self._thread.started.connect(self._worker.run)
-        self._thread.finished.connect(self._worker.deleteLater)
-        self._thread.finished.connect(self._thread.deleteLater)
-        self._thread.finished.connect(self._clear_thread_refs)
-        self._thread.start()
+        th = QThread(self)
+        wk = _ScanWorker(self._db_path)
+        self._thread, self._worker = th, wk
+        wk.moveToThread(th)
+        wk.progress.connect(self._on_scan_progress)
+        wk.done.connect(self._on_scan_done)
+        th.started.connect(wk.run)
+        th.finished.connect(wk.deleteLater)
+        th.finished.connect(th.deleteLater)
+        th.finished.connect(lambda t=th: self._clear_thread_refs(t))
+        th.start()
 
     # ------------------------------------------------------------------ internals
-    def _clear_thread_refs(self) -> None:
-        self._thread = None
-        self._worker = None
+    def _clear_thread_refs(self, t) -> None:
+        # only clear OUR generation: with one-shot workers (they quit
+        # their event loop when done) a finished event can arrive after
+        # a newer rescan already installed the next thread
+        if self._thread is t:
+            self._thread = None
+            self._worker = None
 
     def _on_scan_progress(self, n: int) -> None:
         self._scan_count = n

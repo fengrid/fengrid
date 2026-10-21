@@ -103,6 +103,7 @@ Rectangle {
                         { k: "general", t: qsTr("General") },
                         { k: "appearance", t: qsTr("Appearance") },
                         { k: "library", t: qsTr("Library") },
+                        { k: "storage", t: qsTr("Storage") },
                         { k: "editor", t: qsTr("Editor") },
                         { k: "colors", t: qsTr("Colors") },
                         { k: "updates", t: qsTr("Updates") },
@@ -660,6 +661,199 @@ Rectangle {
                         }
                     }
 
+                    // ────────────────────────────── storage
+                    SettingsSection {
+                        section: "storage"
+                        title: qsTr("Storage")
+
+                        SettingRow {
+                            section: "storage"
+                            label: qsTr("Local folders")
+                            desc: qsTr("Attach local directories through the folder picker — they scan like any other asset folder.")
+                            keys: "local folder directory disk drive picker path"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            SettingsButton {
+                                Layout.alignment: Qt.AlignVCenter
+                                text: qsTr("Add folder…")
+                                onClicked: {
+                                    folderDialog.kind = "folder"
+                                    folderDialog.open()
+                                }
+                            }
+                        }
+
+                        // coming-soon callout (spec: personal cloud sync)
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 12
+                            Layout.preferredHeight:
+                                cloudCol.implicitHeight + 20
+                            radius: 6
+                            color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                            ColumnLayout {
+                                id: cloudCol
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                spacing: 3
+                                Text {
+                                    text: qsTr("Personal cloud sync — coming soon")
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    color: theme.tokens.accent
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: qsTr("Syncing your library with Dropbox, Google Drive or OneDrive is on the way. Until then, attach such a folder as a local path once it exists on disk — or mount it yourself with one of the backends below.")
+                                    wrapMode: Text.Wrap
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.textMuted
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: storage !== null
+                                   ? storage.backends.filter(function (b) {
+                                         return b.key !== "local"
+                                     })
+                                   : []
+                            delegate: RowLayout {
+                                id: backendRow
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.topMargin: 14
+                                spacing: 20
+                                visible: settingsRoot.matches(
+                                    "storage", modelData.label,
+                                    "storage backend mount remote share "
+                                    + modelData.key + " network cloud")
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    Text {
+                                        text: backendRow.modelData.label
+                                        font.family: theme.uiFont
+                                        font.pixelSize: 13
+                                        color: theme.tokens.text
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.Wrap
+                                    }
+                                    Text {
+                                        text: backendRow.modelData.status
+                                        Layout.fillWidth: true
+                                        wrapMode: Text.Wrap
+                                        font.family: theme.uiFont
+                                        font.pixelSize: 11
+                                        color: backendRow.modelData.available
+                                               ? theme.tokens.textMuted
+                                               : theme.tokens.hlInk
+                                    }
+                                }
+                                SettingsButton {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    text: qsTr("Attach…")
+                                    enabled: backendRow.modelData.available
+                                    onClicked: storageDialog.openFor(
+                                        backendRow.modelData.key,
+                                        backendRow.modelData.label,
+                                        qsTr("Example: %1 — %2")
+                                            .arg(backendRow.modelData.hint)
+                                            .arg(backendRow.modelData.status))
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: storage !== null ? storage.mounts : []
+                            delegate: Rectangle {
+                                id: mountRow
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.topMargin: 8
+                                Layout.preferredHeight: 46
+                                radius: 6
+                                color: theme.tokens.surface2
+                                border.color: theme.tokens.border
+                                visible: settingsRoot.matches(
+                                    "storage", modelData.backendLabel,
+                                    "mount attached storage "
+                                    + modelData.backend)
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 10
+                                    anchors.rightMargin: 6
+                                    spacing: 10
+                                    Rectangle {
+                                        Layout.preferredHeight: 16
+                                        Layout.preferredWidth:
+                                            mountChip.implicitWidth + 12
+                                        radius: 3
+                                        color: "transparent"
+                                        border.color: theme.tokens.border
+                                        Text {
+                                            id: mountChip
+                                            anchors.centerIn: parent
+                                            text: mountRow.modelData.backend
+                                            font.family: theme.monoFont
+                                            font.pixelSize: 8
+                                            font.letterSpacing: 1
+                                            color: theme.tokens.textMuted
+                                        }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 0
+                                        Text {
+                                            text: mountRow.modelData.uri
+                                            font.family: theme.uiFont
+                                            font.pixelSize: 12
+                                            color: theme.tokens.text
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                        Text {
+                                            text: mountRow.modelData.local_path
+                                            font.family: theme.monoFont
+                                            font.pixelSize: 9
+                                            color: theme.tokens.textMuted
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideMiddle
+                                        }
+                                    }
+                                    Text {
+                                        text: mountRow.modelData.healthy
+                                              ? qsTr("mounted")
+                                              : qsTr("not mounted")
+                                        font.family: theme.monoFont
+                                        font.pixelSize: 10
+                                        color: mountRow.modelData.healthy
+                                               ? theme.tokens.textMuted
+                                               : theme.tokens.hlInk
+                                    }
+                                    SettingsButton {
+                                        text: qsTr("Eject")
+                                        onClicked:
+                                            storage.detach(mountRow.modelData.id)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 10
+                            visible: storage === null
+                                     || storage.mounts.length === 0
+                            text: qsTr("No network or cloud storage attached yet.")
+                            font.family: theme.uiFont
+                            font.pixelSize: 11
+                            color: theme.tokens.textMuted
+                        }
+                    }
+
                     // ────────────────────────────── editor
                     SettingsSection {
                         section: "editor"
@@ -885,6 +1079,10 @@ Rectangle {
             if (kind === "fontroot")
                 fonts.rescan()
         }
+    }
+
+    StorageDialog {
+        id: storageDialog
     }
 
     Shortcut {

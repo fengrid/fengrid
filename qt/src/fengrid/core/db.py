@@ -166,6 +166,15 @@ CREATE TABLE IF NOT EXISTS asset_link (
 );
 CREATE INDEX IF NOT EXISTS idx_link_from ON asset_link(from_kind, from_id);
 CREATE INDEX IF NOT EXISTS idx_link_to ON asset_link(to_kind, to_id);
+
+CREATE TABLE IF NOT EXISTS storage_mount (
+    id         INTEGER PRIMARY KEY,
+    backend    TEXT NOT NULL,             -- smb | nfs | sshfs | s3 | local
+    uri        TEXT NOT NULL,
+    local_path TEXT NOT NULL UNIQUE,
+    kind       TEXT NOT NULL DEFAULT 'folder',  -- source kind it feeds
+    created    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 # External-content FTS5 kept in sync by triggers (the indexer UPDATEs an

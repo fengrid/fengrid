@@ -76,6 +76,7 @@ def settings_ui(tmp_path):
     from fengrid.bridges.fonts import Fonts
     from fengrid.bridges.library import Library
     from fengrid.bridges.prefs import Prefs
+    from fengrid.bridges.storage import Storage
     from fengrid.bridges.theme import Theme
     from fengrid.bridges.updater import Updater
     from fengrid.core import db as core_db
@@ -89,6 +90,7 @@ def settings_ui(tmp_path):
     code = Code(con)
     prefs = Prefs(con, db_path)
     updater = Updater(auto_check_delay_ms=0)
+    storage = Storage(con, str(tmp_path))
 
     engine = QQmlEngine()
     ctx = engine.rootContext()
@@ -99,6 +101,7 @@ def settings_ui(tmp_path):
     ctx.setContextProperty("code", code)
     ctx.setContextProperty("prefs", prefs)
     ctx.setContextProperty("updater", updater)
+    ctx.setContextProperty("storage", storage)
     ctx.setContextProperty("appVersion", "0.0-test")
     # comp stays a local of this frame for the whole yield — created
     # objects die with their component

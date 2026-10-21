@@ -22,16 +22,20 @@ from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
 from fengrid.bridges.code import Code
 from fengrid.bridges.colors import Colors
+from fengrid.bridges.databases import Databases
 from fengrid.bridges.demo import Demo
 from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
 from fengrid.bridges.prefs import Prefs
 from fengrid.bridges.projects import Projects
+from fengrid.bridges.storage import Storage
 from fengrid.bridges.termcolors import TermColors
 from fengrid.bridges.theme import Theme
 from fengrid.bridges.taxonomy import Taxonomy
 from fengrid.bridges.updater import Updater
 from fengrid.core import db as core_db
+from fengrid.core import registry as core_registry
+from fengrid.core import settings as settings_mod
 from fengrid.glprobe import needs_software_fallback
 from fengrid.web import initialize_webengine, make_preview_profile, \
     register_asset_scheme
@@ -81,7 +85,8 @@ def main(argv=None) -> int:
     parser.add_argument("--dialog", default="",
                         help="open a named modal for QA screenshots"
                              " (libDialog, smartDialog, renameDialog,"
-                             " subDialog, fieldDialog, settings, firstRun)")
+                             " subDialog, fieldDialog, settings, firstRun,"
+                             " menu, storage)")
     parser.add_argument("--term", action="store_true",
                         help="open the Colors pane on the Terminal designer"
                              " (QA screenshots)")
@@ -125,9 +130,35 @@ def main(argv=None) -> int:
             app.setWindowIcon(QIcon(icon_path))
             break
 
-    db_path = args.db or os.path.join(_user_data_dir(), "library.db")
+    data_dir = _user_data_dir()
+    default_db = os.path.join(data_dir, "library.db")
+
+    # App registry: known/starred/active databases + GLOBAL user prefs
+    # (theme, icon size, …) — bound BEFORE any bridge reads settings so
+    # a database switch never repaints the app.
+    reg_con = core_registry.open_registry(data_dir)
+    settings_mod.bind_registry(reg_con)
+
+    startup_notice = ""
+    if args.db:
+        db_path = args.db                    # per-run override (QA too)
+    else:
+        active = core_registry.active_path(reg_con)
+        if active and os.path.isfile(active):
+            db_path = active
+        elif active:
+            db_path = default_db
+            startup_notice = (f"Database missing: {active} —"
+                              " opened the default instead")
+        else:
+            db_path = default_db
     con = core_db.connect(db_path)
+    core_registry.seed_globals(con, reg_con)
+    core_registry.set_active(reg_con, db_path)
     prefs_bridge = Prefs(con, db_path)
+    dbs_bridge = Databases(db_path, reg_con, data_dir,
+                           default_path=default_db)
+    storage_bridge = Storage(con, data_dir)
 
     theme = Theme(con, _asset_dir("fonts"))
     if args.theme:
@@ -139,7 +170,7 @@ def main(argv=None) -> int:
     code_bridge = Code(con)
     projects_bridge = Projects(con)
     # demo suite: files under the data dir so removal never touches user folders
-    demo_bridge = Demo(con, os.path.join(_user_data_dir(), "demo-assets"),
+    demo_bridge = Demo(con, os.path.join(data_dir, "demo-assets"),
                        _asset_dir("fonts"))
     # the release probe must never fire in QA/offscreen runs — and only
     # when the user left "check at startup" enabled in Settings
@@ -161,6 +192,10 @@ def main(argv=None) -> int:
     ctx.setContextProperty("demo", demo_bridge)
     ctx.setContextProperty("updater", updater_bridge)
     ctx.setContextProperty("prefs", prefs_bridge)
+    ctx.setContextProperty("dbs", dbs_bridge)
+    ctx.setContextProperty("storage", storage_bridge)
+    # non-empty when startup fell back (missing active database)
+    ctx.setContextProperty("startupNotice", startup_notice)
     taxonomy_bridge = Taxonomy(con)
     ctx.setContextProperty("taxonomy", taxonomy_bridge)
     preview_profile = make_preview_profile(con, app)
@@ -206,13 +241,26 @@ def main(argv=None) -> int:
             if row:
                 code_bridge.open_snippet(row["id"])
 
-    if not args.no_scan and library.totalAssets == 0:
+    def _start_initial_scans():
+        if args.no_scan:
+            return
         # first run: index the platform icon roots automatically
-        QTimer.singleShot(0, library.rescan)
-    if not args.no_scan and fonts.totalFonts == 0:
+        if library.totalAssets == 0:
+            QTimer.singleShot(0, library.rescan)
         # first run: index the platform font dirs automatically (own thread
         # + own connection, cancellable at quit — see bridges/fonts.py)
-        QTimer.singleShot(0, fonts.rescan)
+        if fonts.totalFonts == 0:
+            QTimer.singleShot(0, fonts.rescan)
+
+    if storage_bridge.mountCount != 0:
+        # bring registered mounts back BEFORE the first scan, so their
+        # sources resolve to live paths (failures toast + degrade to
+        # the missing-root behaviour the scanner already handles)
+        storage_bridge.ready.connect(
+            lambda ok, fail: _start_initial_scans())
+        storage_bridge.remountAll()
+    else:
+        _start_initial_scans()
 
     if args.screenshot:
         def _grab():

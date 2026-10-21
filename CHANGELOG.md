@@ -8,6 +8,35 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Multiple databases** (dev-qt) — one Fengrid database (one SQLite
+  file holding projects, libraries, collections, assets and metadata)
+  active at a time. A new app registry (`registry.db` beside the
+  library file) tracks every database ever opened: the hamburger menu
+  shows the current database, a starred **Quick access** list, and
+  **Recent** with last-opened times — picking any entry relaunches
+  Fengrid into it (the only safe swap, since every bridge holds the
+  single connection; `FENGRID_NO_RELAUNCH` suppresses the exec for
+  tests). New/Open database… use native file dialogs (new databases
+  build their schema via `db.connect`), vanished entries dim as
+  "(missing)", Clear recent forgets history but keeps the active entry.
+  User preferences (theme, icon size, search mode, keymap, palette
+  rule, startup pane, update check, last export dir) moved to the
+  registry as GLOBAL keys — switching databases no longer repaints the
+  app, and existing databases seed the registry on first open. The
+  window title carries the active database's name.
+- **Storage backends** (dev-qt) — a new Settings → Storage section
+  attaches content from local directories (folder picker), SMB/CIFS
+  (gio + session keyring), NFS, SSHFS (ssh agent) and S3-compatible
+  buckets (s3fs). Mount-based attach resolves every backend to a local
+  path, so scan/preview/export work unchanged and credentials never
+  pass through Fengrid. Registered mounts persist per database
+  (`storage_mount`), remount automatically before the first scan at
+  startup, and list with health + Eject in Settings. Backend rows show
+  honest availability (missing tool ⇒ install hint + disabled Attach),
+  and any backend accepts an already-mounted local path as the
+  no-root fallback (the supported route for NFS). Includes the
+  callout: syncing data with personal cloud storage services (Dropbox,
+  Google Drive, OneDrive) is coming soon.
 - **Settings screen + first-run setup** (dev-qt) — a VS Code-style
   Settings surface behind a new header main menu (hamburger → Settings…,
   Check for updates, About; also Ctrl+,): category tree + live search

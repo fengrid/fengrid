@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import "components"
 
 ApplicationWindow {
@@ -10,10 +11,18 @@ ApplicationWindow {
     minimumWidth: 960
     minimumHeight: 560
     visible: true
-    title: qsTr("Fengrid — the UI asset explorer")
+    // the title carries the active database — switching relaunches the
+    // process, so the window name always matches what's loaded
+    title: dbs !== null ? qsTr("Fengrid — %1").arg(dbs.currentLabel)
+                        : "Fengrid — the UI asset explorer"
     color: theme.tokens.bg
     font.family: theme.uiFont
     font.pixelSize: 13
+
+    Component.onCompleted: {
+        if (typeof startupNotice !== "undefined" && startupNotice !== "")
+            toast.show(startupNotice)
+    }
 
     property int iconSize: sizeSlider.value
     // 0 = icons, 1 = fonts, 2 = colors, 3 = code, 4 = projects (top-bar
@@ -80,6 +89,74 @@ ApplicationWindow {
                     x = p.x
                     y = p.y + 6
                 }
+                // ── databases: current / Quick access / Recent ──
+                MenuItem {
+                    enabled: false
+                    font.pixelSize: 11
+                    font.letterSpacing: 1.2
+                    font.capitalization: Font.AllUppercase
+                    text: dbs !== null
+                          ? qsTr("Database — %1").arg(dbs.currentLabel)
+                          : qsTr("Database")
+                }
+                MenuItem {
+                    visible: dbs !== null && dbs.quick.length > 0
+                    enabled: false
+                    text: qsTr("Quick access")
+                }
+                Repeater {
+                    model: dbs !== null ? dbs.quick : []
+                    delegate: MenuItem {
+                        required property var modelData
+                        enabled: modelData.exists
+                        text: modelData.label + (modelData.exists ? ""
+                                                                  : qsTr(" (missing)"))
+                        onClicked: dbs.switchTo(modelData.path)
+                    }
+                }
+                MenuItem {
+                    visible: dbs !== null && dbs.recent.length > 0
+                    enabled: false
+                    text: qsTr("Recent")
+                }
+                Repeater {
+                    model: dbs !== null ? dbs.recent : []
+                    delegate: MenuItem {
+                        required property var modelData
+                        enabled: modelData.exists
+                        text: modelData.label + " · " + modelData.when
+                              + (modelData.exists ? "" : qsTr(" (missing)"))
+                        onClicked: dbs.switchTo(modelData.path)
+                    }
+                }
+                MenuSeparator {
+                    visible: dbs !== null && (dbs.quick.length > 0
+                                              || dbs.recent.length > 0)
+                }
+                MenuItem {
+                    visible: dbs !== null
+                    text: dbs !== null && dbs.currentStarred
+                          ? qsTr("Unstar current database")
+                          : qsTr("Star current database")
+                    onTriggered: dbs.starCurrent()
+                }
+                MenuItem {
+                    visible: dbs !== null
+                    text: qsTr("New database…")
+                    onTriggered: newDbDialog.open()
+                }
+                MenuItem {
+                    visible: dbs !== null
+                    text: qsTr("Open database…")
+                    onTriggered: openDbDialog.open()
+                }
+                MenuItem {
+                    visible: dbs !== null && dbs.recent.length > 0
+                    text: qsTr("Clear recent")
+                    onTriggered: dbs.clearRecent()
+                }
+                MenuSeparator { visible: dbs !== null }
+
                 MenuItem {
                     text: qsTr("Settings…")
                     height: 28
@@ -541,6 +618,27 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+4"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 3 }
     Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 4 }
 
+    // ── database pickers (menu → New/Open database…) ──
+    FileDialog {
+        id: openDbDialog
+        title: qsTr("Open database")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("Fengrid database (*.db)"),
+                      qsTr("All files (*)")]
+        onAccepted: dbs !== null
+                     && dbs.openDatabase(Icons.toLocalPath(selectedFile))
+    }
+    FileDialog {
+        id: newDbDialog
+        title: qsTr("New database")
+        fileMode: FileDialog.SaveFile
+        nameFilters: [qsTr("Fengrid database (*.db)")]
+        defaultSuffix: "db"
+        currentFolder: dbs !== null ? dbs.defaultDir : ""
+        onAccepted: dbs !== null
+                     && dbs.createDatabase(Icons.toLocalPath(selectedFile))
+    }
+
     // QA: --dialog <name> opens a registered modal after load — delayed so
     // the window is mapped first (a Popup opened pre-show never appears)
     function openQaModal(name) {
@@ -549,8 +647,16 @@ ApplicationWindow {
             root.openSettings()
             return
         }
+        if (name === "settings-storage") {
+            root.openSettings("storage")
+            return
+        }
         if (name === "firstRun") {
             root.setupOpen = true
+            return
+        }
+        if (name === "menu") {
+            mainMenu.open()
             return
         }
         var dlg = (sideRail && sideRail.qaModals
@@ -597,5 +703,23 @@ ApplicationWindow {
         function onMessage(msg) { toast.show(msg) }
         function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
         function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
+    }
+    Connections {
+        target: dbs
+        function onMessage(msg) { toast.show(msg) }
+    }
+    Connections {
+        target: storage
+        function onMessage(msg) { toast.show(msg) }
+        // the source row itself belongs to the library bridge
+        function onAttached(path, kind) {
+            library.add_folder(path, kind)
+            if (kind === "fontroot")
+                fonts.rescan()
+        }
+        function onDetached(path) {
+            library.remove_folder_path(path)
+            fonts.refresh()
+        }
     }
 }

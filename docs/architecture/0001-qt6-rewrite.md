@@ -310,6 +310,74 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-21, MULTI-DATABASE + STORAGE BACKENDS (user spec: one active
+  Fengrid database at a time with Recent/Quick-Access switching;
+  local/SMB/NFS/SSHFS/S3 storage backends + a "personal cloud sync
+  coming soon" note): core/registry.py opens
+  `<data_dir>/registry.db` (registry_db table + its own setting
+  table) — known/starred/active databases plus the GLOBAL prefs set
+  (settings.GLOBAL_KEYS: theme, icon_size, search_mode, editor_keymap,
+  colors_rule, startup_pane, update_check, last_export_dir). The
+  settings module gains bind_registry(): global keys route to the
+  registry connection, everything else stays per-database; unbound
+  (no registry) behaves exactly like the old single-DB store, so
+  pre-existing tests/environments are untouched; seed_globals() copies
+  the active DB's values into the registry FIRST-WINS on first open
+  (migration path for existing installs). bridges/databases.py (new):
+  current/quick/recent properties, star/clear/create/open/switch
+  slots; switching = registry flip + os.execv relaunch (every bridge
+  holds the one con — hot-swap is unsafe; the chunked scan commits
+  from the settings batch make an interrupted scan restart-safe), argv
+  filtered of --db so the registry wins next start;
+  FENGRID_NO_RELAUNCH=1 keeps tests in-process, and _activate updates
+  the session path so suppressed mode behaves post-switch. Startup:
+  active → fallback to the default DB with a toast (startupNotice)
+  when the file vanished. QML: the hamburger menu grows a Database
+  block (disabled header "Database — <label>", Quick access + Recent
+  Repeaters with when/missing states, Star/New/Open/Clear items) —
+  Repeater delegates inside a Menu work in Qt 6.9; New/Open are
+  FileDialogs (fileMode SaveFile/OpenFile, defaultSuffix,
+  Icons.toLocalPath); the window title carries the DB label.
+  core/storage.py (new) + bridges/storage.py (new) + storage_mount
+  table: backends local/smb/nfs/sshfs/s3 attach by MOUNTING into
+  data_dir/mounts (sshfs/gio/s3fs/mount through an injectable runner —
+  unit-tested without root or network; smb discovers its gvfs entry by
+  diffing /run/user/…/gvfs before/after), returning a local path so
+  the entire scan pipeline stays untouched; credentials stay in the
+  system (agent / keyring / passwd-s3fs) and are never stored by
+  Fengrid. Settings → Storage section: availability rows (missing tool
+  ⇒ "install X — …" + disabled Attach), attached-mount rows with
+  health + Eject, a local row pointing at the folder picker, and the
+  coming-soon callout for personal cloud sync. Mounts persist per
+  database and remount BEFORE the first scan at startup
+  (ready → _start_initial_scans ordering). GOTCHAS: one-shot QThread
+  workers must QThread.currentThread().quit() when their slot returns —
+  otherwise the thread idles until aboutToQuit and destroying the
+  bridge first ABORTS the process ("QThread: Destroyed while running";
+  this latent flaw existed in the scan workers too — fixed in all
+  three bridges); _clear_thread_refs must be generation-aware (a
+  finished event can arrive AFTER a newer rescan installed the next
+  thread — nulling the new generation's refs would GC a running
+  worker); sqlite connections are thread-affine — the storage worker
+  only mounts, all DB writes happen in _on_done on the main thread
+  (the first bridge test caught the ProgrammingError); a SettingRow
+  written with `visible:` instead of `rowMatches:` silently pins
+  rowMatches to its `true` default so its section never hides (diag:
+  rowMatches=True under visible=False); QML `visible` reads confirmed
+  EFFECTIVE again (property() under a hidden parent returns False).
+  CORRECTION to the settings entry below: Repeaters ARE Items and
+  their delegates DO reparent into a layout's `children` — the
+  first-run sections vanished because their children carry no
+  `rowMatches` property, not because Repeaters are invisible to the
+  introspection loop. Verified: 118 tests (test_registry:
+  routing/seed/CRUD + bridge flows incl. junk-DB rejection and create
+  refusal; test_storage: pure cmd builders, availability honesty,
+  runner-injected mount + failure tails, detach no-ops, mount-table
+  persistence, full threaded attach/detach) + QA gate (dark/light
+  clean) + --dialog menu / settings-storage / settings renders with
+  ZERO QML errors + vision on all three (database header, Quick
+  access, Recent with times, coming-soon callout, four backends with
+  live availability, dimmed Attach buttons for missing tools).
 - 2026-10-21, SETTINGS + FIRST-RUN SETUP (user spec: VS Code-style
   settings surface; one-time setup defining system paths, asset
   folders, look/layout and core features while the initial scan runs):
