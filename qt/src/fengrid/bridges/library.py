@@ -84,7 +84,11 @@ class _ScanWorker(QObject):
     def run(self):
         con = core_db.connect(self._db_path)
         try:
-            sources = indexer.ensure_sources(con, scanner.platform_candidates())
+            roots = scanner.platform_candidates()
+            # "folder" must be in kinds — user-added sources are kind
+            # 'folder' and were silently skipped by the default ("system",)
+            sources = indexer.ensure_sources(con, roots,
+                                             kinds=("system", "folder"))
             report = indexer.scan(
                 con, sources,
                 progress=lambda n, p: self.progress.emit(n))
@@ -106,6 +110,7 @@ class Library(QObject):
     scanningChanged = Signal()
     scanCountChanged = Signal()
     lastExportDirChanged = Signal()
+    sourcesChanged = Signal()
 
     def __init__(self, con, db_path: str, no_scan: bool = False, parent=None):
         super().__init__(parent)
@@ -114,7 +119,9 @@ class Library(QObject):
         self._model = AssetModel(self)
 
         self._search = ""
-        self._search_mode = "smart"
+        # default search mode persists across sessions (Settings → Search)
+        _mode = settings.get(con, "search_mode", "smart")
+        self._search_mode = _mode if _mode in core_search.MODES else "smart"
         self._theme = ""
         self._context = ""
         self._ext = ""
@@ -129,6 +136,7 @@ class Library(QObject):
         self._smart_crit: dict = {}
 
         self._scanning = False
+        self._rescan_pending = False
         self._scan_count = 0
         self._last_scan = settings.get(con, "last_scan", "") or ""
         self._last_export_dir = settings.get(con, "last_export_dir", "") or ""
@@ -146,6 +154,7 @@ class Library(QObject):
         # the scan worker runs on its own connection; give the thread a chance
         # to stop before its object is torn down, otherwise Qt logs
         # "QThread: Destroyed while thread is still running" on exit
+        self._rescan_pending = False  # a queued drain must not restart a scan
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait(10000)
@@ -252,6 +261,7 @@ class Library(QObject):
         if mode not in core_search.MODES or mode == self._search_mode:
             return
         self._search_mode = mode
+        settings.set(self._con, "search_mode", mode)
         self.filtersChanged.emit()
         self._apply_filters()
 
@@ -567,14 +577,58 @@ class Library(QObject):
             self.message.emit("Could not add to collection")
 
     @Slot(str)
-    def add_folder(self, path: str) -> None:
+    @Slot(str, str)
+    def add_folder(self, path: str, kind: str = "folder") -> None:
+        """Register an asset folder ('folder' = icons, 'fontroot' =
+        fonts) and rescan. Icon folders rescan here; for font folders
+        the caller rescans fonts (fonts bridge owns that worker)."""
         p = str(Path(path).expanduser())
         if not os.path.isdir(p):
             self.message.emit(f"Not a folder: {p}")
             return
-        indexer.add_folder_source(self._con, p)
+        indexer.add_folder_source(self._con, p, kind=kind)
         self.message.emit(f"Added folder: {p}")
+        self.sourcesChanged.emit()
+        if kind == "fontroot":
+            return
         self.rescan()
+
+    @Slot(int)
+    def remove_folder(self, source_id: int) -> None:
+        """Forget a source: its assets, taxonomy links and fingerprints
+        are purged by indexer.remove_source; models refresh here."""
+        if indexer.remove_source(self._con, source_id):
+            self.message.emit("Removed source")
+        else:
+            self.message.emit("Source not found")
+        self.sourcesChanged.emit()
+        self.refresh()
+
+    @Slot(str, str, bool)
+    def set_path_enabled(self, path: str, kind: str, enabled: bool) -> None:
+        """Toggle a detected system path or user folder (Settings /
+        first-run). The flag is persisted immediately; the purge or
+        re-index happens in the next scan, which the caller triggers."""
+        indexer.set_path_enabled(self._con, path, kind, enabled)
+        self.sourcesChanged.emit()
+
+    @Slot()
+    def refresh(self) -> None:
+        """Public model refresh for QML after source mutations that
+        don't run a scan (toggles, removes)."""
+        self._refresh_lists()
+        self._apply_filters()
+
+    @Property("QVariantList", notify=sourcesChanged)
+    def sources(self):
+        """All registered sources with per-source asset counts — the
+        Settings / first-run library section binds to this."""
+        out = []
+        for s in indexer.sources_summary(self._con):
+            s = dict(s)
+            s["enabled"] = bool(s["enabled"])
+            out.append(s)
+        return out
 
     @Slot(str)
     def import_state_json(self, path: str) -> None:
@@ -623,6 +677,10 @@ class Library(QObject):
     @Slot()
     def rescan(self) -> None:
         if self._scanning:
+            # queue instead of dropping: the first-run screen adds folders
+            # WHILE the initial scan runs — a dropped call would leave the
+            # new folder unindexed until the next manual rescan
+            self._rescan_pending = True
             return
         self._scanning = True
         self._scan_count = 0
@@ -660,6 +718,13 @@ class Library(QObject):
         self.message.emit(
             f"Indexed: {report['new']} new, {report['changed']} changed,"
             f" {report['pruned']} pruned ({report['total']} files)")
+        self.sourcesChanged.emit()  # per-source counts moved
+        if self._rescan_pending:
+            # deferred, not direct: the finished worker's thread refs are
+            # still being cleared in this signal's delivery chain, and a
+            # direct rescan() would race _clear_thread_refs
+            self._rescan_pending = False
+            QTimer.singleShot(0, self.rescan)
 
     def _refresh_lists(self) -> None:
         con = self._con

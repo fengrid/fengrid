@@ -34,4 +34,26 @@ ToolButton {
     }
     ToolTip.visible: hovered && ToolTip.text.length > 0
     ToolTip.delay: 400
+
+    // attention pulse — after first-run setup the shell points at the
+    // main-menu button so the user knows where Settings lives
+    function flash() { flashSeq.restart() }
+    SequentialAnimation {
+        id: flashSeq
+        loops: 3
+        PropertyAnimation {
+            target: btn
+            property: "opacity"
+            to: 0.2
+            duration: 220
+            easing.type: Easing.InOutQuad
+        }
+        PropertyAnimation {
+            target: btn
+            property: "opacity"
+            to: 1.0
+            duration: 220
+            easing.type: Easing.InOutQuad
+        }
+    }
 }

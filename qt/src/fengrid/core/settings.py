@@ -18,3 +18,19 @@ def get(con: sqlite3.Connection, key: str, default=None):
 
 def set(con: sqlite3.Connection, key: str, value) -> None:
     _set(con, key, value)
+
+
+def get_bool(con: sqlite3.Connection, key: str, default: bool = False) -> bool:
+    """Boolean settings persist through str(value) — 'True'/'False'.
+
+    Accepts the common spellings so hand-edited or migrated rows
+    ('1', 'true', 'yes') still read correctly.
+    """
+    raw = _get(con, key, None)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
+def set_bool(con: sqlite3.Connection, key: str, value: bool) -> None:
+    _set(con, key, bool(value))

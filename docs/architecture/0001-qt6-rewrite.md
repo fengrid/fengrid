@@ -310,6 +310,71 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-21, SETTINGS + FIRST-RUN SETUP (user spec: VS Code-style
+  settings surface; one-time setup defining system paths, asset
+  folders, look/layout and core features while the initial scan runs):
+  the header grows a hamburger main menu (Menu with
+  `parent: Overlay.overlay`, position recomputed in onAboutToShow —
+  mapToItem creates no layout dependencies, so a create-time binding
+  goes stale) with Settings… / Check for updates / About; Ctrl+, also
+  toggles. `SettingsScreen.qml` loads through a content-area Loader
+  (REBUILD-ON-OPEN: creation-time bindings capture bridge state, which
+  kills the whole binding-death sync class; only controls the always-
+  live header can also change — theme combo, search-mode combo,
+  icon-size slider — keep Connections re-syncs). Rows: category tree +
+  live search filter via matches(); sections carry General (search
+  mode, startup pane, run-setup-again), Appearance (theme, icon size),
+  Library (system icon roots + font dirs with per-path checkboxes,
+  custom folder rows with kind chip/count/enable/trash, add + rescan
+  buttons), Editor (keymap), Colors (palette rule), Updates (startup
+  probe toggle + status + check now), About (version, db path,
+  releases). `FirstRun.qml` is a modal card on Overlay.overlay while
+  setupOpen: system paths, asset folders, look & feel, behavior — all
+  writing the SAME keys Settings reads — scan progress in the footer
+  while the initial ingest runs; Escape/Get started →
+  complete_first_run → Connections flips setupOpen → toast pointing at
+  the menu + IconButton.flash() pulse. `__main__` computes
+  initialFirstRun (flag unset AND NOT --screenshot, so pane shots stay
+  clean on a fresh DB; --dialog settings|firstRun forces the surfaces
+  for QA) and --pane now defaults to the startup_pane setting.
+  prefs bridge (NEW) owns icon_size/startup_pane/update_check/
+  first_run_done + the detected path lists (resolved, so they
+  string-match scanner rows); update_check gates the Updater's startup
+  probe delay. Core-layer fixes this exposed: the library scan worker
+  passed the default kinds=("system") so user-added folder sources
+  registered but were NEVER scanned; scans chunk-commit every 400
+  files (settings saves during the first-run scan would otherwise hit
+  SQLITE_BUSY behind one whole-scan transaction); _sweep_disabled
+  purges disabled sources' assets + fingerprints at scan start
+  (uncheck = leaves the grid, re-check = re-indexes) with
+  set_path_enabled upserting before the first scan registers a path;
+  asset upserts are id-preserving UPDATEs (DELETE+INSERT orphaned
+  item_tag/collection_ref/asset_link rows on every mtime touch — FTS
+  has an AFTER UPDATE trigger so search stays in sync); rescan()
+  queues (_rescan_pending → singleShot drain) because first-run adds
+  folders WHILE the initial scan runs. GOTCHAS: QQmlComponent
+  instances DIE with their component — a helper that returns after
+  comp.create() destroys the scene before the test runs (keep `comp`
+  alive on the yielding fixture frame); QML `visible` READS are
+  effective — a section filtering rows by their `visible` self-
+  deadlocks (it hides itself on the first non-match, then reads its
+  rows false forever); filter on plain data (rowMatches mirror);
+  QQuickSlider has moved()/pressed but NO valueModified (load-time
+  "Cannot assign to non-existent property"); pane shortcuts
+  (Space/Ctrl+S/…) are window-scoped and fire THROUGH overlays —
+  typing a space in the settings search regenerated the palette — so
+  overlays publish Shell.overlayOpen (new singleton) and pane/main
+  shortcuts gate on it (Escape stays unambiguous); Repeaters are not
+  Items, so sections introspecting `children` never see Repeater-housed
+  rows (first-run sections 1–2 vanished; filterRows opt-out);
+  Basic-style ScrollBar handles render invisibly on light surfaces —
+  style them token-driven. Verified: 105 tests (new test_prefs +
+  test_qml_settings: clamp/persist round-trip, flag flip + signal,
+  upsert-before-scan, component creation, the full filter chain
+  through real bindings, four-section visibility, scrollability of the
+  setup card) + offscreen pane/settings/firstRun renders with ZERO
+  QML errors + vision on all three (menu button, category tree, rows
+  + controls, all four setup sections, scrollbars, clean layout).
 - 2026-10-20, PANE TABS IN THE RAIL (user direction change: "include the
   Panes as tabs at the top of the left panel"): the top-bar color-coded
   PaneButton row was built first (AbstractButton + icons + glow underline)

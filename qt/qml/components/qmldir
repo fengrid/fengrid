@@ -1,4 +1,5 @@
 singleton Icons 1.0 Icons.qml
+singleton Shell 1.0 Shell.qml
 FormCheck 1.0 FormCheck.qml
 FormDialog 1.0 FormDialog.qml
 FormInput 1.0 FormInput.qml

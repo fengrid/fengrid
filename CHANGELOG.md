@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Settings screen + first-run setup** (dev-qt) — a VS Code-style
+  Settings surface behind a new header main menu (hamburger → Settings…,
+  Check for updates, About; also Ctrl+,): category tree + live search
+  over rows that apply immediately, covering every persisted option —
+  search mode, icon size, startup pane, theme, editor keymap, palette
+  rule, update check, detected system icon/font paths with per-path
+  toggles, and asset folder add/remove/enable + rescan controls. A
+  one-time setup screen (shown until `first_run_done`, re-runnable from
+  Settings) walks through system paths, folders, look and behavior in a
+  single modal while the initial ingest runs in the background —
+  finishing saves to the same keys and points back at the menu. Core
+  fixes this exposed: user folder sources are actually scanned now
+  (the worker's default `kinds` skipped them), scans chunk-commit so
+  settings saves never block behind one whole-scan transaction,
+  disabled sources are swept from the library at the next scan, asset
+  ids survive re-identification (tags/links no longer orphan on touch),
+  and rescan requests queue instead of dropping when a folder is added
+  mid-scan.
+
 - **QT6 taxonomy layer** (dev-qt) — the organizational backbone of the
   Qt port:
   - **Saved libraries** — named tag sets (match any or all tags) that

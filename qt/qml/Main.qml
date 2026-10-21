@@ -20,6 +20,14 @@ ApplicationWindow {
     // pane switcher); --pane N (QA) overrides via the initialPane context
     property int pane: typeof initialPane !== "undefined" ? initialPane : 0
 
+    // ── overlays: settings (content area) + first-run setup (modal) ──
+    property bool settingsOpen: false
+    // computed in __main__ (flag unset && not a screenshot run); flipped
+    // afterwards by prefs.firstRunNeededChanged
+    property bool setupOpen: typeof initialFirstRun !== "undefined"
+                             && initialFirstRun
+    property string pendingCategory: ""
+
     header: Rectangle {
         height: 52
         // subtle vertical depth: surface fading toward bg at the bottom,
@@ -44,6 +52,55 @@ ApplicationWindow {
             anchors.leftMargin: 14
             anchors.rightMargin: 10
             spacing: 12
+
+            // main menu (VS Code-style hamburger) — Settings & friends
+            IconButton {
+                id: menuBtn
+                icon_name: "menu"
+                Layout.alignment: Qt.AlignVCenter
+                ToolTip.text: qsTr("Main menu")
+                onClicked: mainMenu.open()
+            }
+            Menu {
+                id: mainMenu
+                parent: Overlay.overlay
+                width: 230
+                padding: 4
+                background: Rectangle {
+                    radius: 8
+                    color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                // recompute on every open: mapToItem creates no binding
+                // dependency on the button's position, so a create-time
+                // binding would go stale after the first layout pass
+                onAboutToShow: {
+                    var p = menuBtn.mapToItem(Overlay.overlay, 0,
+                                              menuBtn.height)
+                    x = p.x
+                    y = p.y + 6
+                }
+                MenuItem {
+                    text: qsTr("Settings…")
+                    height: 28
+                    onTriggered: root.openSettings()
+                }
+                MenuItem {
+                    text: qsTr("Check for updates")
+                    height: 28
+                    enabled: updater !== null
+                    onTriggered: {
+                        updater.check()
+                        toast.show(qsTr("Checking for updates…"))
+                    }
+                }
+                MenuSeparator {}
+                MenuItem {
+                    text: qsTr("About Fengrid")
+                    height: 28
+                    onTriggered: root.openSettings("about")
+                }
+            }
 
             // glint-quad mini mark (branding/assets/fengrid-mark.svg shape)
             Item {
@@ -101,6 +158,19 @@ ApplicationWindow {
                 onActivated: function (idx) {
                     library !== null && library.set_search_mode(
                         ["smart", "fuzzy", "regex", "content"][idx])
+                }
+                // the persisted mode can also change from Settings —
+                // re-sync on every filters change (user picks above kill
+                // any currentIndex binding)
+                function syncIndex() {
+                    currentIndex = ["smart", "fuzzy", "regex", "content"]
+                        .indexOf(library !== null ? library.searchMode
+                                                  : "smart")
+                }
+                Component.onCompleted: syncIndex()
+                Connections {
+                    target: library
+                    function onFiltersChanged() { searchModeBox.syncIndex() }
                 }
                 background: Rectangle {
                     radius: 6
@@ -187,9 +257,22 @@ ApplicationWindow {
                 from: 16
                 to: 256
                 stepSize: 16
-                value: 32
+                value: prefs !== null ? prefs.iconSize : 32
                 Layout.preferredWidth: 110
                 Layout.alignment: Qt.AlignVCenter
+                // moved() = user-driven only (no feedback loop with the
+                // sync below); set_icon_size dedupes per-step writes
+                onMoved: prefs !== null
+                         && prefs.set_icon_size(Math.round(value))
+                Connections {
+                    // a drag writes `value` imperatively, killing the
+                    // binding above — re-sync from Settings while idle
+                    target: prefs
+                    function onIconSizeChanged() {
+                        if (!sizeSlider.pressed)
+                            sizeSlider.value = prefs.iconSize
+                    }
+                }
             }
             Text {
                 text: sizeSlider.value + "px"
@@ -366,9 +449,68 @@ ApplicationWindow {
         }
     }
 
+    // ── settings overlay: covers the content area; header + footer stay
+    // live (the menu button must keep working). Rebuilt on every open so
+    // every creation-time binding captures current bridge state.
+    Loader {
+        id: settingsLoader
+        anchors.fill: parent
+        z: 50
+        active: root.settingsOpen
+        sourceComponent: SettingsScreen {
+            onClosed: root.settingsOpen = false
+        }
+        onLoaded: {
+            if (root.pendingCategory !== "") {
+                item.showCategory(root.pendingCategory)
+                root.pendingCategory = ""
+            }
+        }
+    }
+    function openSettings(category) {
+        root.pendingCategory = category || ""
+        root.settingsOpen = true
+    }
+
+    // ── first-run setup: full-window modal overlay (covers header and
+    // footer — nothing is configurable behind it) ──
+    Loader {
+        id: setupLoader
+        parent: Overlay.overlay
+        anchors.fill: parent
+        z: 60
+        active: root.setupOpen
+        sourceComponent: FirstRun {
+            onFinished: {
+                // persists first_run_done; the Connections below closes
+                prefs.complete_first_run()
+                toast.show(qsTr("Setup saved — change anything later from the main menu, Settings…"))
+                menuBtn.flash()
+            }
+        }
+    }
+    Connections {
+        target: prefs
+        function onFirstRunNeededChanged() {
+            root.setupOpen = prefs.firstRunNeeded
+        }
+    }
+    // pane shortcuts are window-scoped; components outside this file
+    // (Colors' Space, Code's Ctrl+S) gate on the Shell singleton
+    Connections {
+        target: root
+        function onSettingsOpenChanged() {
+            Shell.overlayOpen = root.settingsOpen || root.setupOpen
+        }
+        function onSetupOpenChanged() {
+            Shell.overlayOpen = root.settingsOpen || root.setupOpen
+        }
+    }
+
     Shortcut {
         sequence: "/"
-        enabled: !searchField.activeFocus
+        enabled: !searchField.activeFocus && !root.settingsOpen
+                 && !root.setupOpen
         onActivated: {
             searchField.forceActiveFocus()
             searchField.selectAll()
@@ -376,24 +518,41 @@ ApplicationWindow {
     }
     Shortcut {
         sequence: "Ctrl+C"
-        enabled: grid.currentIndex >= 0
+        enabled: grid.currentIndex >= 0 && !root.settingsOpen
+                 && !root.setupOpen
         onActivated: library.copy_name(grid.currentIndex)
     }
     Shortcut {
         sequence: "Escape"
-        enabled: grid.currentIndex >= 0
+        enabled: grid.currentIndex >= 0 && !root.settingsOpen
+                 && !root.setupOpen
         onActivated: grid.currentIndex = -1
     }
+    // Ctrl+, — settings (toggle); blocked while setup is modal
+    Shortcut {
+        sequence: "Ctrl+,"
+        enabled: !root.setupOpen
+        onActivated: root.settingsOpen = !root.settingsOpen
+    }
     // Ctrl+1..5 — quick pane switching matching the top-bar order
-    Shortcut { sequence: "Ctrl+1"; onActivated: root.pane = 0 }
-    Shortcut { sequence: "Ctrl+2"; onActivated: root.pane = 1 }
-    Shortcut { sequence: "Ctrl+3"; onActivated: root.pane = 2 }
-    Shortcut { sequence: "Ctrl+4"; onActivated: root.pane = 3 }
-    Shortcut { sequence: "Ctrl+5"; onActivated: root.pane = 4 }
+    Shortcut { sequence: "Ctrl+1"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 0 }
+    Shortcut { sequence: "Ctrl+2"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 1 }
+    Shortcut { sequence: "Ctrl+3"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 2 }
+    Shortcut { sequence: "Ctrl+4"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 3 }
+    Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen; onActivated: root.pane = 4 }
 
     // QA: --dialog <name> opens a registered modal after load — delayed so
     // the window is mapped first (a Popup opened pre-show never appears)
     function openQaModal(name) {
+        // the full-screen surfaces aren't Popups — open them directly
+        if (name === "settings") {
+            root.openSettings()
+            return
+        }
+        if (name === "firstRun") {
+            root.setupOpen = true
+            return
+        }
         var dlg = (sideRail && sideRail.qaModals
                    && sideRail.qaModals[name])
                   ? sideRail.qaModals[name]

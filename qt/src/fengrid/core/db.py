@@ -168,9 +168,10 @@ CREATE INDEX IF NOT EXISTS idx_link_from ON asset_link(from_kind, from_id);
 CREATE INDEX IF NOT EXISTS idx_link_to ON asset_link(to_kind, to_id);
 """
 
-# External-content FTS5 kept in sync by triggers (the indexer never UPDATEs
-# asset rows; it deletes + reinserts, but the update trigger covers the
-# general case anyway).
+# External-content FTS5 kept in sync by triggers (the indexer UPDATEs an
+# existing asset row in place so its id — and every taxonomy row pointing
+# at it — survives re-identification; asset_fts_au reindexes on UPDATE,
+# and the insert/delete triggers cover new and purged rows).
 FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS asset_fts
     USING fts5(name, path, theme, context, content='asset', content_rowid='id');

@@ -25,6 +25,7 @@ from fengrid.bridges.colors import Colors
 from fengrid.bridges.demo import Demo
 from fengrid.bridges.fonts import Fonts
 from fengrid.bridges.library import Library
+from fengrid.bridges.prefs import Prefs
 from fengrid.bridges.projects import Projects
 from fengrid.bridges.termcolors import TermColors
 from fengrid.bridges.theme import Theme
@@ -70,16 +71,17 @@ def main(argv=None) -> int:
                         help="override the library database path")
     parser.add_argument("--no-scan", action="store_true",
                         help="skip the first-run auto scan")
-    parser.add_argument("--pane", type=int, default=0,
-                        help="initial pane: 0 icons, 1 fonts, 2 colors, 3 code"
-                             " (QA screenshots)")
+    parser.add_argument("--pane", type=int, default=None,
+                        help="initial pane: 0 icons, 1 fonts, 2 colors, 3 code,"
+                             " 4 projects (default: the startup_pane setting;"
+                             " QA screenshots pass this explicitly)")
     parser.add_argument("--qa-select", default="",
                         help="pre-select an item for QA screenshots"
                              " (font family / palette / snippet name)")
     parser.add_argument("--dialog", default="",
                         help="open a named modal for QA screenshots"
                              " (libDialog, smartDialog, renameDialog,"
-                             " subDialog, fieldDialog)")
+                             " subDialog, fieldDialog, settings, firstRun)")
     parser.add_argument("--term", action="store_true",
                         help="open the Colors pane on the Terminal designer"
                              " (QA screenshots)")
@@ -125,6 +127,7 @@ def main(argv=None) -> int:
 
     db_path = args.db or os.path.join(_user_data_dir(), "library.db")
     con = core_db.connect(db_path)
+    prefs_bridge = Prefs(con, db_path)
 
     theme = Theme(con, _asset_dir("fonts"))
     if args.theme:
@@ -138,10 +141,13 @@ def main(argv=None) -> int:
     # demo suite: files under the data dir so removal never touches user folders
     demo_bridge = Demo(con, os.path.join(_user_data_dir(), "demo-assets"),
                        _asset_dir("fonts"))
-    # the release probe must never fire in QA/offscreen runs
+    # the release probe must never fire in QA/offscreen runs — and only
+    # when the user left "check at startup" enabled in Settings
     _offline_qa = bool(args.screenshot) \
         or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
-    updater_bridge = Updater(app, auto_check_delay_ms=0 if _offline_qa else 4000)
+    updater_bridge = Updater(
+        app, auto_check_delay_ms=0
+        if _offline_qa or not prefs_bridge.updateCheck else 4000)
 
     engine = QQmlApplicationEngine()
     ctx = engine.rootContext()
@@ -154,6 +160,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("projects", projects_bridge)
     ctx.setContextProperty("demo", demo_bridge)
     ctx.setContextProperty("updater", updater_bridge)
+    ctx.setContextProperty("prefs", prefs_bridge)
     taxonomy_bridge = Taxonomy(con)
     ctx.setContextProperty("taxonomy", taxonomy_bridge)
     preview_profile = make_preview_profile(con, app)
@@ -161,8 +168,16 @@ def main(argv=None) -> int:
     # Loader, which stays inactive there
     ctx.setContextProperty("previewProfile", preview_profile)
     ctx.setContextProperty("appVersion", __version__)
-    ctx.setContextProperty("initialPane", args.pane)
+    ctx.setContextProperty(
+        "initialPane",
+        args.pane if args.pane is not None else prefs_bridge.startupPane)
     ctx.setContextProperty("initialTerm", args.term)
+    # first-run setup shows when the flag is unset — but never in
+    # --screenshot runs (pane shots must stay clean on a fresh DB;
+    # QA forces the screen with --dialog firstRun)
+    ctx.setContextProperty(
+        "initialFirstRun",
+        prefs_bridge.firstRunNeeded and not bool(args.screenshot))
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
     if not engine.rootObjects():
         print("error: failed to load the QML shell", file=sys.stderr)

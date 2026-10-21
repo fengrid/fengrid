@@ -647,6 +647,7 @@ Item {
         sequence: "Space"
         enabled: colorsRoot.visible && !nameField.activeFocus
                  && !tagsField.activeFocus && !hexField.activeFocus
+                 && !Shell.overlayOpen
         onActivated: colors !== null && colors.generate()
     }
 

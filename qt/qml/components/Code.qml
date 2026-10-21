@@ -1465,17 +1465,18 @@ Item {
 
     Shortcut {
         sequence: "Ctrl+S"
-        enabled: codeRoot.visible
+        enabled: codeRoot.visible && !Shell.overlayOpen
         onActivated: codeRoot.saveSnippet()
     }
     Shortcut {
         sequence: "Ctrl+Return"
         enabled: codeRoot.visible && previewProfile !== null
+                 && !Shell.overlayOpen
         onActivated: codeRoot.runPreview()
     }
     Shortcut {
         sequence: "Ctrl+Alt+V"
-        enabled: codeRoot.visible
+        enabled: codeRoot.visible && !Shell.overlayOpen
         onActivated: codeRoot.toggleVim()
     }
 }

@@ -111,12 +111,140 @@ def identify(path: str) -> dict[str, Any]:
     return info
 
 
+# commit cadence for scan()/scan_fonts() — bounds how long a concurrent
+# main-thread writer (settings save on the first-run screen) can block
+_CHUNK = 400
+
+
+def purge_assets(con: sqlite3.Connection,
+                 rows: list[tuple[int, str, str]]) -> int:
+    """Delete asset rows AND every derived row, by (id, kind, path).
+
+    item_tag / item_field_value / collection_ref / asset_link reference
+    items polymorphically with no FK cascade, so they must be deleted
+    explicitly or tag counts and links go orphan-zombie. scan_state rows
+    are keyed by path — leaving them makes a re-added folder scan as
+    'unchanged' with no asset row (the file never comes back). FTS rows
+    clean themselves through the asset AFTER DELETE trigger.
+    """
+    if not rows:
+        return 0
+    by_kind: dict[str, list[tuple[int, str]]] = {}
+    for asset_id, kind, path in rows:
+        by_kind.setdefault(kind, []).append((asset_id, path))
+    for kind, items in by_kind.items():
+        ids = [i for i, _ in items]
+        paths = [p for _, p in items]
+        marks = ",".join("?" * len(ids))
+        con.execute(
+            f"DELETE FROM item_tag WHERE item_kind = ? AND item_id IN"
+            f" ({marks})", [kind, *ids])
+        con.execute(
+            f"DELETE FROM item_field_value WHERE item_kind = ? AND item_id"
+            f" IN ({marks})", [kind, *ids])
+        con.execute(
+            f"DELETE FROM collection_ref WHERE item_kind = ? AND item_id IN"
+            f" ({marks})", [kind, *ids])
+        con.execute(
+            f"DELETE FROM asset_link WHERE (from_kind = ? AND from_id IN"
+            f" ({marks})) OR (to_kind = ? AND to_id IN ({marks}))",
+            [kind, *ids, kind, *ids])
+        con.execute(f"DELETE FROM asset WHERE id IN ({marks})", ids)
+        con.executemany("DELETE FROM scan_state WHERE path = ?",
+                        [(p,) for p in paths])
+    return len(rows)
+
+
+def _enabled_now(con: sqlite3.Connection,
+                 sources: list[tuple[int, str]]) -> list[tuple[int, str]]:
+    """Re-check enabled flags at scan start — a source the user disabled
+    between ensure_sources() and the scan running must not be indexed."""
+    out = []
+    for source_id, root in sources:
+        row = con.execute("SELECT enabled FROM source WHERE id = ?",
+                          (source_id,)).fetchone()
+        if row is not None and row[0]:
+            out.append((source_id, root))
+    return out
+
+
+def _sweep_disabled(con: sqlite3.Connection, kinds: tuple[str, ...],
+                    counts: dict) -> None:
+    """Purge assets/fingerprints of DISABLED sources of the given kinds.
+
+    Unchecking a path in Settings/first-run must make its assets leave
+    the grid; re-checking then re-indexes from scratch (fingerprints
+    are gone). Runs inside the scan transaction, so there is never a
+    half-swept state visible to the UI.
+    """
+    disabled = con.execute(
+        f"SELECT id FROM source WHERE enabled = 0 AND kind IN"
+        f" ({','.join('?' * len(kinds))})", list(kinds)).fetchall()
+    for (sid,) in disabled:
+        rows = con.execute(
+            "SELECT id, kind, path FROM asset WHERE source_id = ?",
+            (sid,)).fetchall()
+        counts["pruned"] += purge_assets(con, [tuple(r) for r in rows])
+
+
+def _upsert_asset(con: sqlite3.Connection, source_id: int, path: str,
+                  meta: dict, info: dict, now: float, fp: str) -> None:
+    """Index one icon file, preserving its asset id when the path is
+    already known.
+
+    UPDATE (not DELETE+INSERT) for existing paths: the id must survive a
+    re-identification — a git checkout or touch bumps mtimes, and a new
+    id would orphan every item_tag / collection_ref / asset_link row the
+    user attached to that asset. The FTS AFTER UPDATE trigger reindexes
+    the search row.
+    """
+    args = (source_id, meta["name"], meta["theme"], meta["context"],
+            meta["ext"], meta["size_px"], info["width"], info["height"],
+            info["bytes"], info["colorspace"], info["color_count"],
+            info["mono"], os.path.getmtime(path))
+    row = con.execute("SELECT id FROM asset WHERE path = ?",
+                      (path,)).fetchone()
+    if row is not None:
+        con.execute(
+            "UPDATE asset SET source_id = ?, name = ?, theme = ?,"
+            " context = ?, ext = ?, size_px = ?, width = ?, height = ?,"
+            " bytes = ?, colorspace = ?, color_count = ?, mono = ?,"
+            " mtime = ? WHERE id = ?",
+            (*args, row[0]))
+    else:
+        con.execute(
+            "INSERT INTO asset(source_id, kind, path, name, theme,"
+            " context, ext, size_px, width, height, bytes,"
+            " colorspace, color_count, mono, mtime)"
+            " VALUES (?, 'icon', ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+            " ?, ?, ?, ?)",
+            (source_id, path, *args[1:]))
+    con.execute(
+        "INSERT INTO scan_state(path, fingerprint, last_seen)"
+        " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
+        " fingerprint=excluded.fingerprint,"
+        " last_seen=excluded.last_seen",
+        (path, fp, now),
+    )
+
+
 def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
          progress=None) -> dict:
     """Incrementally index the given sources into the library.
 
     sources: [(source_id, root_path)] for ENABLED sources only.
-    Returns a counts report; all writes happen in one transaction (WAL).
+    Returns a counts report. Writes commit in chunks (every _CHUNK files
+    and per source) so concurrent main-thread writes — theme changes,
+    folder toggles on the first-run screen — never wait behind one
+    whole-scan transaction (WAL allows a single writer at a time; a
+    multi-second transaction made sqlite3.OperationalError('database is
+    locked') after the 5s busy timeout). Each chunk is internally
+    consistent (asset + scan_state commit together), so a crash simply
+    resumes at the last committed fingerprint.
+
+    Disabled sources are swept first: their asset rows, taxonomy links
+    and fingerprints are purged, so unchecking a path in Settings makes
+    its assets leave the grid, and re-checking re-indexes from scratch.
     """
     counts = {"total": 0, "new": 0, "changed": 0, "unchanged": 0,
               "pruned": 0, "errors": 0}
@@ -124,7 +252,10 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
 
     con.execute("BEGIN")
     try:
-        for source_id, root in sources:
+        _sweep_disabled(con, ("system", "folder"), counts)
+        live = _enabled_now(con, sources)
+        processed = 0
+        for source_id, root in live:
             seen: set[str] = set()
             for path in scanner.iter_icon_files(root):
                 seen.add(path)
@@ -143,47 +274,40 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                 else:
                     meta = scanner.derive_meta(path, root)
                     info = identify(path)
-                    con.execute("DELETE FROM asset WHERE path = ?", (path,))
-                    con.execute(
-                        "INSERT INTO asset(source_id, kind, path, name, theme,"
-                        " context, ext, size_px, width, height, bytes,"
-                        " colorspace, color_count, mono, mtime)"
-                        " VALUES (?, 'icon', ?, ?, ?, ?, ?, ?, ?, ?, ?,"
-                        " ?, ?, ?, ?)",
-                        (source_id, path, meta["name"], meta["theme"],
-                         meta["context"], meta["ext"], meta["size_px"],
-                         info["width"], info["height"], info["bytes"],
-                         info["colorspace"], info["color_count"],
-                         info["mono"], os.path.getmtime(path)),
-                    )
-                    con.execute(
-                        "INSERT INTO scan_state(path, fingerprint, last_seen)"
-                        " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
-                        " fingerprint=excluded.fingerprint,"
-                        " last_seen=excluded.last_seen",
-                        (path, fp, now),
-                    )
+                    try:
+                        _upsert_asset(con, source_id, path, meta, info, now,
+                                      fp)
+                    except sqlite3.IntegrityError:
+                        # source removed mid-scan (FK on source_id) — skip
+                        # this file; the next scan reconciles
+                        counts["total"] -= 1
+                        continue
                     counts["changed" if prev is not None else "new"] += 1
+                processed += 1
                 if progress:
                     progress(counts["total"], path)
+                if processed % _CHUNK == 0:
+                    con.commit()
+                    con.execute("BEGIN")
 
             # prune assets + fingerprints that vanished from this source
             # (kind-scoped: a source row is single-purpose, but belt-and-
             # suspenders so an icon scan can never delete font rows)
             rows = con.execute(
-                "SELECT path FROM asset WHERE source_id = ? AND kind = 'icon'",
+                "SELECT id, path FROM asset WHERE source_id = ? AND kind = 'icon'",
                 (source_id,),
             ).fetchall()
-            for (path,) in rows:
-                if path not in seen:
-                    con.execute("DELETE FROM asset WHERE path = ?", (path,))
-                    con.execute("DELETE FROM scan_state WHERE path = ?", (path,))
-                    counts["pruned"] += 1
+            vanished = [(r["id"], "icon", r["path"]) for r in rows
+                        if r["path"] not in seen]
+            counts["pruned"] += purge_assets(con, vanished)
             st_rows = con.execute("SELECT path FROM scan_state").fetchall()
             root_prefix = str(Path(root).resolve()) + os.sep
-            for (path,) in st_rows:
-                if path.startswith(root_prefix) and path not in seen:
-                    con.execute("DELETE FROM scan_state WHERE path = ?", (path,))
+            stragglers = [p for (p,) in st_rows
+                          if p.startswith(root_prefix) and p not in seen]
+            con.executemany("DELETE FROM scan_state WHERE path = ?",
+                            [(p,) for p in stragglers])
+            con.commit()
+            con.execute("BEGIN")
         con.commit()
     except Exception:
         con.rollback()
@@ -206,7 +330,10 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
 
     con.execute("BEGIN")
     try:
-        for source_id, root in sources:
+        _sweep_disabled(con, ("fontroot",), counts)
+        live = _enabled_now(con, sources)
+        processed = 0
+        for source_id, root in live:
             seen: set[str] = set()
             for path in fonts_mod.iter_font_files(root):
                 if should_stop is not None and should_stop():
@@ -232,40 +359,31 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
                              else os.path.basename(root))
                     name = os.path.splitext(os.path.basename(path))[0]
                     ext = os.path.splitext(path)[1].lower().lstrip(".")
-                    con.execute("DELETE FROM asset WHERE path = ?", (path,))
-                    con.execute(
-                        "INSERT INTO asset(source_id, kind, path, name, theme,"
-                        " ext, bytes, family, style, weight, italic, mtime)"
-                        " VALUES (?, 'font', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (source_id, path, name, theme, ext,
-                         os.path.getsize(path),
-                         meta["family"] if meta else None,
-                         meta["style"] if meta else None,
-                         meta["weight"] if meta else None,
-                         meta["italic"] if meta else None,
-                         os.path.getmtime(path)),
-                    )
-                    con.execute(
-                        "INSERT INTO scan_state(path, fingerprint, last_seen)"
-                        " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
-                        " fingerprint=excluded.fingerprint,"
-                        " last_seen=excluded.last_seen",
-                        (path, fp, now),
-                    )
+                    try:
+                        _upsert_font(con, source_id, path, name, theme, ext,
+                                     meta, now, fp)
+                    except sqlite3.IntegrityError:
+                        counts["total"] -= 1  # source removed mid-scan
+                        continue
                     counts["changed" if prev is not None else "new"] += 1
+                processed += 1
                 if progress:
                     progress(counts["total"], path)
+                if processed % _CHUNK == 0:
+                    con.commit()
+                    con.execute("BEGIN")
 
             # prune font rows that vanished from this source
             rows = con.execute(
-                "SELECT path FROM asset WHERE source_id = ? AND kind = 'font'",
+                "SELECT id, path FROM asset WHERE source_id = ?"
+                " AND kind = 'font'",
                 (source_id,),
             ).fetchall()
-            for (path,) in rows:
-                if path not in seen:
-                    con.execute("DELETE FROM asset WHERE path = ?", (path,))
-                    con.execute("DELETE FROM scan_state WHERE path = ?", (path,))
-                    counts["pruned"] += 1
+            vanished = [(r["id"], "font", r["path"]) for r in rows
+                        if r["path"] not in seen]
+            counts["pruned"] += purge_assets(con, vanished)
+            con.commit()
+            con.execute("BEGIN")
         con.commit()
     except ScanAborted:
         con.rollback()
@@ -277,6 +395,40 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
     return counts
 
 
+def _upsert_font(con: sqlite3.Connection, source_id: int, path: str,
+                 name: str, theme: str, ext: str, meta, now: float,
+                 fp: str) -> None:
+    """Font twin of _upsert_asset: id-preserving UPDATE for known paths
+    (taxonomy rows survive re-identification), INSERT for new ones."""
+    args = (source_id, name, theme, ext, os.path.getsize(path),
+            meta["family"] if meta else None,
+            meta["style"] if meta else None,
+            meta["weight"] if meta else None,
+            meta["italic"] if meta else None,
+            os.path.getmtime(path))
+    row = con.execute("SELECT id FROM asset WHERE path = ?",
+                      (path,)).fetchone()
+    if row is not None:
+        con.execute(
+            "UPDATE asset SET source_id = ?, name = ?, theme = ?, ext = ?,"
+            " bytes = ?, family = ?, style = ?, weight = ?, italic = ?,"
+            " mtime = ? WHERE id = ?",
+            (*args, row[0]))
+    else:
+        con.execute(
+            "INSERT INTO asset(source_id, kind, path, name, theme,"
+            " ext, bytes, family, style, weight, italic, mtime)"
+            " VALUES (?, 'font', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (source_id, path, *args[1:]))
+    con.execute(
+        "INSERT INTO scan_state(path, fingerprint, last_seen)"
+        " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
+        " fingerprint=excluded.fingerprint,"
+        " last_seen=excluded.last_seen",
+        (path, fp, now),
+    )
+
+
 def ensure_sources(con: sqlite3.Connection, roots: list[Path],
                    kinds: tuple[str, ...] = ("system",)) -> list[tuple[int, str]]:
     """Insert missing source rows, disable stale ones, return enabled set.
@@ -286,6 +438,11 @@ def ensure_sources(con: sqlite3.Connection, roots: list[Path],
     added by the user (kind='folder') are always kept even when their root
     no longer exists — pruning then removes the missing files on the next
     scan, which mirrors the 0.x --merge-list flow.
+
+    An EXISTING row keeps the user's enabled flag: a source disabled from
+    Settings/first-run stays disabled even though its path still exists
+    (the previous logic force-re-enabled every detected root on each scan).
+    New rows are inserted enabled.
     """
     known = {r["path"]: r for r in
              con.execute("SELECT id, path, kind, enabled FROM source")}
@@ -305,31 +462,106 @@ def ensure_sources(con: sqlite3.Connection, roots: list[Path],
         if row["kind"] not in kinds:
             continue
         exists = os.path.isdir(path_str)
-        should_enable = 1 if (exists and path_str in root_strs) else row["enabled"]
-        if row["kind"] == "folder":
-            should_enable = row["enabled"]  # user decides; folder stays as-is
-        if row["enabled"] != should_enable:
-            con.execute("UPDATE source SET enabled=? WHERE id=?",
-                        (should_enable, row["id"]))
-        if should_enable and exists:
+        # the user's flag is authoritative for every existing row (system
+        # roots included) — a source disabled from Settings/first-run must
+        # stay disabled even though its path still exists; new rows are
+        # inserted enabled, so detection behaves as before. Missing roots
+        # are simply not returned (the exists check below) but keep their
+        # flag, so a re-plugged path resumes scanning.
+        if row["enabled"] and exists:
             enabled.append((row["id"], path_str))
     con.commit()
     return enabled
 
 
-def add_folder_source(con: sqlite3.Connection, folder: str) -> int:
+def add_folder_source(con: sqlite3.Connection, folder: str,
+                      kind: str = "folder") -> int:
+    """Register a user folder as a scan source ('folder' = icon assets,
+    'fontroot' = font files). Re-adding a disabled path re-enables it."""
+    assert kind in ("folder", "fontroot"), kind
     folder = str(Path(folder).resolve())
-    row = con.execute("SELECT id FROM source WHERE path = ?", (folder,)).fetchone()
+    row = con.execute("SELECT id FROM source WHERE path = ?",
+                      (folder,)).fetchone()
     if row:
-        con.execute("UPDATE source SET enabled = 1 WHERE id = ?", (row[0],))
+        con.execute("UPDATE source SET enabled = 1 WHERE id = ?",
+                    (row[0],))
         con.commit()
         return row[0]
     cur = con.execute(
-        "INSERT INTO source(kind, path, label, enabled) VALUES ('folder', ?, ?, 1)",
-        (folder, Path(folder).name or folder),
+        "INSERT INTO source(kind, path, label, enabled) VALUES (?, ?, ?, 1)",
+        (kind, folder, Path(folder).name or folder),
     )
     con.commit()
     return cur.lastrowid
+
+
+def set_source_enabled(con: sqlite3.Connection, source_id: int,
+                       enabled: bool) -> bool:
+    """Toggle a source row. Disabling takes effect at the next scan:
+    _sweep_disabled purges that source's assets + fingerprints inside
+    the scan transaction, so the grid drops its files and re-enabling
+    re-indexes from scratch. Callers trigger a scan right after."""
+    cur = con.execute("UPDATE source SET enabled = ? WHERE id = ?",
+                      (1 if enabled else 0, source_id))
+    con.commit()
+    return cur.rowcount > 0
+
+
+def set_path_enabled(con: sqlite3.Connection, path: str, kind: str,
+                     enabled: bool) -> None:
+    """Upsert the enabled flag for a DETECTED path.
+
+    The first-run screen toggles system roots before any scan has
+    registered them, so the row may not exist yet: enabled=True with no
+    row is a no-op (registration defaults to on), enabled=False inserts
+    a disabled row so the first scan's ensure_sources() skips it. A
+    known path keeps its existing kind; `kind` is only used on insert
+    ('system' icon roots, 'fontroot' font dirs, 'folder' user folders).
+    """
+    assert kind in ("system", "folder", "fontroot"), kind
+    path = str(Path(path).resolve())
+    row = con.execute("SELECT id FROM source WHERE path = ?",
+                      (path,)).fetchone()
+    if row:
+        con.execute("UPDATE source SET enabled = ? WHERE id = ?",
+                    (1 if enabled else 0, row[0]))
+    elif not enabled:
+        con.execute(
+            "INSERT INTO source(kind, path, label, enabled)"
+            " VALUES (?, ?, ?, 0)",
+            (kind, path, Path(path).name or path))
+    con.commit()
+
+
+def _like_escape(path: str) -> str:
+    return path.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def remove_source(con: sqlite3.Connection, source_id: int) -> bool:
+    """Delete a source and EVERYTHING derived from its assets.
+
+    purge_assets() handles taxonomy rows (polymorphic, no FK cascade),
+    FTS (via the asset AFTER DELETE trigger) and scan_state rows —
+    without the last, a re-added folder would scan as 'unchanged' with
+    no asset rows and its files would never reappear.
+    """
+    src = con.execute("SELECT path FROM source WHERE id = ?",
+                      (source_id,)).fetchone()
+    if src is None:
+        return False
+    root = src["path"]
+    rows = con.execute(
+        "SELECT id, kind, path FROM asset WHERE source_id = ?",
+        (source_id,)).fetchall()
+    purge_assets(con, [tuple(r) for r in rows])
+    # scan_state stragglers under the root (escaped LIKE — paths may
+    # contain % or _)
+    con.execute(
+        "DELETE FROM scan_state WHERE path = ? OR path LIKE ? ESCAPE '\\'",
+        (root, _like_escape(root) + "/%"))
+    con.execute("DELETE FROM source WHERE id = ?", (source_id,))
+    con.commit()
+    return True
 
 
 def sources_summary(con: sqlite3.Connection) -> list[dict]:

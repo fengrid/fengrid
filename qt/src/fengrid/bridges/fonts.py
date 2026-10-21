@@ -13,7 +13,8 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import (QAbstractListModel, QByteArray, QModelIndex,
-                            QObject, Property, Qt, QThread, Signal, Slot)
+                            QObject, Property, Qt, QThread, QTimer, Signal,
+                            Slot)
 from PySide6.QtGui import QGuiApplication
 
 from ..core import db as core_db
@@ -96,6 +97,7 @@ class Fonts(QObject):
         self._types: list = []
         self._selected = ""
         self._scanning = False
+        self._rescan_pending = False
         self._scan_count = 0
         self._thread = None
         self._worker = None
@@ -105,6 +107,7 @@ class Fonts(QObject):
     def _on_about_to_quit(self) -> None:
         # cancel-then-wait: the worker checks the flag per file, so a long
         # first scan cannot wedge the exit path (see indexer.scan_fonts)
+        self._rescan_pending = False  # queued drain must not restart a scan
         if self._thread is not None:
             self._worker.cancelled = True
             self._thread.quit()
@@ -221,6 +224,9 @@ class Fonts(QObject):
     @Slot()
     def rescan(self) -> None:
         if self._scanning:
+            # queue instead of dropping — a font folder added during a
+            # scan (first-run flow) must still get indexed afterwards
+            self._rescan_pending = True
             return
         self._scanning = True
         self._scan_count = 0
@@ -257,6 +263,15 @@ class Fonts(QObject):
         self.message.emit(
             f"Fonts: {report['new']} new, {report['changed']} changed,"
             f" {report['pruned']} pruned ({report['total']} files)")
+        if self._rescan_pending:
+            self._rescan_pending = False
+            QTimer.singleShot(0, self.rescan)
+
+    @Slot()
+    def refresh(self) -> None:
+        """Public model refresh for QML after source mutations made
+        from Settings / first-run (remove a font dir, toggle one)."""
+        self._refresh()
 
     def _refresh(self) -> None:
         all_fams = core_fonts.families(self._con)
