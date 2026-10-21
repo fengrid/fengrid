@@ -223,7 +223,8 @@ class Taxonomy(QObject):
     @Slot(str, int, result="QVariantMap")
     def item_properties(self, kind: str, item_id: int) -> dict:
         """Everything the Properties panel renders for one item: tags,
-        custom field values (with definitions), and links — for any kind."""
+        custom field values (with definitions), links, and kind-specific
+        detail data — for any kind."""
         if not core_tax._item_exists(self._con, kind, item_id):
             return {}
         tags = core_db.tags_for(self._con, item_id, kind)
@@ -231,7 +232,44 @@ class Taxonomy(QObject):
         links = core_tax.links_for(self._con, kind, item_id, "both")
         return {"kind": kind, "id": item_id, "tags": tags,
                 "fields": fields, "links": links,
+                "meta": self._kind_meta(kind, item_id),
                 "starred": core_db.is_starred(self._con, item_id, kind)}
+
+    def _kind_meta(self, kind: str, item_id: int) -> dict:
+        """Kind-specific detail payload for the inspector's Details tab."""
+        from ..core import colors as core_colors
+        from ..core import snippets as core_snippets
+        if kind == "font":
+            rows = self._con.execute(
+                "SELECT family FROM asset WHERE id = ?", (item_id,)).fetchone()
+            family = rows["family"] if rows else ""
+            files = self._con.execute(
+                "SELECT COUNT(*) FROM asset WHERE kind = 'font' AND family = ?",
+                (family,)).fetchone()[0]
+            return {"family": family, "files": files}
+        if kind == "palette":
+            row = self._con.execute(
+                "SELECT name FROM palette WHERE id = ?", (item_id,)).fetchone()
+            return {"name": row["name"] if row else "",
+                    "colors": core_colors.palette_colors(self._con, item_id)}
+        if kind == "snippet":
+            row = self._con.execute(
+                "SELECT title, description, language, created, updated"
+                " FROM snippet WHERE id = ?", (item_id,)).fetchone()
+            if row is None:
+                return {}
+            return {"title": row["title"],
+                    "description": row["description"],
+                    "language": row["language"],
+                    "created": row["created"], "updated": row["updated"]}
+        if kind == "icon":
+            row = self._con.execute(
+                "SELECT name, path FROM asset WHERE id = ?",
+                (item_id,)).fetchone()
+            if row is None:
+                return {}
+            return {"name": row["name"], "path": row["path"]}
+        return {}
 
     # ---------------------------------------------------------- link targets
     @Slot(result="QVariantList")

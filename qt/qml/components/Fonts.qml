@@ -139,84 +139,13 @@ Item {
         }
     }
 
-    // selected-family detail strip (files, weights) — a slim footer row
-    Rectangle {
-        id: detailStrip
-        height: fonts !== null && fonts.selectedFamily !== "" ? 64 : 0
-        visible: height > 0
-        color: theme.tokens.surface
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        border.width: 0
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            spacing: 8
-            visible: detailStrip.height > 0
-
-            Text {
-                text: fonts !== null ? fonts.selectedFamily : ""
-                font.family: theme.headingFont
-                font.pixelSize: 16
-                color: theme.tokens.text
-            }
-            Repeater {
-                model: fonts !== null && fonts.selectedFamily !== ""
-                       ? fonts.family_files(fonts.selectedFamily) : []
-                Rectangle {
-                    required property var modelData
-                    radius: 4
-                    height: 24
-                    width: fileLabel.implicitWidth + 16
-                    color: theme.tokens.surface2
-                    Text {
-                        id: fileLabel
-                        anchors.centerIn: parent
-                        text: (modelData.style || "Regular") + " · "
-                              + (modelData.weight || 400)
-                        font.family: theme.monoFont
-                        font.pixelSize: 10
-                        color: theme.tokens.textMuted
-                    }
-                }
-            }
-            Item { Layout.fillWidth: true }
-            Button {
-                text: qsTr("Details…")
-                enabled: fonts !== null && fonts.selectedFamily !== ""
-                onClicked: detail.open()
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Open the font details screen — sizing, sample text, variants, light/dark preview")
-                background: Rectangle {
-                    radius: 6; color: theme.tokens.surface2
-                    border.color: theme.tokens.border
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: theme.tokens.text
-                    font.family: theme.uiFont; font.pixelSize: 11
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    leftPadding: 8; rightPadding: 8
-                }
-            }
-            Text {
-                text: qsTr("Select a family card to inspect it")
-                visible: fonts !== null && fonts.selectedFamily === ""
-                font.family: theme.uiFont
-                font.pixelSize: 10
-                color: theme.tokens.textMuted
-            }
-        }
-    }
+    // selected-family detail strip — removed: the property inspector's
+    // Details tab (right panel) carries the family, variants and specimen
 
     GridView {
         id: famGrid
         anchors.top: toolbar.bottom
-        anchors.bottom: detailStrip.top
+        anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: 10
@@ -267,13 +196,11 @@ Item {
                     anchors.bottomMargin: 6
                     anchors.left: parent.left
                     anchors.leftMargin: 10
+                    width: parent.width - 20
                     text: model.family
                     font.family: theme.monoFont
                     font.pixelSize: 10
                     color: theme.tokens.textMuted
-                    // stop before the files·weights label — the old
-                    // full-card width let long family names run UNDER it
-                    width: parent.width - 20 - famMeta.implicitWidth - 6
                     elide: Text.ElideRight
                 }
                 Text {
@@ -282,10 +209,15 @@ Item {
                     anchors.bottomMargin: 6
                     anchors.right: parent.right
                     anchors.rightMargin: 10
-                    text: model.files + " · " + model.weights
+                    // files count only — the weights list moved to the
+                    // property inspector's Details tab (it overflowed the
+                    // cells and crowded out the family name)
+                    text: model.files === 1 ? qsTr("1 file")
+                          : qsTr("%1 files").arg(model.files)
                     font.family: theme.monoFont
                     font.pixelSize: 9
                     color: theme.tokens.textMuted
+                    visible: famName.truncated !== true
                 }
                 MouseArea {
                     id: famMa
@@ -293,20 +225,15 @@ Item {
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
-                    // SINGLE CLICK opens the details screen — the old
-                    // hover-preview cue required a second click to get the
-                    // real detail view, which violated "what you can see
-                    // and engage should just work". Select + open at once.
+                    // single click selects; the Details tab of the
+                    // property inspector (right panel) carries the
+                    // specimen view — no more popup on click
                     onClicked: function (mouse) {
                         if (fonts === null)
                             return
                         fonts.select(model.family)
-                        if (mouse.button === Qt.RightButton) {
+                        if (mouse.button === Qt.RightButton)
                             famMenu.popup()
-                            return
-                        }
-                        detail.family = model.family
-                        detail.open()
                     }
                 }
             }
@@ -320,20 +247,6 @@ Item {
             background: Rectangle {
                 radius: 8; color: theme.tokens.surface
                 border.color: theme.tokens.border
-            }
-            MenuItem {
-                text: qsTr("Font details…")
-                height: 28
-                onTriggered: {
-                    detail.family = fonts !== null ? fonts.selectedFamily : ""
-                    detail.open()
-                }
-            }
-            MenuSeparator {
-                topPadding: 3; bottomPadding: 3
-                contentItem: Rectangle {
-                    implicitHeight: 1; color: theme.tokens.border
-                }
             }
             MenuItem {
                 text: qsTr("Export CSS…")
@@ -351,12 +264,6 @@ Item {
                     exportDialog.open()
                 }
             }
-        }
-
-        // font details screen (size / sample / variants / light-dark)
-        FontDetail {
-            id: detail
-            family: fonts !== null ? fonts.selectedFamily : ""
         }
 
         // empty / scanning states — mirrors AssetGrid's empty column

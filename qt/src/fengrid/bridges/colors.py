@@ -221,6 +221,10 @@ class Colors(QObject):
         self.swatchesChanged.emit()
         self.selectionChanged.emit()
         self.nameChanged.emit()
+        # paletteId is the Properties panel's item target — its QML binding
+        # re-evaluates on palettesChanged, which open_palette never fired
+        # (save_palette did), so the panel stayed hidden for opened palettes
+        self.palettesChanged.emit()
 
     @Slot(int)
     def delete_palette(self, palette_id: int) -> None:
