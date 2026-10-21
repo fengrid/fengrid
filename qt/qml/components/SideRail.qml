@@ -8,8 +8,8 @@ Rectangle {
     id: rail
     color: theme.tokens.surface
 
-    // pane switching: 0 = icons, 1 = fonts, 2 = colors, 3 = code (Main owns
-    // the state)
+    // pane switching: tab row at the top of the rail (color-coded, one tab
+    // per pane); Main owns the state
     property int pane: 0
     signal panePicked(int idx)
 
@@ -116,9 +116,108 @@ Rectangle {
         color: theme.tokens.textMuted
     }
 
+    // ------------------------------------------------------------- pane tabs
+    // color-coded tab row: one compact icon tab per pane; the active tab
+    // carries its category accent (glow underline + tinted glyph) and
+    // switching tabs drives the main UI's pane
+    Rectangle {
+        id: tabBar
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 44
+        color: "transparent"
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 2
+
+            component PaneTab: AbstractButton {
+                id: tab
+                property string iconName
+                property color accent
+                property int paneIdx
+                checked: rail.pane === paneIdx
+                hoverEnabled: true
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                onClicked: rail.panePicked(paneIdx)
+                opacity: checked || hovered ? 1 : 0.65
+                Behavior on opacity { NumberAnimation { duration: 120 } }
+                implicitWidth: 34
+                implicitHeight: 32
+
+                background: Rectangle {
+                    implicitWidth: tab.implicitWidth
+                    implicitHeight: tab.implicitHeight
+                    radius: 7
+                    color: "transparent"
+
+                    // hover/active wash in the pane's accent
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 7
+                        color: tab.accent
+                        opacity: tab.checked ? 0.16 : (tab.hovered ? 0.10 : 0)
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+
+                    // accent glow underline for the active tab — layered
+                    // translucent fills, no MultiEffect (software-renderer
+                    // friendly)
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: -1
+                        width: parent.width - 12
+                        height: 2.5
+                        radius: 1.25
+                        opacity: tab.checked ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 160 } }
+                        color: tab.accent
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: parent.width + 12
+                            height: parent.height + 8
+                            radius: 6
+                            color: tab.accent
+                            opacity: 0.25
+                        }
+                    }
+                }
+
+                contentItem: Item {
+                    IconImage {
+                        name: tab.iconName
+                        px: 15
+                        anchors.centerIn: parent
+                        tint: tab.checked ? tab.accent
+                              : theme.tokens.textMuted
+                    }
+                }
+            }
+
+            PaneTab { iconName: "image";   accent: theme.tokens.accentIcon;    paneIdx: 0; ToolTip.text: qsTr("Icons") }
+            PaneTab { iconName: "type";    accent: theme.tokens.accentFont;    paneIdx: 1; ToolTip.text: qsTr("Fonts") }
+            PaneTab { iconName: "droplet"; accent: theme.tokens.accentColor;   paneIdx: 2; ToolTip.text: qsTr("Colors") }
+            PaneTab { iconName: "code";    accent: theme.tokens.accentCode;    paneIdx: 3; ToolTip.text: qsTr("Code") }
+            PaneTab { iconName: "package"; accent: theme.tokens.accentProject; paneIdx: 4; ToolTip.text: qsTr("Projects") }
+        }
+
+        // hairline separating the tab row from the rail content
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 1
+            color: theme.tokens.border
+        }
+    }
+
     Flickable {
         id: flick
-        anchors.fill: parent
+        anchors.top: tabBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
         contentHeight: railCol.implicitHeight + 20
         clip: true
         ScrollBar.vertical: ScrollBar { }
@@ -130,37 +229,6 @@ Rectangle {
 
             // pane items carry their category accent (Icons teal, Fonts
             // violet, Colors rose, Code coral, Projects green)
-            SectionLabel { text: qsTr("Panes") }
-            RailItem {
-                label: qsTr("Icons")
-                accent: theme.tokens.accentIcon
-                active: rail.pane === 0
-                onPicked: rail.panePicked(0)
-            }
-            RailItem {
-                label: qsTr("Fonts")
-                accent: theme.tokens.accentFont
-                active: rail.pane === 1
-                onPicked: rail.panePicked(1)
-            }
-            RailItem {
-                label: qsTr("Colors")
-                accent: theme.tokens.accentColor
-                active: rail.pane === 2
-                onPicked: rail.panePicked(2)
-            }
-            RailItem {
-                label: qsTr("Code")
-                accent: theme.tokens.accentCode
-                active: rail.pane === 3
-                onPicked: rail.panePicked(3)
-            }
-            RailItem {
-                label: qsTr("Projects")
-                accent: theme.tokens.accentProject
-                active: rail.pane === 4
-                onPicked: rail.panePicked(4)
-            }
 
             // FONTS-pane rail content — font families and file types live
             // here, not in the Icons pane's theme/type lists

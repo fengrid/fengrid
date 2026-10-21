@@ -16,7 +16,9 @@ Popup {
     height: 38
     padding: 0
     background: Rectangle {
-        color: theme.tokens.surface2
+        // translucent panel: dark glass look with an accent hairline
+        color: Qt.rgba(theme.tokens.surface2.r, theme.tokens.surface2.g,
+                       theme.tokens.surface2.b, 0.88)
         border.color: theme.tokens.accent
         border.width: 1
         radius: 8

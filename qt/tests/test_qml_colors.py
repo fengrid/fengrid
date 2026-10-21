@@ -17,6 +17,7 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt, QUrl
 from PySide6.QtGui import QGuiApplication, QMouseEvent
+from PySide6.QtTest import QTest
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow
 
@@ -141,7 +142,10 @@ def test_lock_button_click_flips_lock_state(colors_ui):
     assert bridge.swatches[0]["locked"] is True, \
         "click did not reach the lock button — stacking still broken"
 
-    # second click un-locks
+    # second click un-locks — two sendEvent presses at the same spot within
+    # the double-click interval are delivered as a DblClick (MouseArea's
+    # onClicked ignores it), so wait out the interval first
+    QTest.qWait(int(QGuiApplication.styleHints().mouseDoubleClickInterval()) + 30)
     click_lock()
     _qapp().processEvents()
     assert bridge.swatches[0]["locked"] is False

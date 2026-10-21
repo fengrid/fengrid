@@ -16,13 +16,28 @@ ApplicationWindow {
     font.pixelSize: 13
 
     property int iconSize: sizeSlider.value
-    // 0 = icons, 1 = fonts, 2 = colors, 3 = code (see SideRail's Panes list);
-    // --pane N (QA) overrides via the initialPane context property
+    // 0 = icons, 1 = fonts, 2 = colors, 3 = code, 4 = projects (top-bar
+    // pane switcher); --pane N (QA) overrides via the initialPane context
     property int pane: typeof initialPane !== "undefined" ? initialPane : 0
 
     header: Rectangle {
         height: 52
-        color: theme.tokens.surface
+        // subtle vertical depth: surface fading toward bg at the bottom,
+        // with a hairline divider — reads as a floating translucent bar
+        // over the content
+        gradient: Gradient {
+            GradientStop { position: 0; color: theme.tokens.surface }
+            GradientStop { position: 0.82; color: theme.tokens.surface }
+            GradientStop { position: 1; color: Qt.rgba(
+                theme.tokens.surface.r, theme.tokens.surface.g,
+                theme.tokens.surface.b, 0.86) }
+        }
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 1
+            color: theme.tokens.border
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -104,7 +119,11 @@ ApplicationWindow {
 
             Rectangle {
                 id: searchBox
-                Layout.preferredWidth: 320
+                // flexible: fills the space the pane switcher leaves, so the
+                // right-side controls never clip at minimum window width
+                Layout.fillWidth: true
+                Layout.minimumWidth: 140
+                Layout.maximumWidth: 320
                 Layout.preferredHeight: 32
                 radius: 6
                 color: theme.tokens.surface2
@@ -169,7 +188,7 @@ ApplicationWindow {
                 to: 256
                 stepSize: 16
                 value: 32
-                Layout.preferredWidth: 130
+                Layout.preferredWidth: 110
                 Layout.alignment: Qt.AlignVCenter
             }
             Text {
@@ -177,7 +196,7 @@ ApplicationWindow {
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: theme.tokens.textMuted
-                Layout.preferredWidth: 40
+                Layout.preferredWidth: 34
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -266,6 +285,36 @@ ApplicationWindow {
         }
     }
 
+    // full-window accent flash on pane switch — a translucent wash of the
+    // incoming pane's category color, fading fast
+    Rectangle {
+        id: paneFlash
+        anchors.fill: parent
+        color: theme.tokens.accent
+        opacity: 0
+        z: 99
+        enabled: false
+        function flash() {
+            color = [theme.tokens.accentIcon, theme.tokens.accentFont,
+                     theme.tokens.accentColor, theme.tokens.accentCode,
+                     theme.tokens.accentProject][root.pane]
+            paneFlashAnim.restart()
+        }
+        Connections {
+            target: root
+            function onPaneChanged() { paneFlash.flash() }
+        }
+        NumberAnimation {
+            id: paneFlashAnim
+            target: paneFlash
+            property: "opacity"
+            from: 0.07
+            to: 0
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+    }
+
     footer: Rectangle {
         height: 26
         color: theme.tokens.surface
@@ -335,6 +384,12 @@ ApplicationWindow {
         enabled: grid.currentIndex >= 0
         onActivated: grid.currentIndex = -1
     }
+    // Ctrl+1..5 — quick pane switching matching the top-bar order
+    Shortcut { sequence: "Ctrl+1"; onActivated: root.pane = 0 }
+    Shortcut { sequence: "Ctrl+2"; onActivated: root.pane = 1 }
+    Shortcut { sequence: "Ctrl+3"; onActivated: root.pane = 2 }
+    Shortcut { sequence: "Ctrl+4"; onActivated: root.pane = 3 }
+    Shortcut { sequence: "Ctrl+5"; onActivated: root.pane = 4 }
 
     // QA: --dialog <name> opens a registered modal after load — delayed so
     // the window is mapped first (a Popup opened pre-show never appears)

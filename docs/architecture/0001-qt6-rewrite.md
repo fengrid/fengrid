@@ -310,6 +310,44 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-20, PANE TABS IN THE RAIL (user direction change: "include the
+  Panes as tabs at the top of the left panel"): the top-bar color-coded
+  PaneButton row was built first (AbstractButton + icons + glow underline)
+  but the user replaced it with a tab strip INSIDE the rail. SideRail
+  grows a 44px tabBar row: 5 compact 34x32 icon-only PaneTabs (image /
+  type / droplet / code / package — three new Feather paths in Icons.qml:
+  type, droplet, package), each tinted with its category accent; the
+  active tab gets a 16%-alpha accent wash + glowing underline (layered
+  translucent fills, no MultiEffect — software-renderer friendly), hover
+  10% wash, 120ms fades. Clicking a tab emits the restored panePicked
+  signal; Main binds onPanePicked → root.pane, so the tab row and the
+  pane are one control (no separate menu — user rule: buttons and menu
+  one and the same). The rail content starts directly below a hairline.
+  Pol flair kept from the round: header vertical gradient + hairline,
+  translucent Toast (88% alpha glass), full-window accent flash on pane
+  switch (paneFlash, 7% → 0 over 300ms, tinted by the incoming pane's
+  accent, enabled:false so it never eats input), Ctrl+1..5 pane
+  shortcuts. GOTCHAS: AbstractButton's `icon` is FINAL (declared
+  `property string icon` fails "Cannot override FINAL property" — named
+  iconName); AbstractButton has no cursorShape (HoverHandler
+  cursorShape instead); QQuickIcon assignment fails on string
+  (instantiation sites must use iconName too). Search box made flexible
+  (fillWidth, min 140/max 320) so right-side controls never clip.
+  Verified: dark render + pane-0 vision (5 tabs, teal glow on Icons,
+  no Panes list, no clipping), light render + pane-2 vision (droplet
+  tab rose glow, palette content below, top bar clean), QA gate.
+- 2026-10-20, LOCK TEST FLAKE ROOT CAUSE: test_lock_button_click_
+  flips_lock_state failed intermittently in full-suite runs (and 1 of 6
+  in a fixed-order loop) at the SECOND click — `assert locked is False`.
+  Two QCoreApplication.sendEvent presses at the same scene point within
+  QGuiApplication's double-click interval are converted to
+  MouseButtonDblClick (MouseArea's onClicked never fires) — a real Qt
+  delivery rule, not a test-harness artifact. Fix: QTest.qWait(style
+  hints' mouseDoubleClickInterval + 30ms) between the lock and unlock
+  clicks. GOTCHA: styleHints().mouseDoubleClickInterval is a METHOD in
+  PySide6 (call it — bare attribute passes a builtin to int() and
+  TypeErrors). 10 consecutive file loops green; full suite 10x both
+  orders (fixed + random) 96/96.
 - 2026-10-20, RAIL CONTENT FOLLOWS THE PANE (fonts split): the icons
   rail was showing font-derived entries — Themes/Contexts/Types queried
   the whole asset table without a kind filter, so font rows surfaced as
