@@ -104,6 +104,19 @@ while IFS= read -r -d '' f; do
         libxcb-cursor*|libxcb-icccm*|libxcb-image*|libxcb-keysyms*|\
         libxcb-render-util*) continue ;;                    # keep helpers
     esac
+    # auditwheel-hashed vendored copies (lib<name>-<8hex>.so…) carry a
+    # NON-SYSTEM soname: they can never satisfy the end machine's DT_NEEDED
+    # lookups, so they cannot shadow anything — the GLX failure needs the
+    # UNHASHED copies (libX11.so.1 / libxcb.so.1 / libGL.so.1) in the
+    # bundle, and those are still stripped below. Wheel extensions hard-link
+    # their own hashed copies: Pillow 13's _imaging NEEDs
+    # pillow.libs/libxcb-9065bb12.so.1.1.0, and stripping it made every
+    # frozen build die at `from . import _imaging` (PIL/Image.py:94) with
+    # ImportError before the app could open.
+    if [[ "$base" =~ -[0-9a-f]{8}\.so ]]; then
+        echo "gl-strip: keep hashed vendored $base" >&2
+        continue
+    fi
     rm -f "$f"
     gl_stripped=$((gl_stripped + 1))
     echo "gl-strip: $base" >&2
@@ -150,6 +163,14 @@ if [ "${FENGRID_SMOKE:-0}" = "1" ]; then
     [ -s "$SMOKE_SHOT" ] || { echo "error: smoke screenshot is empty" >&2; exit 1; }
     echo "smoke: ok ($SMOKE_SHOT)"
 fi
+
+# Normalize bundle permissions BEFORE packing: PySide6 ships (and
+# QtWebEngine re-creates at runtime, as root during the smoke test) a
+# drwx------ `PySide6/Qt/resources/locales` — a 0700 root:root dir the
+# wrapper's --user extraction cannot read (`cp: Permission denied`),
+# and any non-owner run on the end machine would hit the same wall.
+# a+rX: others get read + dir traversal, exec bits stay where they were.
+chmod -R a+rX "$OUT_DIR/fengrid"
 
 # optional AppImage packaging lands here once the skeleton is validated
 # (linuxdeploy + the Qt runtime plugin; see docs/architecture/0001 §11).

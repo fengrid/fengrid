@@ -20,10 +20,15 @@
 ARG BASE=python:3.12-slim-bookworm
 FROM ${BASE} AS build
 ARG VARIANT=prod
+# forwarded from build-docker-linux.sh (FENGRID_SMOKE knob) — without
+# this, the env never reaches build-linux.sh and docker artifacts ship
+# WITHOUT the smoke gate the docs promise
+ARG SMOKE=1
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     FENGRID_VARIANT=${VARIANT} \
+    FENGRID_SMOKE=${SMOKE} \
     FENGRID_IN_CONTAINER=1
 
 # Qt WebEngine runtime dependencies + build tooling. Validated on the first

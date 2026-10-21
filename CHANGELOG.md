@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Linux bundle failed to launch** (`ImportError: libxcb-9065bb12.so.1.1.0`
+  out of `PIL/Image.py`) — the GLX-crash strip in `build-linux.sh`
+  removed Pillow's *auditwheel-hashed* vendored `libxcb`/`libXau` copies,
+  but Pillow 13's `_imaging` hard-links them (`DT_NEEDED`); wheels' hashed
+  copies have non-system sonames and cannot shadow the end machine's
+  libraries, so only **unhashed** `libX11.so.1`/`libxcb.so.1`/`libGL*`
+  are stripped now. Also: the docker pipeline's `FENGRID_SMOKE` knob was
+  read but never forwarded into the build container — container artifacts
+  shipped unsmoked; the wrapper now passes it as a build arg and both
+  Dockerfiles export it, so every build gates on the frozen binary
+  actually starting.
+
 ### Added
 
 - **Command bar / palette** (dev-qt) — a Spotlight/Alfred/VS-Code-style

@@ -66,6 +66,7 @@ if [ "$OUTPUT" = "local" ]; then
     docker buildx build \
         --platform "$PLATFORM" \
         --build-arg "VARIANT=$VARIANT" \
+        --build-arg "SMOKE=$SMOKE" \
         -f "$DOCKERFILE" \
         --output "type=local,dest=$BUILD_DIR" \
         "$ROOT"
@@ -75,6 +76,7 @@ else
         --platform "$PLATFORM" \
         --target build \
         --build-arg "VARIANT=$VARIANT" \
+        --build-arg "SMOKE=$SMOKE" \
         -f "$DOCKERFILE" \
         -t "$IMAGE" \
         --load \
