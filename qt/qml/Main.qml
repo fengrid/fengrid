@@ -37,6 +37,11 @@ ApplicationWindow {
                              && initialFirstRun
     property string pendingCategory: ""
     property bool paletteOpen: false
+    // launch-scan session: true only when __main__ scheduled the initial
+    // scans — ends the moment they go quiet so manual rescans never
+    // reshow the splash
+    property bool splashSession:
+        typeof initialScans !== "undefined" && initialScans
 
     function updateOverlayGate() {
         Shell.overlayOpen = root.settingsOpen || root.setupOpen
@@ -721,6 +726,52 @@ ApplicationWindow {
         }
     }
 
+    // ── launch splash: visible while the initial scans run (z below
+    // the first-run modal at 60 — setup already shows live counts in
+    // its footer) ──
+    SplashOverlay {
+        id: splashOverlay
+        parent: Overlay.overlay
+        z: 58
+        session: root.splashSession
+    }
+    Connections {
+        target: library
+        function onScanFinished() {
+            if (!fonts.scanning)
+                root.splashSession = false
+        }
+    }
+    Connections {
+        target: fonts
+        function onScanFinished() {
+            if (!library.scanning)
+                root.splashSession = false
+        }
+    }
+
+    // QA: --qa-select <icon> selects the asset (inspector visible in
+    // shots), then FENGRID_QA_INSPECTOR_SCROLL scrolls the inspector
+    // body to prove the pinned footer + scroll-behind behaviour
+    Timer {
+        interval: 500
+        running: typeof qaIconPath !== "undefined" && qaIconPath !== ""
+        onTriggered: {
+            var i = library.index_of_path(qaIconPath)
+            if (i >= 0)
+                grid.currentIndex = i
+            if (typeof qaInspectorScroll !== "undefined"
+                    && qaInspectorScroll > 0) {
+                scrollTimer.start()
+            }
+        }
+    }
+    Timer {
+        id: scrollTimer
+        interval: 400
+        onTriggered: inspectorPanel.bodyFlick.contentY = qaInspectorScroll
+    }
+
     Shortcut {
         sequence: prefs !== null ? prefs.commandShortcut : "Alt+`"
         enabled: !root.setupOpen && !Shell.capturing
@@ -810,6 +861,18 @@ ApplicationWindow {
             commandPalette.show("")
             return
         }
+        // QA: the full user recipe — palette open, then the
+        // "Open settings" row activated (dispatch + hide), used to
+        // reproduce the launch-time freeze on frozen builds
+        if (name === "paletteSettings") {
+            commandPalette.show("")
+            palQaTimer.start()
+            return
+        }
+        if (name === "splash") {
+            splashOverlay.force = true
+            return
+        }
         var dlg = (sideRail && sideRail.qaModals
                    && sideRail.qaModals[name])
                   ? sideRail.qaModals[name]
@@ -817,6 +880,15 @@ ApplicationWindow {
                      ? inspectorPanel.qaModals[name] : null)
         if (dlg)
             dlg.open()
+    }
+    Timer {
+        id: palQaTimer
+        interval: 700
+        onTriggered: {
+            commandPalette.query = "open settings"
+            commandPalette.rebuild()
+            commandPalette.activate(0)
+        }
     }
     Timer {
         interval: 400

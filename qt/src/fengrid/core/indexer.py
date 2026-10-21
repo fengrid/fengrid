@@ -114,6 +114,10 @@ def identify(path: str) -> dict[str, Any]:
 # commit cadence for scan()/scan_fonts() — bounds how long a concurrent
 # main-thread writer (settings save on the first-run screen) can block
 _CHUNK = 400
+# Fonts identify each file with fontTools (~5-20ms) inside the chunk's
+# write lock; 400 of those held the DB for multiple seconds and starved
+# main-thread settings writes (first-run saves). 100 ≈ ≤1.5s holds.
+_CHUNK_FONTS = 100
 
 
 def purge_assets(con: sqlite3.Connection,
@@ -250,7 +254,14 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
               "pruned": 0, "errors": 0}
     now = time.time()
 
-    con.execute("BEGIN")
+    # BEGIN IMMEDIATE: a deferred BEGIN takes a WAL read snapshot on its
+    # first SELECT, and an INSERT against a snapshot another writer has
+    # since advanced fails INSTANTLY with "database is locked" — the
+    # busy timeout never helps that class. Taking the write lock up
+    # front makes waits polite instead. (This killed the initial icon
+    # scan whenever the font scan committed a chunk first: `scanning`
+    # stuck true, half-indexed library — user-reported as a freeze.)
+    con.execute("BEGIN IMMEDIATE")
     try:
         _sweep_disabled(con, ("system", "folder"), counts)
         live = _enabled_now(con, sources)
@@ -288,7 +299,7 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                     progress(counts["total"], path)
                 if processed % _CHUNK == 0:
                     con.commit()
-                    con.execute("BEGIN")
+                    con.execute("BEGIN IMMEDIATE")
 
             # prune assets + fingerprints that vanished from this source
             # (kind-scoped: a source row is single-purpose, but belt-and-
@@ -307,7 +318,7 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
             con.executemany("DELETE FROM scan_state WHERE path = ?",
                             [(p,) for p in stragglers])
             con.commit()
-            con.execute("BEGIN")
+            con.execute("BEGIN IMMEDIATE")
         con.commit()
     except Exception:
         con.rollback()
@@ -328,7 +339,7 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
               "pruned": 0, "errors": 0}
     now = time.time()
 
-    con.execute("BEGIN")
+    con.execute("BEGIN IMMEDIATE")
     try:
         _sweep_disabled(con, ("fontroot",), counts)
         live = _enabled_now(con, sources)
@@ -369,9 +380,9 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
                 processed += 1
                 if progress:
                     progress(counts["total"], path)
-                if processed % _CHUNK == 0:
+                if processed % _CHUNK_FONTS == 0:
                     con.commit()
-                    con.execute("BEGIN")
+                    con.execute("BEGIN IMMEDIATE")
 
             # prune font rows that vanished from this source
             rows = con.execute(
@@ -383,7 +394,7 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
                         if r["path"] not in seen]
             counts["pruned"] += purge_assets(con, vanished)
             con.commit()
-            con.execute("BEGIN")
+            con.execute("BEGIN IMMEDIATE")
         con.commit()
     except ScanAborted:
         con.rollback()

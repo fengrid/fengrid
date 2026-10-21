@@ -86,7 +86,8 @@ def main(argv=None) -> int:
                         help="open a named modal for QA screenshots"
                              " (libDialog, smartDialog, renameDialog,"
                              " subDialog, fieldDialog, settings, firstRun,"
-                             " menu, storage)")
+                             " menu, storage, commandBar, paletteSettings,"
+                             " splash)")
     parser.add_argument("--term", action="store_true",
                         help="open the Colors pane on the Terminal designer"
                              " (QA screenshots)")
@@ -213,6 +214,25 @@ def main(argv=None) -> int:
     ctx.setContextProperty(
         "initialFirstRun",
         prefs_bridge.firstRunNeeded and not bool(args.screenshot))
+    # startup scan session: drives the launch splash (shown only while
+    # these initial scans actually run — manual rescans never reshow it)
+    ctx.setContextProperty(
+        "initialScans",
+        (not args.no_scan)
+        and (library.totalAssets == 0 or fonts.totalFonts == 0))
+    # QA affordances (icons pane): pre-select an icon so the inspector
+    # panel is present in screenshots, and optionally scroll its body so
+    # the pinned action footer is captured mid-overflow
+    _qa_icon_path = ""
+    if args.qa_select and args.pane in (None, 0):
+        _row = con.execute(
+            "SELECT path FROM asset WHERE kind = 'icon' AND name LIKE ?"
+            " ORDER BY name LIMIT 1", (f"{args.qa_select}%",)).fetchone()
+        _qa_icon_path = _row["path"] if _row else ""
+    ctx.setContextProperty("qaIconPath", _qa_icon_path)
+    ctx.setContextProperty(
+        "qaInspectorScroll",
+        int(os.environ.get("FENGRID_QA_INSPECTOR_SCROLL", "0") or 0))
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
     if not engine.rootObjects():
         print("error: failed to load the QML shell", file=sys.stderr)

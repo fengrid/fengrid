@@ -74,11 +74,23 @@ class AssetModel(QAbstractListModel):
 
 class _ScanWorker(QObject):
     done = Signal(dict)
-    progress = Signal(int)
+    failed = Signal(str)
+    # throttled: one emit per file flooded the main loop (60k queued
+    # invocations per scan) and starved the UI — user read it as a freeze
+    progress = Signal(int, str)
+    total = Signal(int)
 
     def __init__(self, db_path: str, parent=None):
         super().__init__(parent)
         self._db_path = db_path
+        self._last_emit = 0.0
+
+    def _progress(self, n: int, path: str) -> None:
+        now = time.monotonic()
+        if now - self._last_emit < 0.05:
+            return                      # ≤20 updates/s; `done` covers the end
+        self._last_emit = now
+        self.progress.emit(n, path)
 
     @Slot()
     def run(self):
@@ -90,12 +102,26 @@ class _ScanWorker(QObject):
                 # 'folder' and were silently skipped by the default ("system",)
                 sources = indexer.ensure_sources(con, roots,
                                                  kinds=("system", "folder"))
+                # pre-count enabled sources for the launch splash's
+                # determinate progress bar (warm page cache makes the
+                # second walk the scan does anyway nearly free)
+                rows = con.execute(
+                    "SELECT path FROM source WHERE enabled = 1"
+                    " AND kind IN ('system', 'folder')").fetchall()
+                total = 0
+                for r in rows:
+                    for _dirpath, _dirs, files in os.walk(r["path"]):
+                        total += len(files)
+                self.total.emit(total)
                 report = indexer.scan(
-                    con, sources,
-                    progress=lambda n, p: self.progress.emit(n))
+                    con, sources, progress=self._progress)
             finally:
                 con.close()
             self.done.emit(report)
+        except Exception as exc:        # a dead worker must NEVER leave
+            # the bridge's `scanning` stuck true (perpetual spinner +
+            # every rescan control disabled — the "frozen app" state)
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
         finally:
             # one-shot worker: after the slot returns the thread's event
             # loop would idle forever — quit it so the QThread finishes
@@ -115,6 +141,8 @@ class Library(QObject):
     filtersChanged = Signal()
     scanningChanged = Signal()
     scanCountChanged = Signal()
+    scanPathChanged = Signal()
+    scanTotalChanged = Signal()
     lastExportDirChanged = Signal()
     sourcesChanged = Signal()
 
@@ -144,6 +172,8 @@ class Library(QObject):
         self._scanning = False
         self._rescan_pending = False
         self._scan_count = 0
+        self._scan_total = 0
+        self._scan_path = ""
         self._last_scan = settings.get(con, "last_scan", "") or ""
         self._last_export_dir = settings.get(con, "last_export_dir", "") or ""
         self._index_by_id: dict[int, int] = {}
@@ -196,6 +226,17 @@ class Library(QObject):
     @Property(int, notify=scanCountChanged)
     def scanCount(self):
         return self._scan_count
+
+    @Property(int, notify=scanTotalChanged)
+    def scanTotal(self) -> int:
+        """Pre-counted file total for the launch splash bar (0 = not yet
+        known → the bar runs indeterminate)."""
+        return self._scan_total
+
+    @Property(str, notify=scanPathChanged)
+    def scanPath(self) -> str:
+        """Latest file under the scanner — live splash status text."""
+        return self._scan_path
 
     @Property(str, notify=lastExportDirChanged)
     def lastExportDir(self):
@@ -735,7 +776,12 @@ class Library(QObject):
             return
         self._scanning = True
         self._scan_count = 0
+        self._scan_total = 0
+        self._scan_path = ""
         self.scanningChanged.emit()
+        self.scanCountChanged.emit()
+        self.scanTotalChanged.emit()
+        self.scanPathChanged.emit()
         self.scanStarted.emit()
 
         th = QThread(self)
@@ -743,6 +789,8 @@ class Library(QObject):
         self._thread, self._worker = th, wk
         wk.moveToThread(th)
         wk.progress.connect(self._on_scan_progress)
+        wk.total.connect(self._on_scan_total)
+        wk.failed.connect(self._on_scan_failed)
         wk.done.connect(self._on_scan_done)
         th.started.connect(wk.run)
         th.finished.connect(wk.deleteLater)
@@ -759,9 +807,25 @@ class Library(QObject):
             self._thread = None
             self._worker = None
 
-    def _on_scan_progress(self, n: int) -> None:
+    def _on_scan_progress(self, n: int, path: str = "") -> None:
         self._scan_count = n
         self.scanCountChanged.emit()
+        if path and path != self._scan_path:
+            self._scan_path = path
+            self.scanPathChanged.emit()
+
+    def _on_scan_total(self, n: int) -> None:
+        self._scan_total = int(n)
+        self.scanTotalChanged.emit()
+
+    def _on_scan_failed(self, err: str) -> None:
+        # the worker died — never leave `scanning` stuck true (that state
+        # kept the spinner alive and disabled every rescan control; the
+        # user read it as a frozen app)
+        self._scanning = False
+        self.scanningChanged.emit()
+        self.scanFinished.emit({})
+        self.message.emit(f"Scan failed: {err}")
 
     def _on_scan_done(self, report: dict) -> None:
         self._scanning = False

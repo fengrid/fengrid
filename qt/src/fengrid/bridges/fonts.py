@@ -51,12 +51,22 @@ class FamilyModel(QAbstractListModel):
 
 class _FontScanWorker(QObject):
     done = Signal(dict)
-    progress = Signal(int)
+    failed = Signal(str)
+    progress = Signal(int, str)   # throttled in _progress — see library
+    total = Signal(int)
 
     def __init__(self, db_path: str, parent=None):
         super().__init__(parent)
         self._db_path = db_path
         self.cancelled = False
+        self._last_emit = 0.0
+
+    def _progress(self, n: int, path: str) -> None:
+        now = time.monotonic()
+        if now - self._last_emit < 0.05:
+            return
+        self._last_emit = now
+        self.progress.emit(n, path)
 
     @Slot()
     def run(self):
@@ -66,13 +76,24 @@ class _FontScanWorker(QObject):
                 roots = core_fonts.platform_font_dirs()
                 sources = indexer.ensure_sources(con, roots,
                                                  kinds=("fontroot",))
+                # pre-count for the launch splash's determinate bar
+                rows = con.execute(
+                    "SELECT path FROM source WHERE enabled = 1"
+                    " AND kind = 'fontroot'").fetchall()
+                total = 0
+                for r in rows:
+                    for _f in core_fonts.iter_font_files(r["path"]):
+                        total += 1
+                self.total.emit(total)
                 report = indexer.scan_fonts(
                     con, sources,
-                    progress=lambda n, p: self.progress.emit(n),
+                    progress=self._progress,
                     should_stop=lambda: self.cancelled)
             finally:
                 con.close()
             self.done.emit(report)
+        except Exception as exc:        # never leave `scanning` stuck true
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
         finally:
             # one-shot worker: leave the event loop after the slot
             # returns, or the QThread idles until aboutToQuit and a
@@ -91,6 +112,8 @@ class Fonts(QObject):
     selectionChanged = Signal()
     scanningChanged = Signal()
     scanCountChanged = Signal()
+    scanPathChanged = Signal()
+    scanTotalChanged = Signal()
 
     def __init__(self, con, db_path: str, parent=None):
         super().__init__(parent)
@@ -106,6 +129,8 @@ class Fonts(QObject):
         self._scanning = False
         self._rescan_pending = False
         self._scan_count = 0
+        self._scan_total = 0
+        self._scan_path = ""
         self._thread = None
         self._worker = None
         self._refresh()
@@ -173,6 +198,17 @@ class Fonts(QObject):
     def scanCount(self):
         return self._scan_count
 
+    @Property(int, notify=scanTotalChanged)
+    def scanTotal(self) -> int:
+        """Pre-counted file total for the launch splash bar (0 = not yet
+        known → the bar runs indeterminate)."""
+        return self._scan_total
+
+    @Property(str, notify=scanPathChanged)
+    def scanPath(self) -> str:
+        """Latest font file under the scanner — live splash status."""
+        return self._scan_path
+
     @Property(str, notify=selectionChanged)
     def selectedFamily(self):
         return self._selected
@@ -237,7 +273,12 @@ class Fonts(QObject):
             return
         self._scanning = True
         self._scan_count = 0
+        self._scan_total = 0
+        self._scan_path = ""
         self.scanningChanged.emit()
+        self.scanCountChanged.emit()
+        self.scanTotalChanged.emit()
+        self.scanPathChanged.emit()
         self.scanStarted.emit()
 
         th = QThread(self)
@@ -245,6 +286,8 @@ class Fonts(QObject):
         self._thread, self._worker = th, wk
         wk.moveToThread(th)
         wk.progress.connect(self._on_scan_progress)
+        wk.total.connect(self._on_scan_total)
+        wk.failed.connect(self._on_scan_failed)
         wk.done.connect(self._on_scan_done)
         th.started.connect(wk.run)
         th.finished.connect(wk.deleteLater)
@@ -260,9 +303,23 @@ class Fonts(QObject):
             self._thread = None
             self._worker = None
 
-    def _on_scan_progress(self, n: int) -> None:
+    def _on_scan_progress(self, n: int, path: str = "") -> None:
         self._scan_count = n
         self.scanCountChanged.emit()
+        if path and path != self._scan_path:
+            self._scan_path = path
+            self.scanPathChanged.emit()
+
+    def _on_scan_total(self, n: int) -> None:
+        self._scan_total = int(n)
+        self.scanTotalChanged.emit()
+
+    def _on_scan_failed(self, err: str) -> None:
+        # never leave `scanning` stuck true — see library._on_scan_failed
+        self._scanning = False
+        self.scanningChanged.emit()
+        self.scanFinished.emit({})
+        self.message.emit(f"Font scan failed: {err}")
 
     def _on_scan_done(self, report: dict) -> None:
         self._scanning = False

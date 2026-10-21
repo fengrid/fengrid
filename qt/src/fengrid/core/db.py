@@ -482,7 +482,10 @@ def is_starred(con: sqlite3.Connection, item_id: int,
 
 def connect(path: str | Path) -> sqlite3.Connection:
     """Open (and initialise) the library database. WAL + foreign keys on."""
-    con = sqlite3.connect(str(path))
+    # timeout=30: with two scan workers writing concurrently, polite
+    # waits must outlast a chunked commit window (default 5s was too
+    # tight once fonts+icons collided at startup)
+    con = sqlite3.connect(str(path), timeout=30)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA foreign_keys=ON")

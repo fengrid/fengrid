@@ -8,6 +8,9 @@ Rectangle {
     id: panel
     color: theme.tokens.surface
 
+    // QA hook: the scrolling body (Main scrolls it for overflow shots)
+    property alias bodyFlick: bodyFlick
+
     property int index: -1
     property Item gridView
     property string exportDir: ""
@@ -70,10 +73,31 @@ Rectangle {
         color: theme.tokens.textMuted
     }
 
-    ColumnLayout {
+    // scrolling body — spans the FULL panel height so overflowing
+    // section content passes BEHIND the pinned action footer below
+    Flickable {
+        id: bodyFlick
         anchors.fill: parent
-        anchors.margins: 14
-        spacing: 10
+        contentWidth: width
+        contentHeight: body.implicitHeight + 28 + footerRect.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {
+            policy: ScrollBar.AsNeeded
+            width: 6
+            contentItem: Rectangle {
+                implicitWidth: 6
+                radius: 3
+                color: theme.tokens.textMuted
+            }
+            background: Item { }
+        }
+        ColumnLayout {
+            id: body
+            x: 14
+            y: 14
+            width: bodyFlick.width - 28
+            spacing: 10
 
         Item {
             Layout.fillWidth: true
@@ -690,7 +714,6 @@ Rectangle {
         }
 
 
-        Item { Layout.fillHeight: true }
 
         Text {
             Layout.fillWidth: true
@@ -703,102 +726,130 @@ Rectangle {
             elide: Text.ElideMiddle
         }
 
-        RowLayout {
-            spacing: 8
-            Layout.fillWidth: true
-            Button {
-                id: starBtn
-                implicitWidth: 36
-                implicitHeight: 30
-                enabled: panel.index >= 0
-                onClicked: library.set_starred(
-                    panel.index, !(d && d.starred))
-                ToolTip.visible: hovered
-                ToolTip.delay: 400
-                ToolTip.text: (d && d.starred)
-                    ? qsTr("Unstar — removes the 'starred' tag and pulls the asset out of Starred Assets")
-                    : qsTr("Star — tags the asset and adds it to Starred Assets")
-                background: Rectangle {
-                    radius: 6
-                    color: starBtn.hovered ? theme.tokens.surface2
-                                           : "transparent"
-                    border.color: theme.tokens.border
+    }
+    }
+
+    Rectangle {                 // pinned action footer — opaque, so the
+        id: footerRect           // sections above scroll behind it
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: 14
+        anchors.rightMargin: 14
+        implicitHeight: footerCol.implicitHeight + 24
+        color: theme.tokens.surface
+
+        Rectangle {              // hairline top edge
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 1
+            color: theme.tokens.border
+        }
+        ColumnLayout {
+            id: footerCol
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.topMargin: 12
+            spacing: 10
+            RowLayout {
+                spacing: 8
+                Layout.fillWidth: true
+                Button {
+                    id: starBtn
+                    implicitWidth: 36
+                    implicitHeight: 30
+                    enabled: panel.index >= 0
+                    onClicked: library.set_starred(
+                        panel.index, !(d && d.starred))
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 400
+                    ToolTip.text: (d && d.starred)
+                        ? qsTr("Unstar — removes the 'starred' tag and pulls the asset out of Starred Assets")
+                        : qsTr("Star — tags the asset and adds it to Starred Assets")
+                    background: Rectangle {
+                        radius: 6
+                        color: starBtn.hovered ? theme.tokens.surface2
+                                               : "transparent"
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Item {
+                        Image {
+                            anchors.centerIn: parent
+                            width: 16
+                            height: 16
+                            sourceSize.width: 32
+                            sourceSize.height: 32
+                            source: Icons.url(
+                                "star",
+                                d && d.starred ? theme.tokens.litPane
+                                               : theme.tokens.textMuted,
+                                d && d.starred ? theme.tokens.litPane : "none")
+                        }
+                    }
                 }
-                contentItem: Item {
-                    Image {
-                        anchors.centerIn: parent
-                        width: 16
-                        height: 16
-                        sourceSize.width: 32
-                        sourceSize.height: 32
-                        source: Icons.url(
-                            "star",
-                            d && d.starred ? theme.tokens.litPane
-                                           : theme.tokens.textMuted,
-                            d && d.starred ? theme.tokens.litPane : "none")
+                Button {
+                    id: copyBtn
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    text: qsTr("Copy name")
+                    onClicked: library.copy_name(panel.index)
+                    background: Rectangle {
+                        radius: 6
+                        color: copyBtn.hovered ? Qt.lighter(theme.tokens.accent, 1.08)
+                                               : theme.tokens.accent
+                    }
+                    contentItem: Text {
+                        text: copyBtn.text
+                        color: theme.tokens.bg
+                        font.family: theme.uiFont
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+                Button {
+                    id: collBtn
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    text: qsTr("To collection")
+                    onClicked: collMenu.popup()
+                    background: Rectangle {
+                        radius: 6
+                        color: theme.tokens.surface2
+                        border.color: collBtn.hovered ? theme.tokens.accent : theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: collBtn.text
+                        color: theme.tokens.text
+                        font.family: theme.uiFont
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
             }
             Button {
-                id: copyBtn
+                id: exportBtn
                 Layout.fillWidth: true
                 implicitHeight: 30
-                text: qsTr("Copy name")
-                onClicked: library.copy_name(panel.index)
-                background: Rectangle {
-                    radius: 6
-                    color: copyBtn.hovered ? Qt.lighter(theme.tokens.accent, 1.08)
-                                           : theme.tokens.accent
-                }
-                contentItem: Text {
-                    text: copyBtn.text
-                    color: theme.tokens.bg
-                    font.family: theme.uiFont
-                    font.pixelSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-            Button {
-                id: collBtn
-                Layout.fillWidth: true
-                implicitHeight: 30
-                text: qsTr("To collection")
-                onClicked: collMenu.popup()
+                enabled: index >= 0
+                text: qsTr("Export…")
+                onClicked: exportPopup.open()
                 background: Rectangle {
                     radius: 6
                     color: theme.tokens.surface2
-                    border.color: collBtn.hovered ? theme.tokens.accent : theme.tokens.border
+                    border.color: exportBtn.hovered ? theme.tokens.accent : theme.tokens.border
                 }
                 contentItem: Text {
-                    text: collBtn.text
+                    text: exportBtn.text
                     color: theme.tokens.text
                     font.family: theme.uiFont
                     font.pixelSize: 12
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
-            }
-        }
-        Button {
-            id: exportBtn
-            Layout.fillWidth: true
-            implicitHeight: 30
-            enabled: index >= 0
-            text: qsTr("Export…")
-            onClicked: exportPopup.open()
-            background: Rectangle {
-                radius: 6
-                color: theme.tokens.surface2
-                border.color: exportBtn.hovered ? theme.tokens.accent : theme.tokens.border
-            }
-            contentItem: Text {
-                text: exportBtn.text
-                color: theme.tokens.text
-                font.family: theme.uiFont
-                font.pixelSize: 12
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
             }
         }
     }
