@@ -22,6 +22,7 @@ from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
 from fengrid.bridges.code import Code
 from fengrid.bridges.colors import Colors
+from fengrid.bridges.data import DataIO
 from fengrid.bridges.databases import Databases
 from fengrid.bridges.demo import Demo
 from fengrid.bridges.fonts import Fonts
@@ -160,6 +161,10 @@ def main(argv=None) -> int:
     dbs_bridge = Databases(db_path, reg_con, data_dir,
                            default_path=default_db)
     storage_bridge = Storage(con, data_dir)
+    dataio_bridge = DataIO(
+        con, db_path, data_dir,
+        registry_path=os.path.join(data_dir, "registry.db"))
+    app.aboutToQuit.connect(dataio_bridge.shutdown)
 
     theme = Theme(con, _asset_dir("fonts"))
     if args.theme:
@@ -195,6 +200,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("prefs", prefs_bridge)
     ctx.setContextProperty("dbs", dbs_bridge)
     ctx.setContextProperty("storage", storage_bridge)
+    ctx.setContextProperty("dataio", dataio_bridge)
     # non-empty when startup fell back (missing active database)
     ctx.setContextProperty("startupNotice", startup_notice)
     taxonomy_bridge = Taxonomy(con)

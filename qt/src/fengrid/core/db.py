@@ -175,6 +175,24 @@ CREATE TABLE IF NOT EXISTS storage_mount (
     kind       TEXT NOT NULL DEFAULT 'folder',  -- source kind it feeds
     created    TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Watch folders / dropboxes (periodic change detection; transports in
+-- core/watch.py — local, storage mounts, remote pulls, coming-soon)
+CREATE TABLE IF NOT EXISTS watch_source (
+    id        INTEGER PRIMARY KEY,
+    path      TEXT NOT NULL,              -- local path or remote spec
+    label     TEXT NOT NULL DEFAULT '',
+    transport TEXT NOT NULL DEFAULT 'local',
+    interval  INTEGER NOT NULL DEFAULT 60,
+    enabled   INTEGER NOT NULL DEFAULT 1,
+    created   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS watch_state (
+    watch_id  INTEGER PRIMARY KEY REFERENCES watch_source(id) ON DELETE CASCADE,
+    last_run  REAL NOT NULL DEFAULT 0,
+    last_sig  TEXT NOT NULL DEFAULT '',
+    last_hits INTEGER NOT NULL DEFAULT 0
+);
 """
 
 # External-content FTS5 kept in sync by triggers (the indexer UPDATEs an
