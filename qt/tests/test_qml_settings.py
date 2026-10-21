@@ -261,3 +261,33 @@ def test_first_run_declares_the_finished_signal(setup_ui):
     assert b["prefs"].firstRunNeeded is True      # fresh db owes setup
     b["prefs"].complete_first_run()
     assert b["prefs"].firstRunNeeded is False
+
+def test_data_management_sections_present(settings_ui):
+    """The four data categories exist with their key controls — this is
+    the Settings interface for import/export/backup/db management."""
+    root = settings_ui["root"]
+    sections = _by_class(root, "SettingsSection")
+    titles = {s.property("title") for s in sections}
+    assert {"Import & Watch", "Export", "Backup & Restore",
+            "Database"} <= titles, titles
+
+    labels = {r.property("label") for r in _by_class(root, "SettingRow")}
+    for want in ("Import files", "File storage mode", "Format conversion",
+                 "Rename template", "CSV name list",
+                 "Watch folders & dropboxes", "Cloud storage",
+                 "Icon formats (multi-select)", "Tint / color filter",
+                 "Batch script / operation", "Webfonts",
+                 "Color code lists", "Snippet format", "Library bundle",
+                 "Back up now", "Automatic backup on quit", "Restore",
+                 "Statistics", "Integrity check", "Maintenance",
+                 "Search index", "Repair orphaned rows"):
+        assert want in labels, f"missing data row: {want}"
+
+    # category filtering works for the new categories too
+    root.setProperty("category", "database")
+    _qapp().processEvents()
+    QTest.qWait(40)
+    shown = {s.property("section") for s in sections if s.isVisible()}
+    assert shown == {"database"}, shown
+    root.setProperty("category", "all")
+    _qapp().processEvents()

@@ -310,6 +310,66 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-21, DATA MANAGEMENT SUITE (user spec: complete import/ingest,
+  export, backup and SQLite-management featureset surfaced in Settings):
+  new core modules — patterns.py (rename engine: template tokens,
+  prefix/suffix, regex that degrades instead of aborting, cardinal/
+  random/GUID enumeration, CSV names, uniquify), ingest.py (copy/link
+  materialisation, streamed ZIPs through a 64KB buffer with flattened
+  member names, conversion via export+Qt SVG rasterisation, folder-as-
+  source), watch.py (13 transports — local, Storage-mount, argv pulls
+  for rsync/scp/sftp/ftp/http with injectable runners, OneDrive/iCloud/
+  Google Drive explicitly coming-soon; signature = count+bytes+mtime
+  walk), backup.py — RESTORE PACKAGE (spec: one *.tar.gz): tarfile.w:gz with
+  backup-manifest.json v2 (build/version + release_tag, system_settings,
+  user_preferences, configuration incl. sources/mounts/watches/opts/
+  row counts, environment incl. per-tool availability, SHA-256 file
+  entries, logs index), consistent snapshots of library.db + registry.db
+  via the online-backup API, captured LOG TAILS when present
+  (128KB cap, unique member names — two sources can share a basename),
+  and generate_restore_scripts(): restore.sh (POSIX) + restore.ps1
+  (Windows) embedding the recorded tag; both refuse when any
+  install/process/server is detected (pgrep fengrid|serve.py, install
+  probes; Get-Process/port 8642 on Windows → exit 2 "must run where
+  Fengrid is not active"), download the SAME release tag (curl -fL /
+  Invoke-WebRequest, prerelease warning, exit 3 on 404/offline), place
+  DBs+config into the TARGET machine's per-OS dir (XDG / Application
+  Support / %LOCALAPPDATA% — original usernames are informational
+  only), move any existing DB aside, refuse rather than auto-sudo on
+  permission walls (exit 5), and SHA-256-verify (sha256sum|shasum /
+  Get-FileHash → exit 6). Exit codes: 2 active, 3 download, 4 archive,
+  5 copy/permissions, 6 verify, 7 prerequisite. Legacy format-1 zips
+  still validate/restore via _open_package(); restore() verifies the
+  recorded checksum BEFORE the swap + admin ops (.pre-restore rollback), exportplus.py (multi-format icon
+  batches with tint-through-alpha and script hooks, fontTools webfonts,
+  HEX/HSL/RGB/CMYK code lists, snippet exports, bundle manifests with
+  tag/collection/project links). bridges/data.py (context `dataio`):
+  one serialized one-shot worker per job with progress signals, JSON
+  option blobs (import_opts/export_opts), 5s watch heartbeat,
+  restore→relaunch (FENGRID_NO_RELAUNCH aware), auto-backup at
+  aboutToQuit. db.py: watch_source/watch_state tables (SCHEMA
+  CREATE-IF-NOT-EXISTS). QML: Settings grows Import & Watch / Export /
+  Backup / Database categories (chip-driven option rows, watch +
+  backup lists, restore confirmation dialog, threaded progress bar,
+  inline admin results); the inspector Export popup switches to
+  multi-format chips + tint through dataio; Main wires dataio.message→
+  toast and importFinished→rescan, and --dialog settings-<category>
+  routes open any category. Pitfalls hit: FormInput has NO textEdited
+  signal (onTextChanged, write-backs converge via equal-value early
+  return); item_tag/item_field columns are item_id/item_kind (not
+  asset_id) and FTS triggers must DROP before the table (else the next
+  asset INSERT breaks); scan_state must never be swept (fingerprints —
+  wiping forces a full re-identify); rgb2hsl returns s/l already in
+  0..100; bundles carry only in-scope assets; a relative `.patterns`
+  import from bridges silently failed per-file until absolute; vision
+  analysis sometimes returns a reconstructed HTML mock instead of
+  analyzing — re-ask with an explicit "do not generate code" instruction.
+  Validation: 26 tests in test_data_management.py (patterns/ingest/watch/
+  backup/dbadmin/export/bundle round-trip incl. project+collection) +
+  settings-surface test; 150+ total green; qa_render.sh dark/light clean;
+  five category renders vision-verified (Import & Watch, Export, Backup,
+  Database, all-settings).
+
 - 2026-10-21, COMMAND BAR / PALETTE (user spec: search+configure+command
   bar at the top, Alt+` primary hotkey, user-definable, first-run
   preference, placeholder advertises the shortcut, VS Code palette ×

@@ -14,8 +14,10 @@ Rectangle {
     property int index: -1
     property Item gridView
     property string exportDir: ""
-    property string exportFormat: "png"
+    property string exportFormat: "png"   // kept: legacy single-format users
     property string exportSize: "64"
+    property var exportFormats: []
+    property string exportTint: ""
     property var d: null
     // QA modal registry (--dialog <name>)
     readonly property var qaModals: ({ "fieldDialog": fieldDialog })
@@ -898,6 +900,12 @@ Rectangle {
 
     Popup {
         id: exportPopup
+        onAboutToShow: {
+            if (panel.exportFormats.length === 0 && dataio !== null)
+                panel.exportFormats = dataio.exportOpts.icon_fmts.slice()
+            if (dataio !== null)
+                panel.exportTint = dataio.exportOpts.tint || ""
+        }
         parent: Overlay.overlay
         anchors.centerIn: parent
         width: 300
@@ -920,7 +928,7 @@ Rectangle {
                 color: theme.tokens.text
             }
             Text {
-                text: qsTr("Format")
+                text: qsTr("Formats (multi-select)")
                 font.family: theme.uiFont
                 font.pixelSize: 10
                 color: theme.tokens.textMuted
@@ -933,9 +941,40 @@ Rectangle {
                     Chip {
                         required property var modelData
                         label: modelData
-                        on: panel.exportFormat === modelData
-                        onPicked: panel.exportFormat = modelData
+                        on: panel.exportFormats.indexOf(modelData) >= 0
+                        onPicked: {
+                            var out = []
+                            for (var i = 0; i < panel.exportFormats.length; i++)
+                                if (panel.exportFormats[i] !== modelData)
+                                    out.push(panel.exportFormats[i])
+                            if (out.length === panel.exportFormats.length)
+                                out.push(modelData)
+                            if (out.length)
+                                panel.exportFormats = out
+                        }
                     }
+                }
+            }
+            Text {
+                text: qsTr("Tint (optional, e.g. #39B8C4)")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
+            TextField {
+                id: tintField
+                Layout.fillWidth: true
+                text: panel.exportTint
+                onTextEdited: panel.exportTint = text
+                placeholderText: qsTr("recolor through alpha…")
+                font.family: theme.monoFont
+                font.pixelSize: 11
+                color: theme.tokens.text
+                background: Rectangle {
+                    radius: 6
+                    color: theme.tokens.surface2
+                    border.color: tintField.activeFocus
+                                  ? theme.tokens.accent : theme.tokens.border
                 }
             }
             Text {
@@ -984,8 +1023,19 @@ Rectangle {
                 enabled: panel.exportDir !== "" && panel.index >= 0
                 text: qsTr("Export")
                 onClicked: {
-                    library.export_asset(panel.index, panel.exportFormat,
-                                         panel.exportSize, panel.exportDir)
+                    if (panel.exportFormats.length === 0)
+                        panel.exportFormats = [panel.exportFormat]
+                    var opts = {
+                        icon_fmts: panel.exportFormats,
+                        icon_size: panel.exportSize,
+                        tint: panel.exportTint,
+                        script: "",
+                        script_enabled: false
+                    }
+                    var path = panel.d ? panel.d.path : ""
+                    if (path !== "")
+                        dataio.exportIcons([path], panel.exportDir,
+                                           JSON.stringify(opts))
                     exportPopup.close()
                 }
                 background: Rectangle {

@@ -240,7 +240,10 @@ class Library(QObject):
 
     @Property(str, notify=lastExportDirChanged)
     def lastExportDir(self):
-        return self._last_export_dir
+        # live read: the dataio bridge also writes this key (settings
+        # screens are rebuilt on open, so no extra notify is needed)
+        return settings.get(self._con, "last_export_dir", "") \
+            or self._last_export_dir
 
     @Property(str, constant=True)
     def appVersion(self):

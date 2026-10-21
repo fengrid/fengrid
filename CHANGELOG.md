@@ -30,6 +30,46 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Data management suite — import, export, backup, database** (dev-qt):
+  four new Settings categories drive a `dataio` bridge. *Import*: files /
+  ZIP / folder ingest in **copy (embedded) or link (symlink)** modes with
+  permission reporting; on-the-fly format conversion (png/bmp/ico/webp,
+  SVG rasterised first); automated renaming — template tokens
+  (`{name} {ext} {n} {guid} {rand} {csv}`), prefix/suffix, regex
+  find/replace that never aborts a batch, cardinal/random/GUID
+  enumeration, CSV-supplied names; memory-safe by construction (64 KB
+  streamed copies, one file in memory, chunked index commits).
+  *Watch folders*: periodic signature-checked scans over local paths,
+  Storage mounts (SMB/NFS/SSHFS/S3) and pull transports
+  (rsync/scp/sftp/ftp/http via argv-only commands, probed for
+  availability); **OneDrive · iCloud · Google Drive listed as coming
+  soon**. *Export*: multi-format icon batches with resize +
+  **alpha-preserving tint** (the cross-set recolor Photoshop was needed
+  for) and optional per-file script hooks (argv, injectable runner,
+  never a shell); webfont packaging (woff2/woff + relative @font-face
+  CSS via fontTools); HEX·HSL·RGB·CMYK code lists (txt/csv/md); snippet
+  exports (bundle/VS Code/massCode/files); **library·collection·project
+  bundles** round-trip with tags, collections and project membership.
+  *Backup*: one self-contained **`*.tar.gz` restore package** — a
+  structured manifest (version/build details incl. release tag +
+  Qt/Python, system settings, user preferences, configuration options
+  incl. sources/mounts/watches/opts, local environment details,
+  SHA-256 file checksums, and log/debug tails **when present**), full
+  consistent copies of both SQLite databases (online-backup API — safe
+  mid-scan, registry included), and **generated platform restore
+  scripts** (`restore.sh` POSIX + `restore.ps1` Windows): they download
+  Fengrid pinned to the backup's recorded release tag, refuse to run
+  where any Fengrid install/process/server is detected (exit code 2
+  with the reason), copy databases + configuration into the *target*
+  machine's per-OS data dir (usernames recomputed — XDG /
+  `Application Support` / `%LOCALAPPDATA%`), handle permissions
+  gracefully (no auto-sudo; numbered error codes 2–7 with clear
+  reasons), and SHA-256-verify the restored database. In-app
+  auto-backup on quit, restore with `.pre-restore` rollback +
+  checksum verification, relaunch. Legacy zip backups still restore. *Database*: stats, integrity check, VACUUM,
+  WAL checkpoint, optimize, FTS rebuild, orphan sweep — all threaded
+  with progress and inline results.
+
 - **Command bar / palette** (dev-qt) — a Spotlight/Alfred/VS-Code-style
   command bar over the main UI: opens with **Alt+`** (Option+` on macs)
   or the header's magnifier, grouped results for commands (navigate,

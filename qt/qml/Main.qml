@@ -845,8 +845,9 @@ ApplicationWindow {
             root.openSettings()
             return
         }
-        if (name === "settings-storage") {
-            root.openSettings("storage")
+        if (name.indexOf("settings-") === 0) {
+            // settings-storage, settings-import, settings-export, …
+            root.openSettings(name.slice("settings-".length))
             return
         }
         if (name === "firstRun") {
@@ -897,6 +898,17 @@ ApplicationWindow {
     }
 
     Toast { id: toast }
+
+    Connections {
+        target: dataio
+        function onMessage(msg) { toast.show(msg) }
+        // import/watch jobs index on their own connection — the main
+        // bridge models must re-walk (fingerprints keep this cheap)
+        function onImportFinished(report) {
+            library.rescan()
+            fonts.rescan()
+        }
+    }
 
     Connections {
         target: library

@@ -34,6 +34,75 @@ Rectangle {
     }
     function showCategory(name) { category = name }
 
+    // dataio options flow: QML edits a COPY of the map, writes it back
+    function setImportOpt(k, v) {
+        var m = JSON.parse(JSON.stringify(
+            dataio !== null ? dataio.importOpts : {}))
+        m[k] = v
+        dataio.setImportOpts(m)
+    }
+    function setExportOpt(k, v) {
+        var m = JSON.parse(JSON.stringify(
+            dataio !== null ? dataio.exportOpts : {}))
+        m[k] = v
+        dataio.setExportOpts(m)
+    }
+    function url2path(u) {
+        var s = String(u)
+        if (s.indexOf("file://") === 0)
+            return decodeURIComponent(s.substring(7))
+        return s
+    }
+    function toggleFmt(list, fmt) {
+        var out = []
+        for (var i = 0; i < list.length; i++)
+            if (list[i] !== fmt) out.push(list[i])
+        if (out.length === list.length) out.push(fmt)
+        return out.length ? out : ["png"]
+    }
+    // live dataio state for the section
+    property var watchRows: []
+    property var transportRows: []
+    property var backupRows: []
+    property string addWatchPath: ""
+    property string addWatchTransport: "local"
+    property int addWatchInterval: 60
+    property string csvPath: ""
+    property string adminResult: ""
+    property bool jobBusy: false
+    property int jobDone: 0
+    property int jobTotal: 0
+    property string csvColumn: "0"
+    property string pendingRestore: ""
+    function refreshData() {
+        if (dataio === null) return
+        watchRows = dataio.watches()
+        transportRows = dataio.transports()
+        backupRows = dataio.backups()
+        csvPath = (dataio.importOpts.csv_path || "")
+        jobBusy = dataio.jobRunning
+    }
+    Component.onCompleted: refreshData()
+    Connections {
+        target: dataio
+        function onWatchesChanged() { settingsRoot.watchRows = dataio.watches() }
+        function onBackupsChanged() { settingsRoot.backupRows = dataio.backups() }
+        function onTransportsChanged() { settingsRoot.transportRows = dataio.transports() }
+        function onJobStarted(kind) {
+            settingsRoot.jobBusy = true
+            settingsRoot.jobDone = 0
+            settingsRoot.jobTotal = 0
+        }
+        function onJobProgress(kind, done, total) {
+            settingsRoot.jobDone = done
+            settingsRoot.jobTotal = total
+        }
+        function onJobDone(kind, msg) { settingsRoot.jobBusy = false }
+        function onJobFailed(kind, err) { settingsRoot.jobBusy = false }
+        function onAdminDone(op, summary) { settingsRoot.adminResult = summary }
+        function onStatsChanged() {}
+    }
+
     // user folders = registered sources that are NOT detected system
     // paths (system icon roots / font dirs are listed separately)
     readonly property var customFolders: {
@@ -104,6 +173,10 @@ Rectangle {
                         { k: "appearance", t: qsTr("Appearance") },
                         { k: "library", t: qsTr("Library") },
                         { k: "storage", t: qsTr("Storage") },
+                        { k: "import", t: qsTr("Import & Watch") },
+                        { k: "export", t: qsTr("Export") },
+                        { k: "backup", t: qsTr("Backup") },
+                        { k: "database", t: qsTr("Database") },
                         { k: "editor", t: qsTr("Editor") },
                         { k: "colors", t: qsTr("Colors") },
                         { k: "updates", t: qsTr("Updates") },
@@ -878,6 +951,888 @@ Rectangle {
                             font.family: theme.uiFont
                             font.pixelSize: 11
                             color: theme.tokens.textMuted
+                        }
+                    }
+
+                    // ────────────────────────── import & watch
+                    SettingsSection {
+                        section: "import"
+                        title: qsTr("Import & Watch")
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Import files")
+                            desc: qsTr("Bring icons and fonts in from files, ZIP archives or whole folders.")
+                            keys: "import ingest add files zip folder archive upload ingest assets fonts icons"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                SettingsButton {
+                                    text: qsTr("Files…")
+                                    onClicked: filesDialog.open()
+                                }
+                                SettingsButton {
+                                    text: qsTr("ZIP…")
+                                    onClicked: zipDialog.open()
+                                }
+                                SettingsButton {
+                                    text: qsTr("Folder…")
+                                    onClicked: folderImportDialog.open()
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("File storage mode")
+                            desc: qsTr("Copy embeds files into Fengrid's data folder (self-contained). Link keeps them where they are and symlinks — needs read permission on the original location.")
+                            keys: "copy link embed symlink mode storage external permission embedded readonly"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 6
+                                Chip {
+                                    label: "copy"
+                                    on: dataio !== null && dataio.importOpts.mode === "copy"
+                                    onPicked: settingsRoot.setImportOpt("mode", "copy")
+                                }
+                                Chip {
+                                    label: "link"
+                                    on: dataio !== null && dataio.importOpts.mode === "link"
+                                    onPicked: settingsRoot.setImportOpt("mode", "link")
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Format conversion")
+                            desc: qsTr("Convert icons on the way in (SVG is rasterised first). Fonts and colors are never rewritten.")
+                            keys: "convert conversion format png bmp ico webp rasterize transform target"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Flow {
+                                spacing: 6
+                                Repeater {
+                                    model: ["none", "png", "bmp", "ico", "webp"]
+                                    Chip {
+                                        required property var modelData
+                                        label: modelData
+                                        on: dataio !== null
+                                            && dataio.importOpts.convert === modelData
+                                        onPicked: settingsRoot.setImportOpt("convert", modelData)
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Rename template")
+                            desc: qsTr("Tokens: {name} {ext} {n} {guid} {rand} {csv}. Empty = keep original names.")
+                            keys: "rename template naming pattern tokens guid random enumeration"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            FormInput {
+                                label: qsTr("template")
+                                text: dataio !== null ? (dataio.importOpts.template || "") : ""
+                                onTextChanged: settingsRoot.setImportOpt("template", text)
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Prefix / suffix")
+                            desc: qsTr("Wrapped around every imported name.")
+                            keys: "prefix suffix prepend append rename"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                FormInput {
+                                    Layout.fillWidth: true
+                                    label: qsTr("prefix")
+                                    text: dataio !== null ? (dataio.importOpts.prefix || "") : ""
+                                    onTextChanged: settingsRoot.setImportOpt("prefix", text)
+                                }
+                                FormInput {
+                                    Layout.fillWidth: true
+                                    label: qsTr("suffix")
+                                    text: dataio !== null ? (dataio.importOpts.suffix || "") : ""
+                                    onTextChanged: settingsRoot.setImportOpt("suffix", text)
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Find / replace (regex)")
+                            desc: qsTr("Applied to the original name before tokens; an invalid pattern is skipped, never aborts the import.")
+                            keys: "regex find replace substitution pattern rename sed"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                FormInput {
+                                    Layout.fillWidth: true
+                                    label: qsTr("find")
+                                    text: dataio !== null ? (dataio.importOpts.find || "") : ""
+                                    onTextChanged: settingsRoot.setImportOpt("find", text)
+                                }
+                                FormInput {
+                                    Layout.fillWidth: true
+                                    label: qsTr("replace")
+                                    text: dataio !== null ? (dataio.importOpts.repl || "") : ""
+                                    onTextChanged: settingsRoot.setImportOpt("repl", text)
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Enumeration style")
+                            desc: qsTr("Cardinal counting, random suffixes or generated GUIDs appended to each name.")
+                            keys: "enumeration cardinal random guid counter sequence numbered sort"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            ColumnLayout {
+                                spacing: 6
+                                Flow {
+                                    spacing: 6
+                                    Repeater {
+                                        model: ["none", "enum", "random", "guid"]
+                                        Chip {
+                                            required property var modelData
+                                            label: modelData
+                                            on: dataio !== null
+                                                && dataio.importOpts.style === modelData
+                                            onPicked: settingsRoot.setImportOpt("style", modelData)
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    spacing: 8
+                                    FormInput {
+                                        Layout.preferredWidth: 90
+                                        label: qsTr("start")
+                                        text: dataio !== null
+                                              ? String(dataio.importOpts.start || 1) : "1"
+                                        onTextChanged: settingsRoot.setImportOpt("start", parseInt(text) || 1)
+                                    }
+                                    FormInput {
+                                        Layout.preferredWidth: 90
+                                        label: qsTr("pad")
+                                        text: dataio !== null
+                                              ? String(dataio.importOpts.pad || 2) : "2"
+                                        onTextChanged: settingsRoot.setImportOpt("pad", Math.max(0, parseInt(text) || 0))
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("CSV name list")
+                            desc: qsTr("Supplied names consumed one per imported file ({csv} token).")
+                            keys: "csv names list spreadsheet batch rename data column"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                SettingsButton {
+                                    text: settingsRoot.csvPath === ""
+                                          ? qsTr("Choose CSV…")
+                                          : settingsRoot.csvPath.split("/").pop()
+                                    onClicked: csvDialog.open()
+                                }
+                                FormInput {
+                                    Layout.preferredWidth: 90
+                                    label: qsTr("column")
+                                    text: settingsRoot.csvColumn
+                                    onTextChanged: {
+                                        settingsRoot.csvColumn = text
+                                        settingsRoot.setImportOpt("csv_column", text)
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Import progress")
+                            desc: qsTr("One file in memory at a time; archives stream through a 64KB buffer and index in chunks — large batches stay flat on memory.")
+                            keys: "progress memory performance large batch streaming big quantities"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 10
+                                visible: settingsRoot.jobBusy
+                                Layout.fillWidth: true
+                                ProgressBar {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 6
+                                    from: 0
+                                    to: settingsRoot.jobTotal > 0
+                                        ? settingsRoot.jobTotal : 1
+                                    value: settingsRoot.jobTotal > 0
+                                           ? settingsRoot.jobDone : 0
+                                    indeterminate: settingsRoot.jobTotal <= 0
+                                    background: Rectangle {
+                                        radius: 3
+                                        color: theme.tokens.surface2
+                                    }
+                                    contentItem: Item {
+                                        clip: true
+                                        Rectangle {
+                                            visible: !parent.parent.indeterminate
+                                            height: parent.height
+                                            width: parent.parent.visualPosition
+                                                   * parent.width
+                                            radius: 3
+                                            color: theme.tokens.accent
+                                        }
+                                        Rectangle {
+                                            visible: parent.parent.indeterminate
+                                            height: parent.height
+                                            width: Math.max(40, parent.width * 0.3)
+                                            radius: 3
+                                            color: theme.tokens.accent
+                                            SequentialAnimation on x {
+                                                loops: Animation.Infinite
+                                                running: parent.parent.parent.parent.visible
+                                                NumberAnimation {
+                                                    from: -80
+                                                    to: parent.parent.parent.parent.width
+                                                    duration: 900
+                                                }
+                                                NumberAnimation {
+                                                    from: parent.parent.parent.parent.width
+                                                    to: -80
+                                                    duration: 900
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Text {
+                                    text: settingsRoot.jobTotal > 0
+                                          ? settingsRoot.jobDone + " / " + settingsRoot.jobTotal
+                                          : qsTr("working…")
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.textMuted
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Watch folders & dropboxes")
+                            desc: qsTr("Scanned periodically for changes; new and changed files are indexed automatically.")
+                            keys: "watch watcher folder dropbox periodic sync auto scan ftp sftp scp http rsync remote network s3 dropbox inbox"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            ColumnLayout {
+                                spacing: 8
+                                Layout.fillWidth: true
+
+                                RowLayout {
+                                    spacing: 8
+                                    Layout.fillWidth: true
+                                    FormInput {
+                                        Layout.fillWidth: true
+                                        label: qsTr("path or remote spec")
+                                        text: settingsRoot.addWatchPath
+                                        onTextChanged: settingsRoot.addWatchPath = text
+                                    }
+                                    SettingsButton {
+                                        text: qsTr("Add")
+                                        enabled: settingsRoot.addWatchPath.trim() !== ""
+                                                 && dataio !== null
+                                        onClicked: {
+                                            dataio.watchAdd(settingsRoot.addWatchPath.trim(),
+                                                            settingsRoot.addWatchTransport,
+                                                            settingsRoot.addWatchInterval)
+                                            settingsRoot.addWatchPath = ""
+                                        }
+                                    }
+                                }
+                                Flow {
+                                    spacing: 6
+                                    Repeater {
+                                        model: settingsRoot.transportRows.filter(
+                                            function (t) { return t.kind !== "soon" })
+                                        Chip {
+                                            required property var modelData
+                                            opacity: modelData.available ? 1 : 0.45
+                                            label: modelData.key
+                                            on: settingsRoot.addWatchTransport === modelData.key
+                                            onPicked: {
+                                                if (modelData.available)
+                                                    settingsRoot.addWatchTransport = modelData.key
+                                            }
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    spacing: 6
+                                    Text {
+                                        text: qsTr("every")
+                                        font.family: theme.uiFont
+                                        font.pixelSize: 11
+                                        color: theme.tokens.textMuted
+                                    }
+                                    Repeater {
+                                        model: [30, 60, 300]
+                                        Chip {
+                                            required property var modelData
+                                            label: modelData === 60 ? "1m"
+                                                  : modelData === 300 ? "5m"
+                                                  : modelData + "s"
+                                            on: settingsRoot.addWatchInterval === modelData
+                                            onPicked: settingsRoot.addWatchInterval = modelData
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: settingsRoot.watchRows
+                                    RowLayout {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 0
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.label || modelData.path
+                                                font.family: theme.uiFont
+                                                font.pixelSize: 12
+                                                color: theme.tokens.text
+                                                elide: Text.ElideMiddle
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.transport + " · "
+                                                      + (modelData.interval >= 300
+                                                         ? Math.round(modelData.interval / 60) + "m"
+                                                         : modelData.interval + "s")
+                                                      + (modelData.lastHits
+                                                         ? " · " + modelData.lastHits + " new"
+                                                         : "")
+                                                font.family: theme.monoFont
+                                                font.pixelSize: 9
+                                                color: theme.tokens.textMuted
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                        FormCheck {
+                                            checkLabel: qsTr("on")
+                                            checked: modelData.enabled
+                                            onToggled: dataio.watchToggle(modelData.id, checked)
+                                        }
+                                        SettingsButton {
+                                            text: qsTr("Run")
+                                            onClicked: dataio.watchRunNow(modelData.id)
+                                        }
+                                        SettingsButton {
+                                            text: qsTr("Remove")
+                                            onClicked: dataio.watchRemove(modelData.id)
+                                        }
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    visible: settingsRoot.watchRows.length === 0
+                                    text: qsTr("No watch folders yet — add a local dropbox above.")
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 11
+                                    color: theme.tokens.textMuted
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
+                            label: qsTr("Cloud storage")
+                            desc: qsTr("Amazon S3-compatible storage attaches through the Storage section; remote pulls need rsync/scp/curl installed.")
+                            keys: "cloud s3 amazon onedrive icloud google drive coming soon remote tools"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 6
+                                Chip { label: "S3 (Storage)"; on: false
+                                       onPicked: {} }
+                                Text {
+                                    text: qsTr("OneDrive · iCloud · Google Drive — coming soon")
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 11
+                                    font.italic: true
+                                    color: theme.tokens.textMuted
+                                }
+                            }
+                        }
+
+                        FileDialog {
+                            id: filesDialog
+                            title: qsTr("Import files")
+                            fileMode: FileDialog.OpenFiles
+                            nameFilters: [qsTr("Assets (*.png *.svg *.bmp *.ico *.webp *.gif *.jpg *.jpeg *.tiff *.ttf *.otf *.ttc)"), qsTr("All files (*)")]
+                            onAccepted: {
+                                var paths = []
+                                for (var i = 0; i < selectedFiles.length; i++)
+                                    paths.push(settingsRoot.url2path(selectedFiles[i]))
+                                dataio.importStart(paths)
+                            }
+                        }
+                        FileDialog {
+                            id: zipDialog
+                            title: qsTr("Import ZIP archive")
+                            fileMode: FileDialog.OpenFile
+                            nameFilters: [qsTr("ZIP archives (*.zip)")]
+                            onAccepted: dataio.importZip(settingsRoot.url2path(selectedFile))
+                        }
+                        FileDialog {
+                            id: csvDialog
+                            title: qsTr("CSV name list")
+                            fileMode: FileDialog.OpenFile
+                            nameFilters: [qsTr("CSV files (*.csv)")]
+                            onAccepted: {
+                                settingsRoot.csvPath = settingsRoot.url2path(selectedFile)
+                                settingsRoot.setImportOpt("csv_path", settingsRoot.csvPath)
+                            }
+                        }
+                        FolderDialog {
+                            id: folderImportDialog
+                            title: qsTr("Import folder as source")
+                            onAccepted: dataio.importFolder(settingsRoot.url2path(selectedFolder))
+                        }
+                    }
+
+                    // ────────────────────────────────────── export
+                    SettingsSection {
+                        section: "export"
+                        title: qsTr("Export")
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Icon formats (multi-select)")
+                            desc: qsTr("Every checked format is written per icon in one pass.")
+                            keys: "export formats png jpeg webp ico pdf gif tiff bmp convert multiple"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Flow {
+                                spacing: 6
+                                Repeater {
+                                    model: ["png", "jpeg", "webp", "ico", "pdf", "gif", "tiff", "bmp"]
+                                    Chip {
+                                        required property var modelData
+                                        label: modelData
+                                        on: dataio !== null
+                                            && dataio.exportOpts.icon_fmts.indexOf(modelData) >= 0
+                                        onPicked: settingsRoot.setExportOpt(
+                                            "icon_fmts",
+                                            settingsRoot.toggleFmt(dataio.exportOpts.icon_fmts, modelData))
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Icon size")
+                            desc: qsTr("Default resize target; ICO keeps its multi-size packing.")
+                            keys: "export size resize px dimensions scale 16 32 64 128 256"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Flow {
+                                spacing: 6
+                                Repeater {
+                                    model: ["16", "32", "64", "128", "256", "orig"]
+                                    Chip {
+                                        required property var modelData
+                                        label: modelData === "orig" ? qsTr("orig") : modelData + "px"
+                                        on: dataio !== null
+                                            && String(dataio.exportOpts.icon_size) === modelData
+                                        onPicked: settingsRoot.setExportOpt("icon_size", modelData)
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Tint / color filter")
+                            desc: qsTr("Recolors icons through their alpha channel — the cross-set recolor you'd otherwise open an editor for. Empty = original colors.")
+                            keys: "tint color filter recolor mono paint hue photoshop filter overlay"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            FormInput {
+                                label: qsTr("hex (e.g. #39B8C4)")
+                                text: dataio !== null ? (dataio.exportOpts.tint || "") : ""
+                                onTextChanged: settingsRoot.setExportOpt("tint", text)
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Batch script / operation")
+                            desc: qsTr("Runs per exported file: argv tokens {in} {out} {dir} {name}. Never a shell; keep it off unless you need it.")
+                            keys: "script batch operation command hook automate post-process pipeline"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            ColumnLayout {
+                                spacing: 6
+                                Layout.fillWidth: true
+                                FormCheck {
+                                    checkLabel: qsTr("run a script on each exported file")
+                                    checked: dataio !== null
+                                             && !!dataio.exportOpts.script_enabled
+                                    onToggled: settingsRoot.setExportOpt("script_enabled", checked)
+                                }
+                                FormInput {
+                                    Layout.fillWidth: true
+                                    visible: dataio !== null
+                                             && !!dataio.exportOpts.script_enabled
+                                    label: qsTr("command (argv)")
+                                    text: dataio !== null ? (dataio.exportOpts.script || "") : ""
+                                    onTextChanged: settingsRoot.setExportOpt("script", text)
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Webfonts")
+                            desc: qsTr("Fonts export as woff2/woff packages with a relative @font-face stylesheet — no conversion site needed.")
+                            keys: "fonts webfont woff woff2 ttf package css font-face variants weight style"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Flow {
+                                spacing: 6
+                                Repeater {
+                                    model: ["woff2", "woff", "ttf"]
+                                    Chip {
+                                        required property var modelData
+                                        label: modelData
+                                        on: dataio !== null
+                                            && dataio.exportOpts.font_fmts.indexOf(modelData) >= 0
+                                        onPicked: settingsRoot.setExportOpt(
+                                            "font_fmts",
+                                            settingsRoot.toggleFmt(dataio.exportOpts.font_fmts, modelData))
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Color code lists")
+                            desc: qsTr("Ship HEX · HSL · RGB · CMYK codes alongside palette exports.")
+                            keys: "color codes hex hsl rgb cmyk list text csv markdown palette export values"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Flow {
+                                spacing: 6
+                                Repeater {
+                                    model: ["txt", "csv", "md"]
+                                    Chip {
+                                        required property var modelData
+                                        label: modelData
+                                        on: dataio !== null
+                                            && dataio.exportOpts.color_codes === modelData
+                                        onPicked: settingsRoot.setExportOpt("color_codes", modelData)
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Snippet format")
+                            desc: qsTr("Bundle round-trips into Fengrid; the others feed editors.")
+                            keys: "snippets export vscode masscode bundle json code files format"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Flow {
+                                spacing: 6
+                                Repeater {
+                                    model: ["bundle", "vscode", "masscode", "files"]
+                                    Chip {
+                                        required property var modelData
+                                        label: modelData
+                                        on: dataio !== null
+                                            && dataio.exportOpts.snippet_kind === modelData
+                                        onPicked: settingsRoot.setExportOpt("snippet_kind", modelData)
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Library bundle")
+                            desc: qsTr("Portable zip of every asset + tags, collections and project membership — importing rebuilds all of it.")
+                            keys: "bundle library collection project export import portable archive round trip json manifest"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                SettingsButton {
+                                    text: qsTr("Export bundle…")
+                                    enabled: dataio !== null && !dataio.jobRunning
+                                    onClicked: exportDestDialog.open()
+                                }
+                                SettingsButton {
+                                    text: qsTr("Import bundle…")
+                                    enabled: dataio !== null && !dataio.jobRunning
+                                    onClicked: bundleImportDialog.open()
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "export"
+                            label: qsTr("Last export folder")
+                            desc: qsTr("Where exports land by default.")
+                            keys: "export folder destination output path directory last"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Text {
+                                text: library !== null
+                                      && library.lastExportDir !== ""
+                                      ? library.lastExportDir : qsTr("—")
+                                font.family: theme.monoFont
+                                font.pixelSize: 10
+                                color: theme.tokens.textMuted
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
+                        }
+
+                        FolderDialog {
+                            id: exportDestDialog
+                            title: qsTr("Export library bundle to…")
+                            onAccepted: dataio.exportBundle(
+                                "library", settingsRoot.url2path(selectedFolder), true)
+                        }
+                        FileDialog {
+                            id: bundleImportDialog
+                            title: qsTr("Import fengrid bundle")
+                            fileMode: FileDialog.OpenFile
+                            nameFilters: [qsTr("Fengrid bundles (*.zip)")]
+                            onAccepted: dataio.importBundle(
+                                settingsRoot.url2path(selectedFile), "copy")
+                        }
+                    }
+
+                    // ──────────────────────────────────────── backup
+                    SettingsSection {
+                        section: "backup"
+                        title: qsTr("Backup & Restore")
+
+                        SettingRow {
+                            section: "backup"
+                            label: qsTr("Back up now")
+                            desc: qsTr("One .tar.gz package: manifest (versions, settings, preferences, config, environment, logs), full database copies, and restore.sh / restore.ps1 scripts pinned to this release tag.")
+                            keys: "backup save snapshot copy archive safety dump"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            SettingsButton {
+                                text: qsTr("Back up…")
+                                enabled: dataio !== null && !dataio.jobRunning
+                                onClicked: dataio.backupNow("")
+                            }
+                        }
+
+                        SettingRow {
+                            section: "backup"
+                            label: qsTr("Automatic backup on quit")
+                            desc: qsTr("Takes one more snapshot when Fengrid closes (skipped if a job is mid-flight).")
+                            keys: "auto backup quit exit automatic schedule safety"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            FormCheck {
+                                checkLabel: qsTr("back up when the app closes")
+                                checked: dataio !== null && dataio.autoBackup
+                                onToggled: dataio.setAutoBackup(checked)
+                            }
+                        }
+
+                        SettingRow {
+                            section: "backup"
+                            label: qsTr("Restore")
+                            desc: qsTr("In-app restore replaces the live database and restarts (current kept as .pre-restore). The package's restore.sh/restore.ps1 rebuild a machine from scratch — they refuse to run where Fengrid is active and verify checksums.")
+                            keys: "restore recover rollback import backup undo replace recovery"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            ColumnLayout {
+                                spacing: 6
+                                Layout.fillWidth: true
+                                Repeater {
+                                    model: settingsRoot.backupRows
+                                    RowLayout {
+                                        required property var modelData
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 0
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.name
+                                                font.family: theme.monoFont
+                                                font.pixelSize: 10
+                                                color: theme.tokens.text
+                                                elide: Text.ElideMiddle
+                                            }
+                                            Text {
+                                                text: (modelData.bytes / 1048576).toFixed(1) + " MB"
+                                                      + (modelData.created
+                                                         ? " · " + modelData.created : "")
+                                                font.family: theme.monoFont
+                                                font.pixelSize: 9
+                                                color: theme.tokens.textMuted
+                                            }
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        SettingsButton {
+                                            text: qsTr("Restore…")
+                                            onClicked: {
+                                                settingsRoot.pendingRestore = modelData.path
+                                                restoreConfirm.open()
+                                            }
+                                        }
+                                        SettingsButton {
+                                            text: qsTr("Remove")
+                                            onClicked: dataio.deleteBackup(modelData.path)
+                                        }
+                                    }
+                                }
+                                Text {
+                                    visible: settingsRoot.backupRows.length === 0
+                                    text: qsTr("No backups yet.")
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 11
+                                    color: theme.tokens.textMuted
+                                }
+                            }
+                        }
+
+                        Dialog {
+                            id: restoreConfirm
+                            parent: Overlay.overlay
+                            anchors.centerIn: parent
+                            width: 340
+                            modal: true
+                            title: qsTr("Restore backup?")
+                            standardButtons: Dialog.Ok | Dialog.Cancel
+                            onAccepted: dataio.restoreBackup(settingsRoot.pendingRestore)
+                            Text {
+                                width: parent.width
+                                wrapMode: Text.Wrap
+                                font.family: theme.uiFont
+                                font.pixelSize: 12
+                                color: theme.tokens.text
+                                text: qsTr("This replaces the current database and restarts Fengrid. Your present database is saved alongside as .pre-restore.")
+                            }
+                        }
+                    }
+
+                    // ─────────────────────────────────────── database
+                    SettingsSection {
+                        section: "database"
+                        title: qsTr("Database")
+
+                        SettingRow {
+                            section: "database"
+                            label: qsTr("Statistics")
+                            desc: qsTr("Live size and row counts of the active SQLite database.")
+                            keys: "database stats size rows tables sqlite wal statistics space"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 10
+                                Layout.fillWidth: true
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: dataio !== null && dataio.stats.bytes !== undefined
+                                          ? ((dataio.stats.bytes / 1048576).toFixed(1) + " MB"
+                                             + (dataio.stats.wal_bytes
+                                                ? " · WAL " + (dataio.stats.wal_bytes / 1024).toFixed(0) + " KB"
+                                                : "")
+                                             + " · " + dataio.stats.tables.length + " tables")
+                                          : qsTr("—")
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.textMuted
+                                    elide: Text.ElideRight
+                                }
+                                SettingsButton {
+                                    text: qsTr("Refresh")
+                                    onClicked: dataio.refreshStats()
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "database"
+                            label: qsTr("Integrity check")
+                            desc: qsTr("PRAGMA quick_check — catches corruption early.")
+                            keys: "integrity check quick_check verify repair corrupt health"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            SettingsButton {
+                                text: qsTr("Run check")
+                                enabled: dataio !== null && !dataio.jobRunning
+                                onClicked: dataio.adminRun("check")
+                            }
+                        }
+
+                        SettingRow {
+                            section: "database"
+                            label: qsTr("Maintenance")
+                            desc: qsTr("VACUUM compacts, checkpoint folds the WAL back in, optimize updates planner statistics.")
+                            keys: "vacuum checkpoint wal compact optimize maintain pragma defragment"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                SettingsButton {
+                                    text: qsTr("VACUUM")
+                                    enabled: dataio !== null && !dataio.jobRunning
+                                    onClicked: dataio.adminRun("vacuum")
+                                }
+                                SettingsButton {
+                                    text: qsTr("Checkpoint WAL")
+                                    enabled: dataio !== null && !dataio.jobRunning
+                                    onClicked: dataio.adminRun("checkpoint")
+                                }
+                                SettingsButton {
+                                    text: qsTr("Optimize")
+                                    enabled: dataio !== null && !dataio.jobRunning
+                                    onClicked: dataio.adminRun("optimize")
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "database"
+                            label: qsTr("Search index")
+                            desc: qsTr("Rebuild the FTS5 index if search results ever look wrong (instant — it is external-content).")
+                            keys: "fts search index rebuild fts5 fulltext reindex"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            SettingsButton {
+                                text: qsTr("Rebuild search index")
+                                enabled: dataio !== null && !dataio.jobRunning
+                                onClicked: dataio.adminRun("rebuild_fts")
+                            }
+                        }
+
+                        SettingRow {
+                            section: "database"
+                            label: qsTr("Repair orphaned rows")
+                            desc: qsTr("Removes tags, field values, links and project references pointing at deleted items.")
+                            keys: "repair orphan cleanup sweep dangling rows garbage maintenance"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            SettingsButton {
+                                text: qsTr("Sweep orphans")
+                                enabled: dataio !== null && !dataio.jobRunning
+                                onClicked: dataio.adminRun("sweep")
+                            }
+                        }
+
+                        SettingRow {
+                            section: "database"
+                            label: qsTr("Last result")
+                            desc: qsTr("Outcome of the most recent database operation.")
+                            keys: "result log output last operation status"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            Text {
+                                Layout.fillWidth: true
+                                text: settingsRoot.adminResult !== ""
+                                      ? settingsRoot.adminResult : qsTr("—")
+                                font.family: theme.monoFont
+                                font.pixelSize: 10
+                                color: theme.tokens.textMuted
+                                wrapMode: Text.Wrap
+                            }
                         }
                     }
 
