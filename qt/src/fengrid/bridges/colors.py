@@ -43,6 +43,7 @@ class Colors(QObject):
         self._variation = 0
         # optional collection filter for the side rail (palette kind)
         self._collection: int | None = None
+        self._starred_only = False
         # active smart collection (sidebar) — criteria filtered in Python
         self._smart_id = 0
         self._refresh_palettes()
@@ -127,6 +128,26 @@ class Colors(QObject):
             self._collection = None
         else:
             self._collection = cid
+        self._starred_only = False
+        self.starredOnlyChanged.emit()
+        self._refresh_palettes()
+
+    # ── starred rail row: filter the pane to starred palettes ──
+    starredOnlyChanged = Signal()
+
+    @Property(bool, notify=starredOnlyChanged)
+    def starredOnly(self) -> bool:
+        return self._starred_only
+
+    @Slot(bool)
+    def set_starred_only(self, on: bool) -> None:
+        on = bool(on)
+        if on == self._starred_only:
+            return
+        self._starred_only = on
+        if on:
+            self._collection = None
+        self.starredOnlyChanged.emit()
         self._refresh_palettes()
 
     @Slot()
@@ -257,7 +278,8 @@ class Colors(QObject):
     # ------------------------------------------------------------ internals
     def _refresh_palettes(self) -> None:
         self._palettes = core_colors.list_palettes(
-            self._con, collection_id=self._collection)
+            self._con, collection_id=self._collection,
+            starred_only=self._starred_only)
         if self._smart_id:
             self._palettes = [p for p in self._palettes
                               if _matches_smart(self._con, self._smart_id, p)]

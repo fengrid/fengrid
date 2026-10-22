@@ -352,6 +352,49 @@ Rectangle {
 
             SectionLabel { text: qsTr("Collections")
                            visible: rail.showCollections }
+            // ── pinned pseudo-collections: everything (works even for
+            // items never added to any collection) and the starred view ──
+            RailItem {
+                visible: rail.showCollections
+                label: qsTr("All assets")
+                count: rail.pane === 0
+                       ? String(library !== null ? library.totalAssets : 0)
+                       : rail.pane === 2
+                         ? String(colors !== null ? colors.palettes.length : 0)
+                         : String(code !== null ? code.snippetCount : 0)
+                active: rail.pane === 0
+                        ? (library !== null && library.collectionFilter === "")
+                        : rail.pane === 2
+                          ? (colors !== null && colors.collectionFilter === ""
+                             && !colors.starredOnly)
+                          : (code !== null && code.collectionFilter === ""
+                             && !code.starredOnly)
+                onPicked: {
+                    if (rail.pane === 0 && library !== null)
+                        library.set_collection("")
+                    else if (rail.pane === 2 && colors !== null)
+                        colors.set_collection("")
+                    else if (rail.pane === 3 && code !== null)
+                        code.set_collection("")
+                }
+            }
+            RailItem {
+                visible: rail.showCollections && rail.pane !== 0
+                label: qsTr("Starred")
+                count: String(library !== null
+                              ? library.starred_count(rail.pane === 2
+                                                      ? "palette" : "snippet")
+                              : 0)
+                active: rail.pane === 2
+                        ? (colors !== null && colors.starredOnly)
+                        : (code !== null && code.starredOnly)
+                onPicked: {
+                    if (rail.pane === 2 && colors !== null)
+                        colors.set_starred_only(!colors.starredOnly)
+                    else if (rail.pane === 3 && code !== null)
+                        code.set_starred_only(!code.starredOnly)
+                }
+            }
             Repeater {
                 model: library.collections
                 RailItem {
@@ -364,6 +407,11 @@ Rectangle {
                              && (rail.pane === 0 || collRow.modelData.n === 0
                                  || (collRow.modelData.counts
                                      && collRow.modelData.counts[rail.paneKind] > 0))
+                             // the dedicated Starred row covers the seeded
+                             // starred collection on the palette/snippet panes
+                             && !(rail.pane !== 0
+                                  && collRow.modelData.name
+                                     === "Starred Assets")
                     label: collRow.modelData.name
                     sub: collRow.modelData.tags
                     count: rail.pane === 0

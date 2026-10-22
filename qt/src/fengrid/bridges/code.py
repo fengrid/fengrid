@@ -38,6 +38,7 @@ class Code(QObject):
         self._sort = "updated"
         # optional collection filter for the side rail (snippet kind)
         self._collection: int | None = None
+        self._starred_only = False
         # active smart collection (sidebar) — criteria filtered in Python
         self._smart_id = 0
         self._current_id: int | None = None
@@ -150,6 +151,25 @@ class Code(QObject):
             self._collection = None
         else:
             self._collection = cid
+        self._starred_only = False
+        self.filtersChanged.emit()
+        self._refresh()
+
+    # ── starred rail row: filter the pane to starred snippets ──
+    starredOnlyChanged = Signal()
+
+    @Property(bool, notify=starredOnlyChanged)
+    def starredOnly(self) -> bool:
+        return self._starred_only
+
+    @Slot(bool)
+    def set_starred_only(self, on: bool) -> None:
+        on = bool(on)
+        if on == self._starred_only:
+            return
+        self._starred_only = on
+        if on:
+            self._collection = None
         self.filtersChanged.emit()
         self._refresh()
 
@@ -271,7 +291,7 @@ class Code(QObject):
     def _refresh(self) -> None:
         rows = core_snippets.list_snippets(
             self._con, q=self._q, lang=self._lang, sort=self._sort,
-            collection_id=self._collection)
+            collection_id=self._collection, starred_only=self._starred_only)
         self._snippets = [dict(r) for r in rows]
         if self._smart_id:
             from .colors import _matches_smart

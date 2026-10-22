@@ -283,7 +283,8 @@ def generate(rule: str, colors: list[dict], base_hue: float | None = None,
 
 def list_palettes(con: sqlite3.Connection, q: str = "",
                   sort: str = "updated",
-                  collection_id: int | None = None) -> list[dict]:
+                  collection_id: int | None = None,
+                  starred_only: bool = False) -> list[dict]:
     order = {"updated": "updated DESC", "name": "name COLLATE NOCASE",
              "created": "created DESC"}.get(sort, "updated DESC")
     where, params = [], []
@@ -292,10 +293,18 @@ def list_palettes(con: sqlite3.Connection, q: str = "",
         where.append("(p.name LIKE ? OR p.tags LIKE ?)")
         params += [f"%{q}%", f"%{q}%"]
     if collection_id is not None:
-        join = (" JOIN collection_ref cr ON cr.item_kind = 'palette'"
-                " AND cr.item_id = p.id")
+        join += (" JOIN collection_ref cr ON cr.item_kind = 'palette'"
+                 " AND cr.item_id = p.id")
         where.append("cr.collection_id = ?")
         params.append(collection_id)
+    if starred_only:
+        # membership in the seeded 'Starred Assets' collection (kept in
+        # sync with the starred tag by db.set_starred)
+        join += (" JOIN collection_ref sr ON sr.item_kind = 'palette'"
+                 " AND sr.item_id = p.id"
+                 " AND sr.collection_id = (SELECT id FROM collection"
+                 " WHERE name = 'Starred Assets')")
+        where.append("1 = 1")
     sql = (f"SELECT p.id, p.name, p.tags, p.created, p.updated"
            f" FROM palette p{join}")
     if where:

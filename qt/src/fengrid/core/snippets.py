@@ -358,17 +358,23 @@ def import_file(kind, path):
 # connect() path guarantees the snippet tables exist before this module is
 # used. CRUD here is intentionally schema-free.
 # --------------------------------------------------------------------------
-def list_snippets(con, q="", lang="", sort="updated", collection_id=None):
+def list_snippets(con, q="", lang="", sort="updated", collection_id=None,
+                  starred_only=False):
     """(id, title, description, language, tags, created, updated) rows."""
     sql = ("SELECT s.id, s.title, s.description, s.language, s.tags,"
            " s.created, s.updated FROM snippet s")
     join = ""
     where, args = [], []
     if collection_id is not None:
-        join = (" JOIN collection_ref cr ON cr.item_kind = 'snippet'"
-                " AND cr.item_id = s.id")
+        join += (" JOIN collection_ref cr ON cr.item_kind = 'snippet'"
+                 " AND cr.item_id = s.id")
         where.append("cr.collection_id = ?")
         args.append(collection_id)
+    if starred_only:
+        join += (" JOIN collection_ref sr ON sr.item_kind = 'snippet'"
+                 " AND sr.item_id = s.id"
+                 " AND sr.collection_id = (SELECT id FROM collection"
+                 " WHERE name = 'Starred Assets')")
     if q:
         like = "%" + q.lower() + "%"
         where.append("(lower(s.title) LIKE ? OR lower(s.description) LIKE ?"

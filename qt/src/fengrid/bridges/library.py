@@ -327,6 +327,28 @@ class Library(QObject):
                     " OR lower(js) LIKE ? LIMIT 20",
                     ["%" + term.lower() + "%"] * 6).fetchall()]
 
+    # ── generic starring (any asset kind) — the PropertiesPanel toggle
+    # uses this so palettes/snippets/fonts land in the Starred collection
+    # exactly like icons do ──
+    @Slot(str, int, bool)
+    def set_item_starred(self, kind: str, item_id: int, starred: bool) -> None:
+        core_db.set_starred(self._con, int(item_id), bool(starred), kind=kind)
+        self._refresh_lists()
+        if starred:
+            self.message.emit(
+                f"Starred {kind} #{item_id} — added to Starred Assets")
+        else:
+            self.message.emit(f"Unstarred {kind} #{item_id}")
+
+    @Slot(str, result=int)
+    def starred_count(self, kind: str) -> int:
+        """Starred-item count for one kind — the rail's Starred row."""
+        row = self._con.execute(
+            "SELECT COUNT(*) FROM item_tag it JOIN tag t ON t.id = it.tag_id"
+            " WHERE t.name = ? AND it.item_kind = ?",
+            ("starred", kind)).fetchone()
+        return int(row[0])
+
     @Slot(str, str)
     def rename_tag(self, old: str, new: str) -> None:
         if core_db.rename_tag(self._con, old, new):
