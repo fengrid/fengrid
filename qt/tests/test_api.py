@@ -216,6 +216,66 @@ def test_inventory_and_projects(api_env):
     assert st == 200
 
 
+def _real_png(path, w=4, h=4):
+    """A valid tiny PNG (the seeded fixture icon is only header bytes)."""
+    import struct
+    import zlib
+    def chunk(tag, data):
+        body = tag + data
+        return (struct.pack(">I", len(data)) + body
+                + struct.pack(">I", zlib.crc32(body)))
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
+    raw = b"".join(b"\x00" + b"\xff\x00\x00\xff" * w for _ in range(h))
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                     + chunk(b"IDAT", zlib.compress(raw))
+                     + chunk(b"IEND", b""))
+
+
+def _wait_job(b, jid, timeout=15.0):
+    deadline = time.time() + timeout
+    st, body = 0, {}
+    while time.time() < deadline:
+        st, body = _req(b, "GET", f"/api/v1/jobs/{jid}")
+        if body["data"]["state"] in ("done", "failed"):
+            return st, body
+        time.sleep(0.1)
+    return st, body
+
+
+def test_ingest_indexes_materialised_assets(api_env, tmp_path):
+    """Import via the API must place files AND index them — the same
+    post-import scan the GUI bridge runs (regression: API ingest used to
+    copy files without scanning, so assets never appeared)."""
+    b = api_env["base"]
+    png = tmp_path / "ingested.png"
+    _real_png(png)
+    zip_path = tmp_path / "ingested.zip"
+    import zipfile
+    with zipfile.ZipFile(zip_path, "w") as z:
+        inner = tmp_path / "zipped.png"
+        _real_png(inner)
+        z.write(inner, "zipped.png")
+
+    st, body = _req(b, "POST", "/api/v1/assets/ingest",
+                    {"paths": [str(png)]})
+    assert st == 200
+    st, jb = _wait_job(b, body["data"]["id"])
+    assert jb["data"]["state"] == "done", jb["data"].get("error")
+    assert jb["data"]["result"].get("indexed", 0) >= 1
+
+    st, body = _req(b, "POST", "/api/v1/assets/ingest",
+                    {"zip_path": str(zip_path)})
+    assert st == 200
+    st, jb = _wait_job(b, body["data"]["id"])
+    assert jb["data"]["state"] == "done", jb["data"].get("error")
+
+    # both ingested assets are now visible in the catalog
+    st, body = _req(b, "GET", "/api/v1/assets?kind=icon")
+    assert st == 200
+    names = {i["name"] for i in body["data"]["items"]}
+    assert "ingested" in names and "zipped" in names
+
+
 # ────────────────────────────────────────────────────── scheduler + jobs
 def test_scheduler_runs_jobs_and_reports(api_env):
     b = api_env["base"]

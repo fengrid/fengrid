@@ -21,7 +21,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from . import indexer, patterns
+from . import db, indexer, patterns
 
 _COPY_BUFSZ = 64 * 1024
 
@@ -255,3 +255,44 @@ def scan_into(con, sources, progress=None) -> dict:
 def scan_fonts_into(con, sources, progress=None, should_stop=None) -> dict:
     return indexer.scan_fonts(con, sources, progress=progress,
                               should_stop=should_stop)
+
+
+def index_materialised(db_path: str, rep: dict, *,
+                        mode: str = "copy") -> dict:
+    """Register + scan every directory an import just wrote into.
+
+    Shared by the Qt dataio bridge and the REST API so ingested assets
+    become visible no matter which front end issued the import.
+    Returns {"indexed": n, "rescan": True}; {"indexed": 0} when the
+    import report says nothing was placed or names no destination.
+    """
+    dest = rep.get("dest")
+    if not dest or not rep.get("placed"):
+        return {"indexed": 0}
+    con = db.connect(db_path)
+    total = 0
+    try:
+        row = con.execute("SELECT id FROM source WHERE path = ?",
+                          (dest,)).fetchone()
+        if row is None:
+            has_font = any(Path(dest).rglob(ext)
+                           for ext in ("*.ttf", "*.otf", "*.ttc"))
+            con.execute(
+                "INSERT INTO source(kind, path, label, enabled)"
+                " VALUES(?, ?, ?, 1)",
+                ("fontroot" if has_font and mode != "copy"
+                 else ("fontroot" if has_font else "folder"),
+                 dest, Path(dest).parent.name + "/" + Path(dest).name))
+            con.commit()
+            row = con.execute("SELECT id FROM source WHERE path = ?",
+                              (dest,)).fetchone()
+        has_font = any(Path(dest).rglob(ext)
+                       for ext in ("*.ttf", "*.otf", "*.ttc"))
+        if has_font:
+            fr = scan_fonts_into(con, [(row[0], dest)])
+            total += int(fr.get("total", 0))
+        ir = scan_into(con, [(row[0], dest)])
+        total += int(ir.get("total", 0))
+    finally:
+        con.close()
+    return {"indexed": total, "rescan": True}

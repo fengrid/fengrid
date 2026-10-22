@@ -895,37 +895,8 @@ def _admin_summary(op: str, data) -> str:
 
 def _index_materialised(db_path: str, rep: dict, opts: dict) -> dict:
     """Scan every directory we just wrote into (icons + fonts)."""
-    dest = rep.get("dest")
-    if not dest or not rep.get("placed"):
-        return {"indexed": 0}
-    con = core_db.connect(db_path)
-    total = 0
-    try:
-        row = con.execute("SELECT id FROM source WHERE path = ?",
-                          (dest,)).fetchone()
-        if row is None:
-            # sniff: any font files in there?
-            has_font = any(Path(dest).rglob("*.ttf")) or \
-                any(Path(dest).rglob("*.otf"))
-            con.execute(
-                "INSERT INTO source(kind, path, label, enabled)"
-                " VALUES(?, ?, ?, 1)",
-                ("fontroot" if has_font and opts.get("mode") != "copy"
-                 else ("fontroot" if has_font else "folder"),
-                 dest, Path(dest).parent.name + "/" + Path(dest).name))
-            con.commit()
-            row = con.execute("SELECT id FROM source WHERE path = ?",
-                              (dest,)).fetchone()
-        has_font = any(Path(dest).rglob(ext)
-                       for ext in ("*.ttf", "*.otf", "*.ttc"))
-        if has_font:
-            fr = ingest.scan_fonts_into(con, [(row[0], dest)])
-            total += int(fr.get("total", 0))
-        ir = ingest.scan_into(con, [(row[0], dest)])
-        total += int(ir.get("total", 0))
-    finally:
-        con.close()
-    return {"indexed": total, "rescan": True}
+    return ingest.index_materialised(db_path, rep,
+                                     mode=str(opts.get("mode", "copy")))
 
 
 def _watch_state(db_path: str, watch_id: int) -> dict:

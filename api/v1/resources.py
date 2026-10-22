@@ -412,6 +412,8 @@ def assets_ingest(ctx: Api, body: dict) -> dict:
         def run():
             rep = ingest.import_zip(zp, ctx.data_dir, mode=mode)
             rep["last_export_dir"] = rep.get("dest")
+            rep.update(ingest.index_materialised(ctx.db_path, rep,
+                                                 mode=mode))
             return rep
         return ctx.job("import", run)
     if body.get("folder"):
@@ -431,6 +433,7 @@ def assets_ingest(ctx: Api, body: dict) -> dict:
     def run():
         rep = ingest.import_files(real, ctx.data_dir, mode=mode)
         rep["last_export_dir"] = rep.get("dest")
+        rep.update(ingest.index_materialised(ctx.db_path, rep, mode=mode))
         return rep
     return ctx.job("import", run)
 
