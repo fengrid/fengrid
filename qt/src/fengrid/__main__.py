@@ -64,6 +64,12 @@ def _user_data_dir() -> str:
 
 
 def main(argv=None) -> int:
+    # FIRST: drop the benign qt.svg "Duplicate unique style id" flood
+    # (third-party icon sets ship duplicate ids; Qt re-logs per render).
+    # Everything else keeps flowing; FENGRID_DEBUG_QT_SVG=1 shows it all.
+    from fengrid import qtlog
+    qtlog.install()
+
     parser = argparse.ArgumentParser(prog="fengrid")
     parser.add_argument("--screenshot", metavar="PATH",
                         help="render the shell, save a PNG and exit (headless QA)")

@@ -310,6 +310,32 @@ heading font → Bebas Neue confirmed by the user (TTF bundled, OFL license).
 
 ## 17. Validation record
 
+- 2026-10-21, QT LOG NOISE (user report: terminal flooded with
+  `qt.svg: Duplicate unique style id: "..."` while browsing the
+  library): reproduced with a duplicate-id SVG — Qt's SVG handler logs
+  one warning PER duplicate id PER PARSE, and Fengrid re-parses those
+  files constantly (grid `Image{source:file://...}` on view/zoom,
+  library thumbnails via QSvgRenderer, exportplus.render_svg exports/
+  conversions, palette re-renders), so a handful of third-party icon
+  sets bury the terminal. Fix: new `fengrid/qtlog.py`, installed FIRST
+  in `main()`: a Qt message handler that drops ONLY `^Duplicate unique
+  style id:` at QtWarningMsg from category `qt.svg` (anchored regex +
+  severity + category — real SVG parse failures and every other
+  diagnostic still pass through) and reproduces Qt's default output for
+  everything else (`<category>: <message>` on stderr, no prefix for
+  the default category, fd-2 fallback if stderr is gone).
+  `FENGRID_DEBUG_QT_SVG=1` passes the warnings through. Probes that
+  shaped it: Qt writes at the file descriptor, not python's
+  `sys.stderr` object (redirection/capsys cannot see its messages
+  until a handler is installed — afterwards handler output DOES flow
+  through python and IS capturable); shiboken's qInstallMessageHandler
+  returns None, so Qt's default handler cannot be chained — it must be
+  emulated; `QMessageLogContext.category` IS exposed ('default' for
+  unqualified warnings). Validation: `tests/test_qtlog.py` — real
+  QImage+QSvgRenderer flood silenced, unrelated warning survives,
+  scoping by text/severity/category, env passthrough, idempotent
+  install; full suite green; qa_render dark/light clean.
+
 - 2026-10-21, DATA MANAGEMENT SUITE (user spec: complete import/ingest,
   export, backup and SQLite-management featureset surfaced in Settings):
   new core modules — patterns.py (rename engine: template tokens,

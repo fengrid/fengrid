@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Terminal no longer floods with `qt.svg: Duplicate unique style id`
+  warnings while viewing icon sets whose SVGs redeclare paint/gradient
+  ids (dev-qt). Qt re-logs that warning on every render; a scoped Qt
+  message handler now drops exactly that line while every other
+  diagnostic still reaches stderr (`FENGRID_DEBUG_QT_SVG=1` shows them).
+
 - **Font details cramped in the properties panel** — variant cards for
   many-weight families (27+ variants) rendered flush against each other
   with clipped specimen lines: cards hand-bound `height` (racing the
