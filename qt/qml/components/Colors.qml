@@ -98,7 +98,10 @@ Item {
 
             Button {
                 id: genBtn
-                text: qsTr("Generate (space)")
+                text: qsTr("Generate")
+                ToolTip.visible: hovered
+                ToolTip.delay: 350
+                ToolTip.text: qsTr("Use the space bar to generate new color combinations!")
                 onClicked: colors !== null && colors.generate()
                 background: Rectangle {
                     radius: 6
@@ -409,6 +412,7 @@ Item {
 
             component EditSlider: RowLayout {
                 property string label
+                property string tip: ""
                 property real val
                 property real maxVal
                 signal edited(real v)
@@ -417,13 +421,28 @@ Item {
                     font.family: theme.monoFont
                     font.pixelSize: 10
                     color: theme.tokens.textMuted
+                    MouseArea {
+                        id: hslTipArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                    }
+                    ToolTip.visible: parent.tip !== "" && hslTipArea.containsMouse
+                    ToolTip.delay: 350
+                    ToolTip.text: parent.tip
                 }
                 Slider {
                     id: es
                     Layout.preferredWidth: 140
                     from: 0; to: parent.maxVal
                     value: parent.val
-                    onMoved: parent.edited(value)
+                    // dragging breaks the value: parent.val binding (Qt
+                    // slider gotcha) — without this imperative assign,
+                    // applyHsl kept reading the STALE pre-drag val and the
+                    // swatch never changed: "the HSL sliders don't work"
+                    onMoved: {
+                        parent.val = value
+                        parent.edited(value)
+                    }
                 }
                 Text {
                     text: Math.round(parent.val)
@@ -436,16 +455,19 @@ Item {
             EditSlider {
                 id: hSlider
                 label: "H"; maxVal: 360
+                tip: qsTr("Hue — 0–360° around the color wheel")
                 onEdited: val => applyHsl()
             }
             EditSlider {
                 id: sSlider
                 label: "S"; maxVal: 100
+                tip: qsTr("Saturation — 0 = gray, 100 = fully saturated")
                 onEdited: val => applyHsl()
             }
             EditSlider {
                 id: lSlider
                 label: "L"; maxVal: 100
+                tip: qsTr("Lightness — 0 = black, 100 = white")
                 onEdited: val => applyHsl()
             }
 
@@ -587,11 +609,19 @@ Item {
                         // a glance; the icon swap alone is too subtle
                         tint: swCard.modelData.locked
                               ? theme.tokens.litPane : "#FFFFFF"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 350
+                        ToolTip.text: swCard.modelData.locked
+                              ? qsTr("Locked — this color stays fixed when Generate runs (click to unlock)")
+                              : qsTr("Lock this color so it stays fixed when Generate runs")
                         onClicked: colors !== null && colors.toggle_lock(
                             swCard.index)
                     }
                     SwTool {
                         icon_name: "x"
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 350
+                        ToolTip.text: qsTr("Remove this swatch from the palette")
                         onClicked: colors !== null && colors.remove_swatch(
                             swCard.index)
                     }

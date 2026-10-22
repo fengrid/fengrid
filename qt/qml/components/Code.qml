@@ -908,6 +908,9 @@ Item {
                     Button {
                         id: saveBtn
                         text: dirty ? qsTr("Save •") : qsTr("Save")
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 350
+                        ToolTip.text: qsTr("Save the snippet (Ctrl+S)")
                         Layout.preferredHeight: 26
                         onClicked: codeRoot.saveSnippet()
                         background: Rectangle {
@@ -1010,17 +1013,27 @@ Item {
 
         // two-row editor layout: upper row = snippet editor;
         // lower row = preview spanning the right two-thirds
-        ColumnLayout {
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            spacing: 0
 
-            // ---- row 1: editor (upper middle)
-            Rectangle {
+            // ---- row 1 (40%): editor + snippet property inspector.
+            // Plain anchors: Layout.fillHeight is a bool in Qt6 (no
+            // stretch weights) and child preferredHeight bindings on
+            // parent.height are circular — fractions of the fixed-band
+            // item are the honest 40/60 split.
+            RowLayout {
                 id: editorRow
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                color: theme.tokens.bg
+                anchors { top: parent.top; left: parent.left
+                         right: parent.right }
+                height: parent.height * 0.4 - 0.5
+                spacing: 0
+
+                Rectangle {
+                    id: editorPane
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: theme.tokens.bg
                 Flickable {
                     id: edFlick
                     anchors.fill: parent
@@ -1432,29 +1445,32 @@ Item {
                 }
             }
 
+                PropertiesPanel {
+                    id: snipInspector
+                    Layout.preferredWidth: 300
+                    Layout.fillHeight: true
+                    itemKind: "snippet"
+                    itemId: code !== null ? code.currentId : -1
+                    visible: itemId >= 0
+                }
+            }
+
             Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
+                anchors { top: editorRow.bottom; left: parent.left
+                         right: parent.right }
+                height: 1
                 color: theme.tokens.border
             }
 
-            // ---- row 2: preview in the lower right two-thirds
+            // ---- row 2 (60%): preview across the full band — the
+            // inspector lives in row 1, so nothing squeezes it now
             Item {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+                anchors { top: editorRow.bottom; left: parent.left
+                         right: parent.right; bottom: parent.bottom }
                 clip: true
 
-                Rectangle {   // quiet left third
-                    anchors { top: parent.top; bottom: parent.bottom
-                             left: parent.left }
-                    width: parent.width / 3
-                    color: theme.tokens.surface2
-                }
-
-                Rectangle {   // live preview (right two thirds)
-                    anchors { top: parent.top; bottom: parent.bottom
-                             right: parent.right }
-                    width: parent.width * 2 / 3
+                Rectangle {   // live preview
+                    anchors.fill: parent
                     color: theme.tokens.surface
                     Item {
                         anchors.fill: parent

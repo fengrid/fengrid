@@ -36,6 +36,23 @@ ApplicationWindow {
     property bool setupOpen: typeof initialFirstRun !== "undefined"
                              && initialFirstRun
     property string pendingCategory: ""
+    // ── status-bar tip ticker + short-lived notices. Details win: while
+    // a notice (scan summaries, export results, errors) is live the tips
+    // step aside; notices decay and the rotation resumes.
+    property var statusTips: [
+        qsTr("Use the space bar to generate new color combinations!"),
+        qsTr("Alt + / opens the slash menu — jump anywhere, run anything"),
+        qsTr("Lock a swatch to keep it fixed while generating"),
+        qsTr("Right-click anything for its context menu"),
+        qsTr("Hover a color swatch for WCAG contrast readouts"),
+        qsTr("Mark snippets with tags to build smart collections"),
+        qsTr("Watch folders ingest new assets automatically — Settings → Import & Watch"),
+        qsTr("Save a project revision before big token changes")
+    ]
+    property int statusTipIdx: 0
+    property string statusNotice: ""
+    property string statusTip:
+        statusTips[statusTipIdx % statusTips.length]
     property bool paletteOpen: false
     // launch-scan session: true only when __main__ scheduled the initial
     // scans — ends the moment they go quiet so manual rescans never
@@ -358,6 +375,9 @@ ApplicationWindow {
             }
             Slider {
                 id: sizeSlider
+                ToolTip.visible: hovered
+                ToolTip.delay: 400
+                ToolTip.text: qsTr("Grid tile size on the icons pane")
                 from: 16
                 to: 256
                 stepSize: 16
@@ -460,15 +480,15 @@ ApplicationWindow {
             id: propsPanel
             Layout.preferredWidth: 300
             Layout.fillHeight: true
-            itemKind: root.pane === 1 ? "font"
-                      : root.pane === 2 ? "palette" : "snippet"
+            itemKind: root.pane === 1 ? "font" : "palette"
             itemId: root.pane === 1
                     ? (fonts !== null
                        ? fonts.family_primary_id(fonts.selectedFamily) : -1)
-                    : root.pane === 2
-                      ? (colors !== null ? colors.paletteId : -1)
-                      : (code !== null ? code.currentId : -1)
-            visible: root.pane >= 1 && root.pane <= 3 && itemId >= 0
+                    : (colors !== null ? colors.paletteId : -1)
+            // pane 3 hosts its own PropertiesPanel in the editor row —
+            // the snippet preview spans the FULL lower band, so the
+            // Main-level inspector would push it out of the window
+            visible: root.pane >= 1 && root.pane <= 2 && itemId >= 0
         }
     }
 
@@ -521,6 +541,40 @@ ApplicationWindow {
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: theme.tokens.textMuted
+            }
+            // tip ticker / notification area — yields to every detail:
+            // hidden while scanning, while a notice is live, and while
+            // the version notice is up
+            Text {
+                // the separator keeps the tip visually distinct from the
+                // indexed details it must never displace
+                text: "| " + root.statusTip
+                visible: library !== null && !library.scanning
+                         && root.statusNotice === ""
+                         && !(updater !== null && updater.updateAvailable)
+                font.family: theme.monoFont
+                font.pixelSize: 11
+                color: theme.tokens.textMuted
+                opacity: 0.85
+                elide: Text.ElideRight
+                Layout.maximumWidth: 420
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.statusTipIdx++
+                }
+                ToolTip.visible: hovered
+                ToolTip.text: root.statusTip
+            }
+            Text {
+                text: root.statusNotice !== "" ? "| " + root.statusNotice : ""
+                visible: root.statusNotice !== ""
+                font.family: theme.monoFont
+                font.pixelSize: 11
+                color: theme.tokens.text
+                elide: Text.ElideRight
+                Layout.maximumWidth: 420
             }
             Item { Layout.fillWidth: true }
             Text {
@@ -903,9 +957,26 @@ ApplicationWindow {
 
     Toast { id: toast }
 
+    Timer {
+        interval: 6000
+        running: root.statusNotice === "" && !root.paletteOpen
+                 && !root.settingsOpen && !root.setupOpen
+        repeat: true
+        onTriggered: root.statusTipIdx++
+    }
+    Timer {
+        id: noticeDecay
+        interval: 8000
+        onTriggered: root.statusNotice = ""
+    }
+    function statusNote(msg) {
+        root.statusNotice = msg
+        noticeDecay.restart()
+    }
+
     Connections {
         target: dataio
-        function onMessage(msg) { toast.show(msg) }
+        function onMessage(msg) { toast.show(msg); root.statusNote(msg) }
         // import/watch jobs index on their own connection — the main
         // bridge models must re-walk (fingerprints keep this cheap)
         function onImportFinished(report) {
@@ -916,9 +987,15 @@ ApplicationWindow {
 
     Connections {
         target: library
-        function onMessage(msg) { toast.show(msg) }
-        function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
-        function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
+        function onMessage(msg) { toast.show(msg); root.statusNote(msg) }
+        function onExportDone(path) {
+            var m = qsTr("Exported to %1").arg(path)
+            toast.show(m); root.statusNote(m)
+        }
+        function onExportFailed(err) {
+            var m = qsTr("Export failed: %1").arg(err)
+            toast.show(m); root.statusNote(m)
+        }
     }
     Connections {
         target: fonts

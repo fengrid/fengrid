@@ -226,7 +226,13 @@ class Taxonomy(QObject):
         custom field values (with definitions), links, and kind-specific
         detail data — for any kind."""
         if not core_tax._item_exists(self._con, kind, item_id):
-            return {}
+            # MISSING item (deleted under the panel, sweep, db switch):
+            # NEVER return a truthy-but-empty {} — every QML binding does
+            # panel.props.meta.<key>.<field>, which throws on a partial
+            # payload ("Value is undefined...", frozen-build terminal
+            # flood). Shape the null case like a real payload.
+            return {"kind": kind, "id": item_id, "tags": [], "fields": [],
+                    "links": [], "meta": {}, "starred": False}
         tags = core_db.tags_for(self._con, item_id, kind)
         fields = core_tax.asset_field_values(self._con, item_id, kind)
         links = core_tax.links_for(self._con, kind, item_id, "both")
@@ -257,7 +263,8 @@ class Taxonomy(QObject):
                 "SELECT title, description, language, created, updated"
                 " FROM snippet WHERE id = ?", (item_id,)).fetchone()
             if row is None:
-                return {}
+                return {"title": "", "description": "", "language": "",
+                        "created": "", "updated": ""}
             return {"title": row["title"],
                     "description": row["description"],
                     "language": row["language"],
@@ -267,7 +274,7 @@ class Taxonomy(QObject):
                 "SELECT name, path FROM asset WHERE id = ?",
                 (item_id,)).fetchone()
             if row is None:
-                return {}
+                return {"name": "", "path": ""}
             return {"name": row["name"], "path": row["path"]}
         return {}
 

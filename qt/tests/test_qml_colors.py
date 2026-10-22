@@ -16,7 +16,9 @@ os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF
 from PySide6.QtGui import QGuiApplication, QMouseEvent
+from PySide6.QtTest import QTest
 from PySide6.QtTest import QTest
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickWindow
@@ -217,3 +219,82 @@ def test_lock_survives_rule_switch_and_generate(colors_ui):
     assert bridge.swatches[0]["hex"] == locked_before[0]
     assert bridge.swatches[2]["hex"] == locked_before[1]
     assert bridge.swatches[0]["locked"] and bridge.swatches[2]["locked"]
+
+
+def test_hsl_slider_drag_updates_swatch(colors_ui):
+    """Regression: dragging an HSL slider never moved the swatch. The
+    EditSlider Slider broke its `value: parent.val` binding on first drag
+    (Qt slider gotcha) while onMoved only forwarded `value` to applyHsl,
+    which read the STALE component-level `val` — the swatch hex never
+    changed. onMoved must assign parent.val imperatively before editing.
+    """
+    ed = colors_ui
+    bridge, win, root = ed["colors"], ed["win"], ed["root"]
+
+    bridge.select(0)
+    _qapp().processEvents()
+    before_hex = bridge.swatches[0]["hex"]
+    before_h = bridge.swatches[0]["h"]
+
+    # find the three EditSlider instances; identify by label
+    sliders = []
+    stack = [root]
+    while stack:
+        o = stack.pop()
+        if o.metaObject().className().startswith("EditSlider"):
+            sliders.append(o)
+        stack.extend(o.childItems())
+    assert len(sliders) == 3, f"expected 3 EditSliders, got {len(sliders)}"
+    by_label = {}
+    for s in sliders:
+        by_label[s.property("label")] = s
+    h = by_label["H"]
+    hslider = h.findChild(QObject, None)  # placeholder, replaced below
+
+    # the inner QQuickSlider: walk children for the Slider type
+    def find_slider(item):
+        hits, seen = [], []
+        stack2 = [item]
+        while stack2:
+            o = stack2.pop()
+            cn = o.metaObject().className()
+            seen.append(cn)
+            if cn.startswith("Slider_") and "Groove" not in cn and "Handle" not in cn:
+                hits.append(o)
+            stack2.extend(o.childItems())
+        print("CHILD CLASSES:", seen)
+        return hits[0]
+
+    hs = find_slider(h)
+    start = hs.mapToScene(QPointF(hs.width() / 2, hs.height() / 2))
+    # drag the handle to ~80% of the track
+    target_x = start.x() + hs.width() * 0.3
+    y = start.y()
+    ev = QMouseEvent(QEvent.MouseButtonPress, QPointF(start.x(), y),
+                     QPointF(start.x(), y), Qt.LeftButton, Qt.LeftButton,
+                     Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+    for frac in (0.05, 0.15, 0.3):
+        ev = QMouseEvent(QEvent.MouseMove, QPointF(target_x, y),
+                         QPointF(target_x, y), Qt.NoButton, Qt.LeftButton,
+                         Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(win, ev)
+        _qapp().processEvents()
+    ev = QMouseEvent(QEvent.MouseButtonRelease, QPointF(target_x, y),
+                     QPointF(target_x, y), Qt.LeftButton, Qt.NoButton,
+                     Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+    QTest.qWait(50)
+
+    after_hex = bridge.swatches[0]["hex"]
+    after_h = bridge.swatches[0]["h"]
+    assert after_h != before_h, \
+        "dragging the H slider must move the hue (before=%s after=%s)" % (
+            before_h, after_h)
+    assert after_hex != before_hex, \
+        "dragging the H slider must change the swatch hex"
+    # the component val must track the slider (readout correctness)
+    assert abs(h.property("val") - after_h) <= 2, (
+        h.property("val"), after_h)
