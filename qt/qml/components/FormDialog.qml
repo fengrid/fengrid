@@ -47,45 +47,18 @@ Dialog {
         }
     }
 
-    footer: RowLayout {
-        spacing: 8
-        Item { Layout.fillWidth: true }
-        Button {
-            text: shell.cancelLabel
-            onClicked: shell.reject()
-            background: Rectangle {
-                radius: 6; color: theme.tokens.surface2
-                border.color: theme.tokens.border
-            }
-            contentItem: Text {
-                text: parent.text
-                color: theme.tokens.text
-                font.family: theme.uiFont; font.pixelSize: 12
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                leftPadding: 14; rightPadding: 14
-            }
-        }
-        Button {
-            text: shell.acceptLabel
-            enabled: shell.acceptEnabled
-            onClicked: {
-                shell.apply()
-                shell.accept()      // closes + emits accepted()
-            }
-            background: Rectangle {
-                radius: 6
-                color: shell.acceptEnabled ? theme.tokens.accent
-                                           : theme.tokens.border
-            }
-            contentItem: Text {
-                text: parent.text
-                color: theme.tokens.bg
-                font.family: theme.uiFont; font.pixelSize: 12
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                leftPadding: 14; rightPadding: 14
-            }
+    // Dialog padding insets the contentItem only — the footer sits flush
+    // against the background edge (buttons touched the corner).
+    // FgDialogFooter restores the same 16px insets the content column
+    // uses, and every themed dialog shares it.
+    footer: FgDialogFooter {
+        cancelLabel: shell.cancelLabel
+        acceptLabel: shell.acceptLabel
+        acceptEnabled: shell.acceptEnabled
+        onCancelClicked: shell.reject()
+        onAcceptClicked: {
+            shell.apply()
+            shell.accept()      // closes + emits accepted()
         }
     }
 }

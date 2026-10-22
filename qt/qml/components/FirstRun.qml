@@ -505,9 +505,9 @@ Rectangle {
 
                         SettingRow {
                             section: "behavior"
-                            label: qsTr("Command bar hotkey")
-                            desc: qsTr("Opens the command bar from anywhere — search assets and snippets, run commands. Default Alt + `.")
-                            keys: "command bar palette hotkey shortcut key sequence spotlight alfred vscode search jump"
+                            label: qsTr("Slash menu hotkey")
+                            desc: qsTr("Opens the slash menu from anywhere — search assets and snippets, run commands. Default Alt + /.")
+                            keys: "slash menu palette hotkey shortcut key sequence spotlight alfred vscode search jump"
                             RowLayout {
                                 spacing: 8
                                 Layout.alignment: Qt.AlignVCenter
@@ -524,7 +524,7 @@ Rectangle {
                                     text: qsTr("Reset")
                                     onClicked: prefs !== null
                                                && prefs.set_command_shortcut(
-                                                   "Alt+`")
+                                                   "Alt+/")
                                 }
                             }
                         }

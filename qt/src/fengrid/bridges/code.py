@@ -155,11 +155,33 @@ class Code(QObject):
 
     @Slot()
     def new_snippet(self) -> None:
+        self.new_snippet_in("web")
+
+    @Slot(str)
+    def new_snippet_in(self, lang: str) -> None:
+        """New snippet in an editor-suite language (dropdown / / command)."""
         self._current_id = None
         self._current = {"id": -1, "title": "", "description": "",
-                         "language": "web", "html": "", "css": "", "js": "",
-                         "tags": "", "created": "", "updated": ""}
+                         "language": lang or "web", "html": "", "css": "",
+                         "js": "", "tags": "", "created": "", "updated": ""}
         self.currentChanged.emit()
+
+    @Property("QVariantList", constant=True)
+    def languages(self) -> list:
+        """Snippet editor language suite (dropdown + / command)."""
+        return core_snippets.editor_languages()
+
+    @Slot(str, result=str)
+    def body_field(self, lang: str) -> str:
+        """Single body field for a non-web editor language; "" for the
+        web fiddle (which keeps all three tabs)."""
+        field = core_snippets.language_field(lang)
+        return field or ""
+
+    @Slot(str, bool, result=str)
+    def markdown_html(self, md: str, dark: bool = False) -> str:
+        """GitHub-styled full HTML document for the markdown preview."""
+        return core_snippets.markdown_doc(md, bool(dark))
 
     @Slot(str, int, result="QVariantList")
     def palette_search(self, query: str, limit: int = 8) -> list:

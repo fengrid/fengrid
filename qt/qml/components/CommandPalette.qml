@@ -3,9 +3,9 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "."
 
-// Command bar — the cross between VS Code's command palette, macOS
+// Slash menu — the cross between VS Code's command palette, macOS
 // Spotlight and Dash/Alfred: one input over commands, assets, snippets
-// and databases, opened with the configured hotkey (Alt+` by default)
+// and databases, opened with the configured hotkey (Alt+/ by default)
 // or the header's magnifier. Activation SIGNALS OUT to the shell, which
 // owns every action (this file can't see Main's ids). Groups render as
 // ListView sections; typing never mutates the grid's own search state —
@@ -52,10 +52,11 @@ Item {
             { id: "rescan-fonts", t: qsTr("Rescan fonts"), g: qsTr("Actions"), k: "scan refresh index rebuild font" },
             { id: "toggle-theme", t: qsTr("Toggle dark / light theme"), g: qsTr("Actions"), k: "theme dark light appearance mode color" },
             { id: "generate-palette", t: qsTr("Generate a color palette"), g: qsTr("Actions"), k: "colors palette generate harmony random" },
+            { id: "new-snippet", t: qsTr("New snippet"), g: qsTr("Actions"), k: "snippet create new code editor language slash command markdown python" },
             { id: "check-updates", t: qsTr("Check for updates"), g: qsTr("Actions"), k: "update release version upgrade" },
             { id: "open-settings", t: qsTr("Open settings"), g: qsTr("Preferences"), k: "settings preferences config options" },
             { id: "run-setup", t: qsTr("Run first-time setup again"), g: qsTr("Preferences"), k: "setup first-run wizard configure paths folders" },
-            { id: "command-shortcut", t: qsTr("Change command bar shortcut"), g: qsTr("Preferences"), k: "hotkey keyboard shortcut keybinding command bar" },
+            { id: "command-shortcut", t: qsTr("Change slash menu shortcut"), g: qsTr("Preferences"), k: "hotkey keyboard shortcut keybinding slash menu" },
             { id: "new-db", t: qsTr("New database…"), g: qsTr("Databases"), k: "database new create file" },
             { id: "open-db", t: qsTr("Open database…"), g: qsTr("Databases"), k: "database open file load" },
             { id: "star-db", t: qsTr("Star / unstar current database"), g: qsTr("Databases"), k: "star favorite quick access pin" },

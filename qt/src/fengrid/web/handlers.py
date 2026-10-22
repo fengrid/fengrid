@@ -72,16 +72,23 @@ class PreviewRequestInterceptor(QWebEngineUrlRequestInterceptor):
             info.block(True)
 
 
-def make_preview_profile(con, parent=None) -> QWebEngineProfile:
+def make_preview_profile(con, parent=None) -> "QQuickWebEngineProfile":
     """Off-the-record profile wired to the allowlist scheme + interceptor.
 
     The interceptor and handler are parented to the profile so they live
     and die with it (Python GC must not outlive Chromium's references).
+
+    Must be a QQuickWebEngineProfile — QML's WebEngineView.profile takes
+    the QUICK profile class; assigning the core QWebEngineProfile fails
+    at load ("Unable to assign QWebEngineProfile to
+    QQuickWebEngineProfile") and the view silently falls back to the
+    DEFAULT profile — no interceptor, no scheme handler.
     """
-    profile = QWebEngineProfile(parent)  # default ctor = off-the-record
-    profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.NoCache)
+    from PySide6.QtWebEngineQuick import QQuickWebEngineProfile
+    profile = QQuickWebEngineProfile(parent)  # default ctor = off-the-record
+    profile.setHttpCacheType(QQuickWebEngineProfile.HttpCacheType.NoCache)
     profile.setPersistentCookiesPolicy(
-        QWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies)
+        QQuickWebEngineProfile.PersistentCookiesPolicy.NoPersistentCookies)
     interceptor = PreviewRequestInterceptor(profile)
     profile.setUrlRequestInterceptor(interceptor)
     handler = AssetSchemeHandler(con, profile)

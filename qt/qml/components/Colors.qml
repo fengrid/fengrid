@@ -661,14 +661,14 @@ Item {
             radius: 8; color: theme.tokens.surface
             border.color: theme.tokens.border
         }
-        MenuItem {
+        FgMenuItem {
             text: qsTr("Load into generator")
             height: 28
             enabled: palMenu.target !== null
             onTriggered: palMenu.target
                          && colors.open_palette(palMenu.target.id)
         }
-        MenuItem {
+        FgMenuItem {
             text: qsTr("Export…")
             height: 28
             enabled: palMenu.target !== null
@@ -679,7 +679,7 @@ Item {
                 exportDialog.open()
             }
         }
-        MenuItem {
+        FgMenuItem {
             text: qsTr("Add to collection")
             height: 28
             enabled: palMenu.target !== null
@@ -690,11 +690,11 @@ Item {
                                     palMenu.target.id, palMenu.target.name)
             }
         }
-        MenuSeparator {
+        FgMenuSeparator {
             topPadding: 3; bottomPadding: 3
             contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
         }
-        MenuItem {
+        FgMenuItem {
             text: qsTr("Delete palette")
             height: 28
             enabled: palMenu.target !== null

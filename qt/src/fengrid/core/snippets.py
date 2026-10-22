@@ -65,6 +65,71 @@ def map_language(raw):
 
 
 # --------------------------------------------------------------------------
+# Editor language suite — the dropdown (and / command) in the snippet
+# editor. "web" keeps the three-tab HTML/CSS/JS fiddle; "markdown" gets a
+# live GitHub-styled preview; every other entry is a single-body language
+# whose code lives in the field `language_field()` returns. The snippet
+# schema stays html/css/js, so 0.x stores and VSCode/massCode imports
+# round-trip unchanged — imports keep the legacy "web" fiddle mapping and
+# the user can retag the language from the dropdown afterwards.
+# --------------------------------------------------------------------------
+EDITOR_LANGUAGES = [
+    ("web", None),
+    ("markdown", "html"),
+    ("python", "js"),
+    ("shell", "js"),
+    ("javascript", "js"),
+    ("typescript", "js"),
+    ("go", "js"),
+    ("rust", "js"),
+    ("c", "js"),
+    ("cpp", "js"),
+    ("csharp", "js"),
+    ("java", "js"),
+    ("kotlin", "js"),
+    ("swift", "js"),
+    ("ruby", "js"),
+    ("php", "js"),
+    ("lua", "js"),
+    ("perl", "js"),
+    ("r", "js"),
+    ("haskell", "js"),
+    ("scala", "js"),
+    ("dart", "js"),
+    ("powershell", "js"),
+    ("sql", "js"),
+    ("yaml", "js"),
+    ("toml", "js"),
+    ("json", "js"),
+    ("dockerfile", "js"),
+    ("makefile", "js"),
+    ("diff", "js"),
+    ("ini", "js"),
+    ("plaintext", "js"),
+    ("xml", "html"),
+    ("svg", "html"),
+    ("css", "css"),
+    ("scss", "css"),
+]
+
+_LANG_FIELD = dict(EDITOR_LANGUAGES)
+
+
+def editor_languages() -> list[str]:
+    """Language keys offered by the snippet editor dropdown, in order."""
+    return [k for k, _ in EDITOR_LANGUAGES]
+
+
+def language_field(lang: str) -> str | None:
+    """Body field for an editor language: None for the web fiddle (which
+    has three fields), else the single html/css/js field it edits."""
+    key = (lang or "").strip().lower()
+    if key not in _LANG_FIELD:
+        key = "web"
+    return _LANG_FIELD[key]
+
+
+# --------------------------------------------------------------------------
 # JSONC — VSCode snippet files allow // and /* */ comments and trailing
 # commas. A small state machine strips comments while respecting string
 # literals (so "http://…" survives), then trailing commas are removed.
@@ -365,3 +430,206 @@ def update_snippet(con, sid, title, description, language, html, css, js, tags):
 def delete_snippet(con, sid) -> None:
     con.execute("DELETE FROM snippet WHERE id = ?", (sid,))
     con.commit()
+
+
+# --------------------------------------------------------------------------
+# Markdown → HTML (snippet preview). A compact GitHub-flavoured subset:
+# headings, hr, fenced code (with language tag), blockquotes, pipe tables,
+# ordered/unordered lists, inline code / bold / italic / strikethrough,
+# links and images, paragraphs. No dependencies — the renderer ships in
+# the frozen bundle.
+# --------------------------------------------------------------------------
+def _md_inline(text: str) -> str:
+    """Inline markdown: code, bold, italic, strike, links, images."""
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = re.sub(r"!\[([^\]]*)\]\(([^)\s]+)\)",
+                  r'<img src="\2" alt="\1">', text)
+    text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)",
+                  r'<a href="\2">\1</a>', text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
+    text = re.sub(r"__([^_]+)__", r"<strong>\1</strong>", text)
+    text = re.sub(r"(?<!\*)\*([^*\s][^*]*)\*(?!\*)", r"<em>\1</em>", text)
+    text = re.sub(r"_([^_\s][^_]*)_(?!\w)", r"<em>\1</em>", text)
+    text = re.sub(r"~~([^~]+)~~", r"<del>\1</del>", text)
+    return text
+
+
+def _md_table(rows: list[str]) -> str:
+    """A pipe table: row 0 header, row 1 alignment dashes, rest body."""
+    cells = lambda r: [c.strip() for c in r.strip().strip("|").split("|")]
+    head = cells(rows[0])
+    body = [cells(r) for r in rows[2:]]
+    out = ["<table>", "<thead>", "<tr>"]
+    out += [f"<th>{_md_inline(c)}</th>" for c in head]
+    out += ["</tr>", "</thead>", "<tbody>"]
+    for r in body:
+        out.append("<tr>")
+        out += [f"<td>{_md_inline(c)}</td>" for c in r]
+        out.append("</tr>")
+    out += ["</tbody>", "</table>"]
+    return "".join(out)
+
+
+def markdown_html(md: str) -> str:
+    """Render a GitHub-flavoured markdown fragment to HTML."""
+    md = (md or "").replace("\r\n", "\n")
+    lines = md.split("\n")
+    out: list[str] = []
+    i, n = 0, len(lines)
+    while i < n:
+        line = lines[i]
+        stripped = line.strip()
+
+        # fenced code block
+        fence = re.match(r"^(```+|~~~+)\s*(\S*)$", stripped)
+        if fence:
+            fence_tok, lang = fence.group(1)[:3], fence.group(2)
+            block = []
+            i += 1
+            while i < n and not lines[i].strip().startswith(fence_tok):
+                block.append(lines[i])
+                i += 1
+            i += 1  # closing fence (or EOF)
+            cls = f' class="language-{lang}"' if lang else ""
+            body = _md_inline("\n".join(block)) if lang == "html" else \
+                "\n".join(block)
+            body = body.replace("&", "&amp;").replace("<", "&lt;") \
+                       .replace(">", "&gt;")
+            out.append(f"<pre><code{cls}>{body}</code></pre>")
+            continue
+
+        # pipe table (header + alignment row + >=1 body row)
+        if (stripped.startswith("|") and i + 1 < n
+                and re.match(r"^\s*\|?[\s:|-]+\|?\s*$", lines[i + 1])
+                and "-" in lines[i + 1]):
+            rows = [line]
+            i += 1
+            while i < n and lines[i].strip().startswith("|"):
+                rows.append(lines[i])
+                i += 1
+            if len(rows) >= 3:
+                out.append(_md_table(rows))
+                continue
+
+        # heading
+        h = re.match(r"^(#{1,6})\s+(.*?)(\s+#+\s*)?$", stripped)
+        if h:
+            lvl = len(h.group(1))
+            out.append(f"<h{lvl}>{_md_inline(h.group(2))}</h{lvl}>")
+            i += 1
+            continue
+
+        # hr
+        if re.match(r"^(\*\s*){3,}$|^(-\s*){3,}$|^(_\s*){3,}$", stripped):
+            out.append("<hr>")
+            i += 1
+            continue
+
+        # blockquote
+        if stripped.startswith(">"):
+            block = []
+            while i < n and lines[i].strip().startswith(">"):
+                block.append(lines[i].strip()[1:].strip())
+                i += 1
+            out.append(f"<blockquote>{markdown_html(chr(10).join(block))}"
+                       f"</blockquote>")
+            continue
+
+        # lists (one indent level; ul/ol mixed by marker)
+        li = re.match(r"^(\s*)([-*+]|\d+\.)\s+(.*)$", line)
+        if li:
+            ordered = bool(re.match(r"^\d+\.", li.group(2)))
+            tag = "ol" if ordered else "ul"
+            items = []
+            while i < n:
+                m = re.match(r"^(\s*)([-*+]|\d+\.)\s+(.*)$", lines[i])
+                if not m or bool(re.match(r"^\d+\.", m.group(2))) != ordered:
+                    break
+                items.append(f"<li>{_md_inline(m.group(3))}</li>")
+                i += 1
+            out.append(f"<{tag}>{''.join(items)}</{tag}>")
+            continue
+
+        # blank line closes a paragraph
+        if not stripped:
+            i += 1
+            continue
+
+        # paragraph: consecutive non-empty, non-structural lines
+        para = [stripped]
+        i += 1
+        while i < n:
+            s2 = lines[i].strip()
+            if (not s2 or s2.startswith("#") or s2.startswith(">")
+                    or s2.startswith("|") or s2.startswith("```")
+                    or s2.startswith("~~~")
+                    or re.match(r"^([-*+]|\d+\.)\s+", s2)):
+                break
+            para.append(s2)
+            i += 1
+        out.append(f"<p>{_md_inline('<br>'.join(para))}</p>")
+
+    return "\n".join(out)
+
+
+# GitHub-markdown-flavoured stylesheet, tokenised for dark/light. The
+# palette follows github.com's primer values (both modes), scoped to the
+# preview surface only — user CSS can override by editing the snippet's
+# markdown (the renderer honours <style> in raw HTML blocks too).
+_MD_CSS = """
+:root {
+  --bg: %(bg)s; --fg: %(fg)s; --border: %(border)s;
+  --muted: %(muted)s; --code-bg: %(codebg)s; --accent: %(accent)s;
+}
+body { margin: 0; padding: 24px; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica,
+  Arial, sans-serif; font-size: 16px; line-height: 1.6;
+  word-wrap: break-word; }
+h1, h2, h3, h4, h5, h6 { margin: 24px 0 16px; font-weight: 600;
+  line-height: 1.25; }
+h1 { font-size: 2em; border-bottom: 1px solid var(--border);
+  padding-bottom: .3em; }
+h2 { font-size: 1.5em; border-bottom: 1px solid var(--border);
+  padding-bottom: .3em; }
+h3 { font-size: 1.25em; } h4 { font-size: 1em; }
+p { margin: 0 0 16px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas,
+  'Liberation Mono', Menlo, monospace; font-size: 85%%; padding: .2em .4em;
+  background: var(--code-bg); border-radius: 6px; }
+pre { background: var(--code-bg); border-radius: 6px; padding: 16px;
+  overflow: auto; line-height: 1.45; }
+pre code { padding: 0; background: transparent; font-size: 100%%; }
+blockquote { margin: 0 0 16px; padding: 0 1em; color: var(--muted);
+  border-left: .25em solid var(--border); }
+table { border-collapse: collapse; margin-bottom: 16px; display: block;
+  overflow: auto; }
+th, td { border: 1px solid var(--border); padding: 6px 13px; }
+th { font-weight: 600; background: var(--code-bg); }
+tr:nth-child(2n) { background: var(--code-bg); }
+img { max-width: 100%%; }
+hr { height: 1px; border: 0; background: var(--border); margin: 24px 0; }
+ul, ol { margin: 0 0 16px; padding-left: 2em; }
+del { color: var(--muted); }
+"""
+
+_MD_THEMES = {
+    False: {   # light — GitHub light
+        "bg": "#ffffff", "fg": "#1f2328", "border": "#d0d7de",
+        "muted": "#656d76", "codebg": "#f6f8fa", "accent": "#0969da",
+    },
+    True: {    # dark — GitHub dark dimmed
+        "bg": "#0d1117", "fg": "#e6edf3", "border": "#30363d",
+        "muted": "#8b949e", "codebg": "#161b22", "accent": "#2f81f7",
+    },
+}
+
+
+def markdown_doc(md: str, dark: bool = False) -> str:
+    """Full HTML document for the preview pane: GitHub-style CSS for the
+    requested mode wrapping markdown_html(md)."""
+    css = _MD_CSS % _MD_THEMES[bool(dark)]
+    return ("<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            "<style>" + css + "</style></head><body>"
+            + markdown_html(md) + "</body></html>")

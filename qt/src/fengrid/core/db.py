@@ -116,6 +116,20 @@ CREATE TABLE IF NOT EXISTS project_asset (
     UNIQUE(project_id, asset_kind, asset_id)
 );
 
+-- Projects pane revision control: settings snapshots taken from the
+-- configurator ("Save revision"), restorable in any order.
+CREATE TABLE IF NOT EXISTS project_revision (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    label       TEXT NOT NULL DEFAULT '',
+    name        TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    settings    TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_project_revision
+    ON project_revision(project_id, id DESC);
+
 -- Saved libraries: named tag sets that resolve to a dynamic asset view
 CREATE TABLE IF NOT EXISTS library_view (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,

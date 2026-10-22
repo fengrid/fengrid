@@ -5,7 +5,7 @@ import "."
 // Keyboard-shortcut capture box (KeySequenceEdit replacement — that
 // Control is not present in our Qt 6.9.3 build). Click to arm, press
 // the combination: modifiers assemble as Ctrl/Alt/Shift/Meta+KEY,
-// printable keys use their character (Alt+`), non-printables their Qt
+// printable keys use their character (Alt+/), non-printables their Qt
 // name (F5, Right). Escape cancels; a modifier (Ctrl/Alt/Meta) or an
 // F-key is required so letters stay typeable app-wide. Writes through
 // sequenceEdited → prefs.set_command_shortcut.
@@ -21,14 +21,14 @@ Rectangle {
     border.width: capturing ? 2 : 1
 
     property bool capturing: false
-    property string seqRaw: ""       // QKeySequence text, e.g. "Alt+`"
+    property string seqRaw: ""       // QKeySequence text, e.g. "Alt+/"
     property string invalidHint: ""
     signal sequenceEdited(string seq)
 
     // live-follow prefs (Reset from the sibling button must update us)
     function syncFromPrefs() {
         if (!capturing)
-            seqRaw = prefs !== null ? prefs.commandShortcut : "Alt+`"
+            seqRaw = prefs !== null ? prefs.commandShortcut : "Alt+/"
     }
     Component.onCompleted: syncFromPrefs()
     onCapturingChanged: {
@@ -41,7 +41,7 @@ Rectangle {
         function onCommandShortcutChanged() { box.syncFromPrefs() }
     }
 
-    // human display: "Alt+`" → "Alt + `"
+    // human display: "Alt+/" → "Alt + /"
     readonly property string display:
         seqRaw !== "" ? seqRaw.split("+").join(" + ") : ""
 

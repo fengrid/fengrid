@@ -410,7 +410,7 @@ Rectangle {
                     radius: 8; color: theme.tokens.surface
                     border.color: theme.tokens.border
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("New sub-collection…")
                     height: 28
                     enabled: collMenu.target !== null
@@ -419,7 +419,7 @@ Rectangle {
                         subDialog.open()
                     }
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Edit tags…")
                     height: 28
                     enabled: collMenu.target !== null
@@ -429,7 +429,7 @@ Rectangle {
                         subDialog.open()
                     }
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Delete collection")
                     height: 28
                     enabled: collMenu.target !== null
@@ -510,43 +510,12 @@ Rectangle {
                 // footer actions — the other form dialogs all expose
                 // explicit Cancel/primary buttons; Enter-only commit was
                 // inconsistent with them
-                footer: RowLayout {
-                    spacing: 8
-                    Item { Layout.fillWidth: true }
-                    Button {
-                        text: qsTr("Cancel")
-                        onClicked: subDialog.close()
-                        background: Rectangle {
-                            radius: 6; color: theme.tokens.surface2
-                            border.color: theme.tokens.border
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            color: theme.tokens.text
-                            font.family: theme.uiFont; font.pixelSize: 12
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            leftPadding: 14; rightPadding: 14
-                        }
-                    }
-                    Button {
-                        enabled: subInput.text.trim() !== ""
-                        text: subDialog.tagMode ? qsTr("Save") : qsTr("Create")
-                        onClicked: subDialog.commit()
-                        background: Rectangle {
-                            radius: 6
-                            color: subInput.text.trim() !== ""
-                                   ? theme.tokens.accent : theme.tokens.border
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            color: theme.tokens.bg
-                            font.family: theme.uiFont; font.pixelSize: 12
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            leftPadding: 14; rightPadding: 14
-                        }
-                    }
+                footer: FgDialogFooter {
+                    acceptLabel: subDialog.tagMode ? qsTr("Save")
+                                                   : qsTr("Create")
+                    acceptEnabled: subInput.text.trim() !== ""
+                    onCancelClicked: subDialog.close()
+                    onAcceptClicked: subDialog.commit()
                 }
             }
             Rectangle {
@@ -807,7 +776,7 @@ Rectangle {
                     radius: 8; color: theme.tokens.surface
                     border.color: theme.tokens.border
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Configure…")
                     height: 28
                     enabled: libMenu.target !== null
@@ -819,7 +788,7 @@ Rectangle {
                         libDialog.open()
                     }
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Delete library")
                     height: 28
                     enabled: libMenu.target !== null
@@ -835,7 +804,7 @@ Rectangle {
                     radius: 8; color: theme.tokens.surface
                     border.color: theme.tokens.border
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Edit criteria…")
                     height: 28
                     enabled: smartMenu.target !== null
@@ -849,7 +818,7 @@ Rectangle {
                         smartDialog.open()
                     }
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Delete smart collection")
                     height: 28
                     enabled: smartMenu.target !== null
@@ -865,7 +834,7 @@ Rectangle {
                     radius: 8; color: theme.tokens.surface
                     border.color: theme.tokens.border
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Rename tag…")
                     height: 28
                     enabled: tagMenu.target !== null
@@ -874,7 +843,7 @@ Rectangle {
                         renameDialog.open()
                     }
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Delete tag")
                     height: 28
                     enabled: tagMenu.target !== null

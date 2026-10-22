@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
+import threading
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from ..core import projects as core_projects
+from ..core import settings as core_settings
 
 _ROLES = ("bg", "surface", "ink", "muted", "accent", "border")
 
@@ -45,6 +49,9 @@ class Projects(QObject):
     assetsChanged = Signal()
     exportDone = Signal(str)
     exportFailed = Signal(str)
+    revisionsChanged = Signal()
+    askDone = Signal(str)            # local llm helper replied
+    askFailed = Signal(str)
 
     def __init__(self, con, parent=None):
         super().__init__(parent)
@@ -52,6 +59,7 @@ class Projects(QObject):
         self._search = ""
         self._current_id = -1
         self._current: dict = {}
+        self._ask_thread = None
         self._refresh()
 
     # ------------------------------------------------------------ properties
@@ -307,3 +315,106 @@ class Projects(QObject):
             self.exportDone.emit(info["path"])
         except Exception as exc:  # noqa: BLE001 — surfaced to the UI
             self.exportFailed.emit(str(exc)[:300])
+
+    # ------------------------------------------------------- revisions
+    @Property("QVariantList", notify=revisionsChanged)
+    def revisions(self) -> list:
+        if self._current_id < 0:
+            return []
+        return [dict(r) for r in self._con.execute(
+            "SELECT id, created, label, name FROM project_revision"
+            " WHERE project_id = ? ORDER BY id DESC LIMIT 50",
+            (self._current_id,))]
+
+    @Slot(str)
+    def snapshot(self, label: str = "") -> None:
+        """Save a revision of the current project's meta + settings."""
+        if self._current_id < 0 or not self._current:
+            self.message.emit("No project open")
+            return
+        self._con.execute(
+            "INSERT INTO project_revision(project_id, label, name,"
+            " description, settings) VALUES (?, ?, ?, ?, ?)",
+            (self._current_id, (label or "").strip() or "manual",
+             self._current.get("name", ""),
+             self._current.get("description", ""),
+             json.dumps(self._current.get("settings") or {})))
+        self._con.commit()
+        self.revisionsChanged.emit()
+        self.message.emit("Revision saved")
+
+    @Slot(int)
+    def restore_revision(self, rid: int) -> None:
+        row = self._con.execute(
+            "SELECT name, description, settings FROM project_revision"
+            " WHERE id = ?", (int(rid),)).fetchone()
+        if row is None or self._current_id < 0:
+            return
+        try:
+            settings = json.loads(row["settings"] or "{}")
+        except ValueError:
+            settings = {}
+        core_projects.update_project(
+            self._con, self._current_id, name=row["name"],
+            description=row["description"], settings=settings)
+        self._current = core_projects.get_project(self._con,
+                                                  self._current_id) or {}
+        self.currentChanged.emit()
+        self._refresh()
+        self.message.emit("Revision restored")
+
+    @Slot(int)
+    def delete_revision(self, rid: int) -> None:
+        self._con.execute("DELETE FROM project_revision WHERE id = ?",
+                          (int(rid),))
+        self._con.commit()
+        self.revisionsChanged.emit()
+
+    # ------------------------------------------------------------- ask
+    # the LLM chat tab pipes prompts + project context to a LOCAL helper
+    # binary (`fengrid-llm`, or the `llm` CLI) — no keys, no network from
+    # the app itself; a missing helper surfaces a setup note instead of
+    # pretending to think.
+    @Property(str, constant=True)
+    def askHelper(self) -> str:
+        tool = core_settings.get(self._con, "llm_command", "")
+        for cand in ([tool] if tool else []) + ["fengrid-llm", "llm"]:
+            if cand and shutil.which(cand):
+                return cand
+        return ""
+
+    @Slot(str)
+    def ask(self, prompt: str) -> None:
+        helper = self.askHelper
+        if not helper:
+            self.askFailed.emit(
+                "No local helper — install fengrid-llm (or the `llm` CLI),"
+                " or set Settings → llm_command")
+            return
+        if self._ask_thread is not None and self._ask_thread.isAlive():
+            self.askFailed.emit("A question is already running")
+            return
+        context = ("Project: %s — settings: %s" %
+                   (self._current.get("name", ""),
+                    json.dumps(self._current.get("settings") or {})))
+        prompt_full = f"{context}\n\n{prompt}"
+        project = self
+
+        class _Runner(threading.Thread):
+            def run(self):
+                try:
+                    out = subprocess.run(
+                        [helper, prompt_full], capture_output=True, text=True,
+                        timeout=120)
+                    reply = (out.stdout or out.stderr or "").strip()
+                    if not reply:
+                        project.askFailed.emit("helper returned nothing")
+                    else:
+                        project.askDone.emit(reply[:4000])
+                except Exception as exc:  # noqa: BLE001
+                    project.askFailed.emit(str(exc)[:300])
+                finally:
+                    project._ask_thread = None
+
+        self._ask_thread = _Runner(daemon=True)
+        self._ask_thread.start()

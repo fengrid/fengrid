@@ -349,9 +349,9 @@ Rectangle {
 
                         SettingRow {
                             section: "general"
-                            label: qsTr("Command bar hotkey")
-                            desc: qsTr("Opens the command bar — search assets and snippets, run commands, jump anywhere. Default Alt + `.")
-                            keys: "command bar palette hotkey shortcut key sequence spotlight alfred vscode search jump"
+                            label: qsTr("Slash menu hotkey")
+                            desc: qsTr("Opens the slash menu — search assets and snippets, run commands, jump anywhere. Default Alt + /.")
+                            keys: "slash menu palette hotkey shortcut key sequence spotlight alfred vscode search jump"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             RowLayout {
                                 spacing: 8
@@ -369,7 +369,7 @@ Rectangle {
                                     text: qsTr("Reset")
                                     onClicked: prefs !== null
                                                && prefs.set_command_shortcut(
-                                                   "Alt+`")
+                                                   "Alt+/")
                                 }
                             }
                         }
@@ -1705,7 +1705,6 @@ Rectangle {
                             width: 340
                             modal: true
                             title: qsTr("Restore backup?")
-                            standardButtons: Dialog.Ok | Dialog.Cancel
                             onAccepted: dataio.restoreBackup(settingsRoot.pendingRestore)
                             Text {
                                 width: parent.width
@@ -1714,6 +1713,13 @@ Rectangle {
                                 font.pixelSize: 12
                                 color: theme.tokens.text
                                 text: qsTr("This replaces the current database and restarts Fengrid. Your present database is saved alongside as .pre-restore.")
+                            }
+                            // themed footer (Ok|Cancel's Basic footer sits
+                            // flush against the dialog edge)
+                            footer: FgDialogFooter {
+                                acceptLabel: qsTr("Restore")
+                                onCancelClicked: restoreConfirm.reject()
+                                onAcceptClicked: restoreConfirm.accept()
                             }
                         }
                     }

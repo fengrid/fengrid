@@ -18,6 +18,16 @@ Item {
     property var editors: ({ html: "", css: "", js: "" })
     property string currentPane: "html"
     property bool dirty: false
+    // editor language suite: "web" = HTML/CSS/JS fiddle; "markdown" gets
+    // a live GitHub-styled preview; everything else is a single-body
+    // language editing the field code.body_field() returns
+    property string snipLang: "web"
+    readonly property string bodyField:
+        code !== null ? code.body_field(snipLang) : ""
+    readonly property bool isWeb: snipLang === "web"
+    readonly property bool isMarkdown: snipLang === "markdown"
+    // markdown preview document — regenerated while typing
+    property string markdownDoc: ""
     property string previewDoc: ""
     property bool previewActive: false
 
@@ -109,6 +119,30 @@ Item {
         colGoal = -1
         refreshHighlight()
         dirty = true
+    }
+
+    // switch the editor language (dropdown / / command): park the body
+    // text in its field, then focus the new language's body field
+    function setLanguage(lang) {
+        if (code === null)
+            return
+        editors[currentPane] = edTa.text
+        snipLang = lang
+        var f = code.body_field(lang)
+        currentPane = f || "html"
+        edTa.text = editors[currentPane]
+        vimAnchor = -1
+        colGoal = -1
+        dirty = true
+        refreshHighlight()
+        updateMarkdown()
+    }
+
+    // live markdown preview — regenerate while typing
+    function updateMarkdown() {
+        if (isMarkdown && code !== null)
+            markdownDoc = code.markdown_html(editors[currentPane],
+                                             theme.isDark)
     }
 
     function cursorStatus() {
@@ -304,7 +338,12 @@ Item {
     }
 
     function refreshHighlight() {
-        edHl.text = highlight(edTa.text, currentPane) + "\n"
+        // the overlay is StyledText — raw \n collapses to a space (HTML
+        // whitespace rules), so every multiline snippet displayed on ONE
+        // line with the caret drifting off the visible glyphs. Break
+        // lines explicitly with <br>.
+        edHl.text = highlight(edTa.text, currentPane)
+                    .replace(/\n/g, "<br>") + "<br>"
     }
 
     function runPreview() {
@@ -319,7 +358,7 @@ Item {
         if (code === null)
             return
         code.save(titleField.text, code.current.description || "",
-                  code.current.language || "web",
+                  snipLang,
                   editors.html, editors.css, editors.js,
                   tagsField.text)
         dirty = false
@@ -334,8 +373,9 @@ Item {
             editors.html = code.current.html || ""
             editors.css = code.current.css || ""
             editors.js = code.current.js || ""
-            currentPane = "html"
-            edTa.text = editors.html
+            snipLang = code.current.language || "web"
+            currentPane = bodyField || "html"
+            edTa.text = editors[currentPane]
             titleField.text = code.current.title || ""
             tagsField.text = code.current.tags || ""
             refreshHighlight()
@@ -470,11 +510,15 @@ Item {
                 ComboBox {
                     id: langBox
                     Layout.fillWidth: true
-                    model: [qsTr("All langs"), qsTr("Web"), qsTr("Markdown")]
+                    // filter list = the editor language suite (the pane
+                    // filter matches the snippet's language column)
+                    model: code !== null
+                           ? [qsTr("All langs")].concat(code.languages)
+                           : [qsTr("All langs")]
                     currentIndex: 0
                     onActivated: function (idx) {
                         code !== null && code.set_lang(
-                            ["", "web", "markdown"][idx])
+                            idx === 0 ? "" : code.languages[idx - 1])
                     }
                     background: Rectangle { radius: 6; color: theme.tokens.surface2; border.color: theme.tokens.border }
                     contentItem: Text { text: langBox.displayText; font.family: theme.monoFont; font.pixelSize: 10; color: theme.tokens.text; verticalAlignment: Text.AlignVCenter; leftPadding: 6 }
@@ -583,13 +627,13 @@ Item {
                     radius: 8; color: theme.tokens.surface
                     border.color: theme.tokens.border
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Open in editor")
                     height: 28
                     onTriggered: code !== null && code.open_snippet(
                         snipList.currentItem ? snipList.currentItem.row.id : -1)
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Copy title")
                     height: 28
                     onTriggered: {
@@ -598,11 +642,11 @@ Item {
                             titleField.text = it.row.title
                     }
                 }
-                MenuSeparator {
+                FgMenuSeparator {
                     topPadding: 3; bottomPadding: 3
                     contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Add to collection")
                     height: 28
                     enabled: library !== null && library.collections.length > 0
@@ -628,7 +672,7 @@ Item {
                                           parent, parent.width, 0)
                     onClicked: snipCollSub.popup(parent, parent.width, 0)
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Delete snippet")
                     height: 28
                     onTriggered: {
@@ -711,11 +755,15 @@ Item {
                     Layout.fillWidth: true
                     spacing: 4
                     Repeater {
-                        model: ["html", "css", "js"]
+                        // web fiddle → three tabs; any other editor
+                        // language → a single tab bound to its body field
+                        model: isWeb ? ["html", "css", "js"]
+                                     : [bodyField || "html"]
                         Button {
                             id: paneTab
                             required property string modelData
-                            text: modelData.toUpperCase()
+                            text: isWeb ? modelData.toUpperCase()
+                                        : snipLang.toUpperCase()
                             Layout.preferredHeight: 22
                             onClicked: codeRoot.setPane(modelData)
                             background: Rectangle {
@@ -795,6 +843,38 @@ Item {
                             color: theme.tokens.textMuted
                         }
                     }
+                    // language suite dropdown — also how the / command
+                    // lands ("New snippet" opens the editor; pick here)
+                    ComboBox {
+                        id: langPick
+                        Layout.preferredHeight: 26
+                        Layout.preferredWidth: 116
+                        model: code !== null ? code.languages : []
+                        currentIndex: code !== null
+                                      ? code.languages.indexOf(snipLang)
+                                      : 0
+                        onActivated: function (idx) {
+                            var lang = code !== null
+                                       ? code.languages[idx] : "web"
+                            if (lang !== snipLang)
+                                setLanguage(lang)
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Snippet language — markdown renders a live preview")
+                        background: Rectangle {
+                            radius: 6
+                            color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: langPick.displayText
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.text
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 6
+                        }
+                    }
                     Rectangle {
                         Layout.preferredWidth: 160
                         Layout.preferredHeight: 26
@@ -848,9 +928,11 @@ Item {
                         id: runBtn
                         text: qsTr("Run ▸")
                         Layout.preferredHeight: 26
-                        enabled: previewProfile !== null
+                        enabled: previewProfile !== null && isWeb
                         ToolTip.visible: !enabled && hovered
-                        ToolTip.text: qsTr("Preview unavailable (no WebEngine)")
+                        ToolTip.text: isWeb
+                                      ? qsTr("Preview unavailable (no WebEngine)")
+                                      : qsTr("Only the web fiddle runs — markdown previews live")
                         onClicked: codeRoot.runPreview()
                         background: Rectangle {
                             radius: 6
@@ -926,24 +1008,18 @@ Item {
             }
         }
 
-        // editor + preview split
-        SplitView {
+        // two-row editor layout: upper row = snippet editor;
+        // lower row = preview spanning the right two-thirds
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            orientation: Qt.Horizontal
+            spacing: 0
 
-            // static themed handle — reading SplitView.hovered/pressed INSIDE
-            // the handle delegate trips Qt's "attached properties must be
-            // accessed through a direct child" warning and never resolves
-            handle: Rectangle {
-                color: theme.tokens.border
-                width: 1
-            }
-
-            // ---- editor
+            // ---- row 1: editor (upper middle)
             Rectangle {
-                SplitView.fillWidth: true
-                SplitView.minimumWidth: 240
+                id: editorRow
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 color: theme.tokens.bg
                 Flickable {
                     id: edFlick
@@ -978,6 +1054,7 @@ Item {
                             editors[currentPane] = text
                             dirty = true
                             refreshHighlight()
+                            updateMarkdown()
                         }
                         Keys.onPressed: function (event) {
                             var v = text, pos = cursorPosition
@@ -1356,44 +1433,69 @@ Item {
             }
 
             Rectangle {
-                width: 1
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
                 color: theme.tokens.border
             }
 
-            // ---- preview
-            Rectangle {
-                SplitView.preferredWidth: parent.width * 0.42
-                SplitView.minimumWidth: 120
-                color: theme.tokens.surface
+            // ---- row 2: preview in the lower right two-thirds
+            Item {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
 
-                Item {
-                    anchors.fill: parent
-                    Loader {
-                        id: previewLoader
+                Rectangle {   // quiet left third
+                    anchors { top: parent.top; bottom: parent.bottom
+                             left: parent.left }
+                    width: parent.width / 3
+                    color: theme.tokens.surface2
+                }
+
+                Rectangle {   // live preview (right two thirds)
+                    anchors { top: parent.top; bottom: parent.bottom
+                             right: parent.right }
+                    width: parent.width * 2 / 3
+                    color: theme.tokens.surface
+                    Item {
                         anchors.fill: parent
-                        anchors.margins: 1
-                        active: codeRoot.previewActive
-                        sourceComponent: PreviewPane {
-                            profile: previewProfile
-                            document: codeRoot.previewDoc
+                        Loader {
+                            id: previewLoader
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            active: codeRoot.previewActive
+                            sourceComponent: PreviewPane {
+                                profile: previewProfile
+                                document: codeRoot.previewDoc
+                            }
                         }
-                    }
-                    Column {
-                        anchors.centerIn: parent
-                        visible: !codeRoot.previewActive
-                        spacing: 10
-                        IconImage {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            name: "play"
-                            px: 28
-                            tint: theme.tokens.textMuted
+                        // markdown: live GitHub-styled preview while typing
+                        Loader {
+                            anchors.fill: parent
+                            anchors.margins: 1
+                            active: isMarkdown && !previewActive
+                            sourceComponent: PreviewPane {
+                                profile: previewProfile
+                                document: markdownDoc
+                            }
                         }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: qsTr("Press Run ▸ or Ctrl+Enter")
-                            font.family: theme.uiFont
-                            font.pixelSize: 12
-                            color: theme.tokens.textMuted
+                        Column {
+                            anchors.centerIn: parent
+                            visible: !codeRoot.previewActive
+                                     && !isMarkdown
+                            spacing: 10
+                            IconImage {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                name: "play"
+                                px: 28
+                                tint: theme.tokens.textMuted
+                            }
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: qsTr("Press Run ▸ or Ctrl+Enter")
+                                font.family: theme.uiFont
+                                font.pixelSize: 12
+                                color: theme.tokens.textMuted
+                            }
                         }
                     }
                 }
@@ -1440,6 +1542,13 @@ Item {
                         + "optional) and press Save; the first save creates "
                         + "it, later saves update in place. The sidebar lists "
                         + "snippets with search, sort, and a tag cloud.\n\n"
+                        + "Languages: the dropdown next to the title picks "
+                        + "the snippet language — Web keeps the three-tab "
+                        + "HTML/CSS/JS fiddle, Markdown renders a live "
+                        + "GitHub-styled preview while you type, and every "
+                        + "other language (Python, Go, Rust, SQL, YAML…) "
+                        + "edits a single body field. Pick a language from "
+                        + "the slash menu with New snippet.\n\n"
                         + "Import: read snippets from other tools — VSCode "
                         + ".code-snippets / .json files (comments and trailing "
                         + "commas allowed) or a massCode db.sqlite. Unmapped "

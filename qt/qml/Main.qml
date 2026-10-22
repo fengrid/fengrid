@@ -102,7 +102,7 @@ ApplicationWindow {
                     y = p.y + 6
                 }
                 // ── databases: current / Quick access / Recent ──
-                MenuItem {
+                FgMenuItem {
                     enabled: false
                     font.pixelSize: 11
                     font.letterSpacing: 1.2
@@ -111,14 +111,14 @@ ApplicationWindow {
                           ? qsTr("Database — %1").arg(dbs.currentLabel)
                           : qsTr("Database")
                 }
-                MenuItem {
+                FgMenuItem {
                     visible: dbs !== null && dbs.quick.length > 0
                     enabled: false
                     text: qsTr("Quick access")
                 }
                 Repeater {
                     model: dbs !== null ? dbs.quick : []
-                    delegate: MenuItem {
+                    delegate: FgMenuItem {
                         required property var modelData
                         enabled: modelData.exists
                         text: modelData.label + (modelData.exists ? ""
@@ -126,14 +126,14 @@ ApplicationWindow {
                         onClicked: dbs.switchTo(modelData.path)
                     }
                 }
-                MenuItem {
+                FgMenuItem {
                     visible: dbs !== null && dbs.recent.length > 0
                     enabled: false
                     text: qsTr("Recent")
                 }
                 Repeater {
                     model: dbs !== null ? dbs.recent : []
-                    delegate: MenuItem {
+                    delegate: FgMenuItem {
                         required property var modelData
                         enabled: modelData.exists
                         text: modelData.label + " · " + modelData.when
@@ -141,40 +141,40 @@ ApplicationWindow {
                         onClicked: dbs.switchTo(modelData.path)
                     }
                 }
-                MenuSeparator {
+                FgMenuSeparator {
                     visible: dbs !== null && (dbs.quick.length > 0
                                               || dbs.recent.length > 0)
                 }
-                MenuItem {
+                FgMenuItem {
                     visible: dbs !== null
                     text: dbs !== null && dbs.currentStarred
                           ? qsTr("Unstar current database")
                           : qsTr("Star current database")
                     onTriggered: dbs.starCurrent()
                 }
-                MenuItem {
+                FgMenuItem {
                     visible: dbs !== null
                     text: qsTr("New database…")
                     onTriggered: newDbDialog.open()
                 }
-                MenuItem {
+                FgMenuItem {
                     visible: dbs !== null
                     text: qsTr("Open database…")
                     onTriggered: openDbDialog.open()
                 }
-                MenuItem {
+                FgMenuItem {
                     visible: dbs !== null && dbs.recent.length > 0
                     text: qsTr("Clear recent")
                     onTriggered: dbs.clearRecent()
                 }
-                MenuSeparator { visible: dbs !== null }
+                FgMenuSeparator { visible: dbs !== null }
 
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Settings…")
                     height: 28
                     onTriggered: root.openSettings()
                 }
-                MenuItem {
+                FgMenuItem {
                     text: qsTr("Check for updates")
                     height: 28
                     enabled: updater !== null
@@ -183,8 +183,8 @@ ApplicationWindow {
                         toast.show(qsTr("Checking for updates…"))
                     }
                 }
-                MenuSeparator {}
-                MenuItem {
+                FgMenuSeparator {}
+                FgMenuItem {
                     text: qsTr("About Fengrid")
                     height: 28
                     onTriggered: root.openSettings("about")
@@ -299,7 +299,7 @@ ApplicationWindow {
                         name: "search"
                         px: 15
                         tint: theme.tokens.textMuted
-                        // magnifier = mouse entry into the command bar
+                        // magnifier = mouse entry into the slash menu
                         MouseArea {
                             anchors.fill: parent
                             anchors.margins: -7
@@ -311,11 +311,11 @@ ApplicationWindow {
                     TextField {
                         id: searchField
                         Layout.fillWidth: true
-                        // the tip for the command-bar hotkey rides in
+                        // the tip for the slash-menu hotkey rides in
                         // the placeholder and follows the user's binding
                         placeholderText: qsTr("search assets  ( / )  ·  %1")
                             .arg(prefs !== null ? prefs.formattedShortcut
-                                                 : "Alt + `")
+                                                 : "Alt + /")
                         color: theme.tokens.text
                         placeholderTextColor: theme.tokens.textMuted
                         background: null
@@ -582,7 +582,7 @@ ApplicationWindow {
         }
     }
 
-    // ── command bar dispatch (the palette signals; every action lives
+    // ── slash menu dispatch (the palette signals; every action lives
     // here because the palette file cannot see Main's ids) ──
     function paletteAction(kind, payload) {
         var d = {}
@@ -626,6 +626,10 @@ ApplicationWindow {
             break
         case "command-shortcut": openSettings("general"); break
         case "rescan-library": library.rescan(); break
+        case "new-snippet":
+            root.pane = 3
+            code.new_snippet()
+            break
         case "rescan-fonts": fonts.rescan(); break
         case "toggle-theme": theme.toggle(); break
         case "generate-palette":
@@ -706,7 +710,7 @@ ApplicationWindow {
         function onSetupOpenChanged() { root.updateOverlayGate() }
     }
 
-    // ── command bar: opens with the configured sequence (Alt+` by
+    // ── slash menu: opens with the configured sequence (Alt+/ by
     // default, rebindable in Settings / first-run). Lives in the
     // overlay so its backdrop dims the header and status bar too ──
     CommandPalette {
@@ -773,7 +777,7 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: prefs !== null ? prefs.commandShortcut : "Alt+`"
+        sequence: prefs !== null ? prefs.commandShortcut : "Alt+/"
         enabled: !root.setupOpen && !Shell.capturing
         onActivated: commandPalette.open ? commandPalette.hide()
                                          : commandPalette.show("")

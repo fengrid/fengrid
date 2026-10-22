@@ -125,7 +125,7 @@ Item {
                 starItem.text = st ? qsTr("Unstar") : qsTr("Star")
             }
 
-            MenuItem {
+            FgMenuItem {
                 id: starItem
                 property bool starred: false
                 height: 30
@@ -145,7 +145,7 @@ Item {
                     radius: 5
                 }
             }
-            MenuSeparator {
+            FgMenuSeparator {
                 topPadding: 3
                 bottomPadding: 3
                 contentItem: Rectangle {
@@ -153,7 +153,7 @@ Item {
                     color: theme.tokens.border
                 }
             }
-            MenuItem {
+            FgMenuItem {
                 id: copyItem
                 text: qsTr("Copy name")
                 height: 30
@@ -174,7 +174,7 @@ Item {
             }
             // LINK TO — typed links to collections / libraries / projects
             // (targets pulled live when the menu opens)
-            MenuItem {
+            FgMenuItem {
                 id: linkItem
                 property var targets: []
                 text: qsTr("Link to…")
@@ -209,7 +209,7 @@ Item {
                     }
                     Repeater {
                         model: linkItem.targets
-                        MenuItem {
+                        FgMenuItem {
                             id: linkTarget
                             required property var modelData
                             height: 28
@@ -240,7 +240,7 @@ Item {
                 }
             }
             // GENERATE ID — one item per id-type custom field
-            MenuItem {
+            FgMenuItem {
                 id: genIdItem
                 property var idFields: []
                 text: qsTr("Generate ID…")
@@ -282,7 +282,7 @@ Item {
                     }
                     Repeater {
                         model: genIdItem.idFields
-                        MenuItem {
+                        FgMenuItem {
                             id: genIdTarget
                             required property var modelData
                             height: 28
@@ -311,7 +311,7 @@ Item {
                     }
                 }
             }
-            MenuItem {
+            FgMenuItem {
                 id: collMenuItem
                 text: qsTr("Add to collection")
                 height: 30
@@ -345,7 +345,7 @@ Item {
                     }
                     Repeater {
                         model: library !== null ? library.collections : []
-                        MenuItem {
+                        FgMenuItem {
                             id: collItem
                             required property var modelData
                             text: collItem.modelData.name

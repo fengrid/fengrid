@@ -236,7 +236,7 @@ def test_first_run_carries_the_command_bar_hotkey_row(setup_ui):
     root = setup_ui["root"]
     caps = _by_class(root, "ShortcutCapture")
     assert len(caps) >= 1, "first-run is missing the shortcut capture box"
-    assert caps[0].property("seqRaw") == "Alt+`"
+    assert caps[0].property("seqRaw") == "Alt+/"
 
 
 def test_first_run_content_is_scrollable(setup_ui):

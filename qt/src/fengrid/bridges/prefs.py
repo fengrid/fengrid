@@ -28,8 +28,11 @@ class Prefs(QObject):
     commandShortcutChanged = Signal()
     message = Signal(str)
 
-    # Alt+` (Option+` on macs — Qt maps Alt to Option in sequences)
-    DEFAULT_COMMAND_SHORTCUT = "Alt+`"
+    # Alt+/ — the slash menu. (Option+/ on macs — Qt maps Alt to Option
+    # in sequences.) Legacy installs that never customized still carry
+    # the old Alt+` default; migrate them so the new hotkey is primary.
+    DEFAULT_COMMAND_SHORTCUT = "Alt+/"
+    LEGACY_COMMAND_SHORTCUT = "Alt+`"
 
     def __init__(self, con: sqlite3.Connection, db_path: str, parent=None):
         super().__init__(parent)
@@ -41,9 +44,13 @@ class Prefs(QObject):
         self._update_check = settings.get_bool(con, "update_check", True)
         self._first_run_needed = not settings.get_bool(
             con, "first_run_done", False)
-        self._command_shortcut = (
-            settings.get(con, "command_shortcut", "")
-            or self.DEFAULT_COMMAND_SHORTCUT)
+        stored = settings.get(con, "command_shortcut", "") or ""
+        if stored == self.LEGACY_COMMAND_SHORTCUT:
+            # user never customized (value equals the retired default) —
+            # move them to the new primary hotkey
+            stored = ""
+            settings.set(con, "command_shortcut", "")
+        self._command_shortcut = stored or self.DEFAULT_COMMAND_SHORTCUT
         # detected at construction, resolved so they string-match the
         # source rows the scanner registers (which are stored resolved)
         self._system_icon_paths = [

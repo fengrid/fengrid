@@ -473,7 +473,7 @@ Rectangle {
                 radius: 8; color: theme.tokens.surface
                 border.color: theme.tokens.border
             }
-            MenuItem {
+            FgMenuItem {
                 text: qsTr("Delete field")
                 height: 28
                 onTriggered: taxonomy !== null
@@ -662,55 +662,25 @@ Rectangle {
                     }
                 }
             }
-            footer: RowLayout {
-                spacing: 8
-                Item { Layout.fillWidth: true }
-                Button {
-                    text: qsTr("Cancel")
-                    onClicked: fieldDialog.reject()
-                    background: Rectangle {
-                        radius: 6; color: theme.tokens.surface2
-                        border.color: theme.tokens.border
+            footer: FgDialogFooter {
+                acceptLabel: qsTr("Create")
+                acceptEnabled: fName.text.trim() !== ""
+                onCancelClicked: fieldDialog.reject()
+                onAcceptClicked: {
+                    var opts = {}
+                    if (fType.currentIndex === 4)
+                        opts.choices = fChoices.text.split(",").map(
+                            function (s) { return s.trim() }).filter(
+                            function (s) { return s !== "" })
+                    if (fType.currentIndex === 5) {
+                        opts.prefix = fPrefix.text.trim()
+                        opts.pad = parseInt(fPad.text) || 4
                     }
-                    contentItem: Text {
-                        text: parent.text; color: theme.tokens.text
-                        font.family: theme.uiFont; font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        leftPadding: 14; rightPadding: 14
-                    }
-                }
-                Button {
-                    text: qsTr("Create")
-                    enabled: fName.text.trim() !== ""
-                    onClicked: {
-                        var opts = {}
-                        if (fType.currentIndex === 4)
-                            opts.choices = fChoices.text.split(",").map(
-                                function (s) { return s.trim() }).filter(
-                                function (s) { return s !== "" })
-                        if (fType.currentIndex === 5) {
-                            opts.prefix = fPrefix.text.trim()
-                            opts.pad = parseInt(fPad.text) || 4
-                        }
-                        taxonomy.create_field(fName.text, fType.currentText,
-                                              JSON.stringify(opts))
-                        fName.text = ""
-                        fChoices.text = ""
-                        fieldDialog.accept()
-                    }
-                    background: Rectangle {
-                        radius: 6
-                        color: fName.text.trim() !== ""
-                               ? theme.tokens.accent : theme.tokens.border
-                    }
-                    contentItem: Text {
-                        text: parent.text; color: theme.tokens.bg
-                        font.family: theme.uiFont; font.pixelSize: 12
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        leftPadding: 14; rightPadding: 14
-                    }
+                    taxonomy.create_field(fName.text, fType.currentText,
+                                          JSON.stringify(opts))
+                    fName.text = ""
+                    fChoices.text = ""
+                    fieldDialog.accept()
                 }
             }
         }
@@ -861,14 +831,14 @@ Rectangle {
         width: 200
         Repeater {
             model: library.collections
-            MenuItem {
+            FgMenuItem {
                 required property var modelData
                 text: modelData.name
                 onTriggered: library.add_to_collection(panel.index, modelData.id)
             }
         }
-        MenuSeparator { }
-        MenuItem {
+        FgMenuSeparator { }
+        FgMenuItem {
             text: qsTr("New collection…")
             onTriggered: newCollDialog.open()
         }

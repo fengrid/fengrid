@@ -248,7 +248,7 @@ Item {
                 radius: 8; color: theme.tokens.surface
                 border.color: theme.tokens.border
             }
-            MenuItem {
+            FgMenuItem {
                 text: qsTr("Export CSS…")
                 height: 28
                 onTriggered: {
@@ -256,7 +256,7 @@ Item {
                     exportDialog.open()
                 }
             }
-            MenuItem {
+            FgMenuItem {
                 text: qsTr("Export ZIP…")
                 height: 28
                 onTriggered: {

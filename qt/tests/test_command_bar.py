@@ -34,9 +34,9 @@ def test_command_shortcut_defaults_format_and_persist(tmp_path):
     con = db.connect(tmp_path / "t.db")
     path = str(tmp_path / "t.db")
     p = Prefs(con, path)
-    # the documented default: Option+` on macs maps from Alt+`
-    assert p.commandShortcut == "Alt+`"
-    assert p.formattedShortcut == "Alt + `"
+    # the documented default: Option+` on macs maps from Alt+/
+    assert p.commandShortcut == "Alt+/"
+    assert p.formattedShortcut == "Alt + /"
 
     p.set_command_shortcut("Ctrl+Shift+P")
     assert p.formattedShortcut == "Ctrl + Shift + P"
@@ -44,11 +44,32 @@ def test_command_shortcut_defaults_format_and_persist(tmp_path):
 
     # empty is rejected — the placeholder tip must never lie
     p.set_command_shortcut("")
-    assert p.commandShortcut == "Alt+`"
+    assert p.commandShortcut == "Alt+/"
 
     # a fresh Prefs over the same DB sees the stored value
     p2 = Prefs(con, path)
-    assert p2.commandShortcut == "Alt+`"
+    assert p2.commandShortcut == "Alt+/"
+
+
+def test_command_shortcut_migrates_retired_default(tmp_path):
+    """Databases from before the slash-menu rename carry the old Alt+`
+    default. A user who never customized is migrated to Alt+/; a value
+    that merely LOOKS custom must be left alone (only the exact retired
+    default moves)."""
+    from fengrid.core import db, settings as core_settings
+    from fengrid.bridges.prefs import Prefs
+
+    con = db.connect(tmp_path / "t.db")
+    path = str(tmp_path / "t.db")
+    core_settings.set(con, "command_shortcut", "Alt+`")
+    p = Prefs(con, path)
+    assert p.commandShortcut == "Alt+/"
+
+    # a genuine customization survives untouched
+    core_settings.set(con, "command_shortcut", "Ctrl+K")
+    p2 = Prefs(con, path)
+    assert p2.commandShortcut == "Ctrl+K"
+    con.close()
 
 
 def test_command_shortcut_survives_db_switch(tmp_path):
@@ -192,8 +213,8 @@ def _wait(ms):
 def test_shortcut_capture_component(bar_ui):
     cap, prefs = bar_ui["cap"], bar_ui["prefs"]
     # displays the current binding out of the box
-    assert cap.property("seqRaw") == "Alt+`"
-    assert cap.property("display") == "Alt + `"
+    assert cap.property("seqRaw") == "Alt+/"
+    assert cap.property("display") == "Alt + /"
     # live-follow: an external change (Reset button) re-syncs us
     prefs.set_command_shortcut("Ctrl+K")
     _wait(50)
