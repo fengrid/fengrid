@@ -571,12 +571,13 @@ ApplicationWindow {
                 elide: Text.ElideRight
                 Layout.maximumWidth: 420
                 MouseArea {
+                    id: statusTipMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.statusTipIdx++
                 }
-                ToolTip.visible: hovered
+                ToolTip.visible: statusTipMouse.containsMouse
                 ToolTip.text: root.statusTip
             }
             Text {

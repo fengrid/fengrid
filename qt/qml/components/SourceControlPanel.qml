@@ -180,7 +180,7 @@ Rectangle {
             }
         }
         Text {
-            visible: scRoot.st.clean
+            visible: scRoot.st.clean === true
             text: qsTr("Working tree clean")
             font.family: theme.uiFont
             font.pixelSize: 10

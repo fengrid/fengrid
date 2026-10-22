@@ -3,13 +3,17 @@ QML as a GittyUp/VS Code-style panel.
 
 Follows the bridges/projects.py pattern: QVariant properties with notify
 signals, plain-argv git via core.projects_git. The repo root is
-<data_dir>/repos/<project-slug> — outside the database, inside the
-app's data dir, so backup/restore carries it and nothing escapes the
-user's profile.
+<data_dir>/repos/<kind>-<slug> — outside the database, inside the app's
+data dir, so backup/restore carries it and nothing escapes the user's
+profile.
 
-The bridge is intentionally small: it owns NO git logic, only binding —
-init-on-demand, status polling, commit/branch/merge/delete/push slots,
-and batch-operation lifecycle for the Projects pane's bulk actions.
+The bridge owns no git logic, only binding: init-on-demand, status
+polling, commit/branch/merge/delete/push slots, and batch-operation
+lifecycle for the Projects pane's bulk actions.
+
+Perf note: gitAvailable/lfsAvailable are CACHED module-level probes —
+a sync subprocess inside a QML binding (re-evaluated on every settings
+interaction) froze the Settings screen.
 """
 from __future__ import annotations
 
@@ -19,6 +23,23 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from ..core import projects_git as core_git
 from ..core import settings as core_settings
+
+_GIT_OK: bool | None = None
+_LFS_OK: bool | None = None
+
+
+def _probe_git() -> bool:
+    global _GIT_OK
+    if _GIT_OK is None:
+        _GIT_OK = core_git.git_available()
+    return _GIT_OK
+
+
+def _probe_lfs() -> bool:
+    global _LFS_OK
+    if _LFS_OK is None:
+        _LFS_OK = core_git.lfs_available()
+    return _LFS_OK
 
 
 class SourceControl(QObject):
@@ -45,7 +66,7 @@ class SourceControl(QObject):
     @Slot(str, str)
     def attach(self, label: str, kind: str = "project") -> None:
         """Point the panel at a project/library repo; init on demand."""
-        if not core_git.git_available():
+        if not _probe_git():
             self.message.emit("git is not installed — version control "
                               "unavailable")
             return
@@ -132,11 +153,13 @@ class SourceControl(QObject):
 
     @Slot(result=bool)
     def gitAvailable(self) -> bool:
-        return core_git.git_available()
+        """Cached probe — never spawns a subprocess from a QML binding
+        (a sync subprocess in a binding froze the Settings screen)."""
+        return _probe_git()
 
     @Slot(result=bool)
     def lfsAvailable(self) -> bool:
-        return core_git.lfs_available()
+        return _probe_lfs()
 
     # ------------------------------------------------------------- actions
     @Slot(str)
@@ -192,7 +215,7 @@ class SourceControl(QObject):
 
     @Slot(str)
     def delete_branch(self, name: str) -> None:
-        """Delete a merged working branch (default branch is refused)."""
+        """Delete a working branch (default branch is refused)."""
         if self._current_repo is None:
             return
         try:
@@ -220,8 +243,7 @@ class SourceControl(QObject):
         control) is embedded in the stored URL only, never committed."""
         if self._current_repo is None:
             return
-        tok = core_settings.get(self._con, "sc_token", "") if not token \
-            else token
+        tok = token or core_settings.get(self._con, "sc_token", "")
         try:
             self._current_repo.set_remote(name, url, tok or None)
             self.message.emit(f"Remote '{name}' set")
@@ -258,17 +280,15 @@ class SourceControl(QObject):
         if repo is None:
             return
         op = core_git.BatchOp(repo, label)
-        op.committed = "batch"        # marker: branch exists to be judged
-        # find the actual batch branch head to decide merge-vs-discard
         try:
             if keep and op.branch in repo.branches():
                 ahead, _ = repo.ahead_behind_from(op.branch)
                 if ahead > 0:
                     repo.merge_into_current(op.branch)
             repo.delete_branch(op.branch, force=True)
-            self.message.emit("Batch merged into "
-                              f"{core_git.DEFAULT_BRANCH}" if keep
-                              else "Batch discarded")
+            self.message.emit(
+                f"Batch merged into {core_git.DEFAULT_BRANCH}" if keep
+                else "Batch discarded")
         except core_git.GitError as e:
             self.message.emit(f"Batch finish failed: {e}")
         self.refresh()
