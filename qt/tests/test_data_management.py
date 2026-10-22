@@ -672,3 +672,89 @@ def test_restore_relaunch_suppressed(tmp_path, monkeypatch):
     dio._relaunch()                      # would execv without the guard
     assert msgs and "relaunch suppressed" in msgs[0]
     con.close()
+
+
+def test_dataio_jobs_use_worker_owned_connections(tmp_path):
+    """Regression: the admin/stats and several export jobs ran the
+    MAIN-thread sqlite connection inside their worker threads. sqlite
+    objects are thread-affine, so every Database-section button (and
+    snippet/bundle/webfont exports) died at runtime with
+    ProgrammingError the moment the worker touched the connection —
+    tests only ever exercised the core fns on the caller's own thread,
+    so the QA gate missed it. Jobs must open worker-owned connections;
+    settings writes ride home in the job payload.
+    """
+    import time as _time
+
+    from PySide6.QtCore import QCoreApplication
+
+    from fengrid.bridges.data import DataIO
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = str(tmp_path / "t.db")
+    con = core_db.connect(db_path)
+    con.execute("INSERT INTO snippet(title, html) VALUES('probe', '<p>x</p>')")
+    con.commit()
+
+    dio = DataIO(con, db_path, str(tmp_path))
+    admin, done, failed = [], [], []
+    stats_seen = []
+    dio.adminDone.connect(lambda op, s: admin.append((op, s)))
+    dio.jobDone.connect(lambda kind, s: done.append((kind, s)))
+    dio.jobFailed.connect(lambda kind, e: failed.append((kind, e)))
+    dio.statsChanged.connect(lambda: stats_seen.append(bool(dio.stats)))
+
+    dio.refreshStats()                   # was: ProgrammingError in worker
+
+    deadline = _time.time() + 20
+    while not stats_seen and _time.time() < deadline:
+        app.processEvents()
+        _time.sleep(0.01)
+
+    dio.adminRun("check")                # was: ProgrammingError in worker
+    deadline = _time.time() + 20
+    while not admin and _time.time() < deadline:
+        app.processEvents()
+        _time.sleep(0.01)
+
+    # jobs are serialized one-at-a-time — start the export only now
+    dio.exportSnippets(str(tmp_path / "snips"), "bundle", "[]")
+    deadline = _time.time() + 20
+    while not done and _time.time() < deadline:
+        app.processEvents()
+        _time.sleep(0.01)
+
+    assert failed == [], f"jobs must not fail: {failed}"
+    assert stats_seen, "refreshStats must deliver real stats"
+    assert dio.stats.get("tables"), f"stats empty: {dio.stats}"
+    check = dict(admin).get("check", "")
+    assert "ProgrammingError" not in check, check
+    assert "Integrity: OK" in check, check
+    assert done and done[0][0] == "export", done
+    assert (tmp_path / "snips").is_dir()
+    con.close()
+
+
+def test_setImportOpts_keeps_csv_options(tmp_path):
+    """The Settings CSV-name row writes csv_path/csv_column — keys that
+    were missing from the defaults dict, so setImportOpts silently
+    DROPPED them on every write and the import job never saw a CSV
+    (the option row was cosmetic)."""
+    from PySide6.QtCore import QCoreApplication
+
+    from fengrid.bridges.data import DataIO
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = str(tmp_path / "t.db")
+    con = core_db.connect(db_path)
+    dio = DataIO(con, db_path, str(tmp_path))
+    opts = dict(dio.importOpts)
+    opts["csv_path"] = str(tmp_path / "names.csv")
+    opts["csv_column"] = "1"
+    dio.setImportOpts(opts)
+    assert dio.importOpts.get("csv_path") == str(tmp_path / "names.csv")
+    assert dio.importOpts.get("csv_column") == "1"
+    # and the persisted blob round-trips
+    dio2 = DataIO(con, db_path, str(tmp_path))
+    assert dio2.importOpts.get("csv_path") == str(tmp_path / "names.csv")
+    con.close()

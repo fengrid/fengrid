@@ -172,6 +172,13 @@ def main(argv=None) -> int:
         registry_path=os.path.join(data_dir, "registry.db"))
     app.aboutToQuit.connect(dataio_bridge.shutdown)
 
+    # freeze watchdog: a silent UI freeze (the bug class that cannot be
+    # reproduced on a QA host) writes every thread's stack to the data
+    # dir instead of dying unexplained
+    from fengrid.freeze_watchdog import FreezeWatchdog
+    freeze_watchdog = FreezeWatchdog(data_dir)
+    app.aboutToQuit.connect(freeze_watchdog.stop)
+
     theme = Theme(con, _asset_dir("fonts"))
     if args.theme:
         theme.set_theme(args.theme)

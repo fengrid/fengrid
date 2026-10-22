@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from PySide6.QtCore import (QObject, QThread, QTimer, QCoreApplication,
@@ -52,7 +53,8 @@ class _Worker(QObject):
 def _default_import_opts() -> dict:
     return {"mode": "copy", "convert": "none", "template": "",
             "prefix": "", "suffix": "", "find": "", "repl": "",
-            "style": "none", "start": 1, "pad": 2, "random_len": 6}
+            "style": "none", "start": 1, "pad": 2, "random_len": 6,
+            "csv_path": "", "csv_column": "0"}
 
 
 def _default_export_opts() -> dict:
@@ -60,6 +62,23 @@ def _default_export_opts() -> dict:
             "script": "", "script_enabled": False,
             "font_fmts": ["woff2"], "color_codes": "txt",
             "snippet_kind": "bundle"}
+
+
+@contextmanager
+def _job_con(db_path: str):
+    """Worker-owned database connection.
+
+    sqlite3 objects are thread-affine (check_same_thread defaults to
+    True): the moment a job worker touches the bridge's main-thread
+    connection it raises ProgrammingError and the job dies. Every job
+    that needs the database opens its OWN connection here — the same
+    house rule the scan/watch workers follow.
+    """
+    con = core_db.connect(db_path)
+    try:
+        yield con
+    finally:
+        con.close()
 
 
 class DataIO(QObject):
@@ -90,6 +109,9 @@ class DataIO(QObject):
                                             _default_export_opts())
         self._stats: dict = {}
         self._restore_pending = False
+        self._pending = ("", None, None)     # (kind, thread, on_done)
+        self._pending_admin = ("", None, None)
+        self._pending_watch = None
         # watcher heartbeat: cheap 5s tick; jobs run in their own thread
         self._timer = QTimer(self)
         self._timer.setInterval(5000)
@@ -157,39 +179,24 @@ class DataIO(QObject):
         QML disables the section buttons off this."""
         return self._worker is not None
 
-    def _start(self, kind: str, fn, args=()) -> bool:
+    def _start(self, kind: str, fn, args=(), on_done=None) -> bool:
         if self._worker is not None:
             self.jobFailed.emit(kind, "another data job is still running")
             return False
         th = QThread(self)
         wk = _Worker(fn, args)
         self._thread, self._worker = th, wk
+        # completion context — the done/failed handlers are BOUND METHODS
+        # (QObject slots), so their auto-connections queue to the main
+        # thread. A plain-closure connect would be DIRECT and run the
+        # handler inside the worker thread (verified: PySide executes
+        # plain-callable connections in the emitting thread), where
+        # touching bridge state or self._con is both racy and fatal.
+        self._pending = (kind, th, on_done)
         wk.moveToThread(th)
         th.started.connect(wk.run)
-
-        def _finish(payload):
-            self._clear(th)
-            if kind == "backup":
-                self.backupsChanged.emit()
-            if kind == "restore" and getattr(self, "_restore_pending",
-                                             False):
-                self._restore_pending = False
-                self.backupsChanged.emit()
-                from PySide6.QtCore import QTimer as _T
-                _T.singleShot(400, self._relaunch)
-            if kind == "import":
-                self.importFinished.emit(payload if isinstance(payload, dict)
-                                         else {})
-            self.jobDone.emit(kind, _summary(kind, payload))
-            self.message.emit(_summary(kind, payload))
-
-        def _fail(err):
-            self._clear(th)
-            self.jobFailed.emit(kind, err)
-            self.message.emit(f"{kind} failed: {err}")
-
-        wk.done.connect(_finish)
-        wk.failed.connect(_fail)
+        wk.done.connect(self._job_done)
+        wk.failed.connect(self._job_failed)
         wk.done.connect(wk.deleteLater)
         wk.failed.connect(wk.deleteLater)
         th.finished.connect(th.deleteLater)
@@ -197,6 +204,38 @@ class DataIO(QObject):
         self.busyChanged.emit()
         th.start()
         return True
+
+    @Slot(object)
+    def _job_done(self, payload) -> None:
+        kind, th, on_done = self._pending
+        self._clear(th)
+        if kind == "backup":
+            self.backupsChanged.emit()
+        if kind == "restore" and getattr(self, "_restore_pending", False):
+            self._restore_pending = False
+            self.backupsChanged.emit()
+            from PySide6.QtCore import QTimer as _T
+            _T.singleShot(400, self._relaunch)
+        if kind == "import":
+            self.importFinished.emit(payload if isinstance(payload, dict)
+                                     else {})
+        # settings writes stay on the main thread (jobs carry the
+        # value home in the payload instead of touching self._con)
+        if (kind == "export" and isinstance(payload, dict)
+                and payload.get("last_export_dir")):
+            core_settings.set(self._con, "last_export_dir",
+                              str(payload.pop("last_export_dir")))
+        self.jobDone.emit(kind, _summary(kind, payload))
+        self.message.emit(_summary(kind, payload))
+        if on_done is not None:
+            on_done(payload)
+
+    @Slot(str)
+    def _job_failed(self, err: str) -> None:
+        kind, th, _ = self._pending
+        self._clear(th)
+        self.jobFailed.emit(kind, err)
+        self.message.emit(f"{kind} failed: {err}")
 
     def _clear(self, t) -> None:
         if self._thread is t:
@@ -324,7 +363,7 @@ class DataIO(QObject):
                 script=str(opts.get("script", "")),
                 script_enabled=bool(opts.get("script_enabled")),
                 progress=self._progress("export"))
-            core_settings.set(self._con, "last_export_dir", str(dest))
+            rep["last_export_dir"] = str(dest)
             return rep
 
         self._start("export", job)
@@ -334,11 +373,12 @@ class DataIO(QObject):
         opts = json.loads(opts_json or "{}")
 
         def job():
-            return xp.export_fonts_web(
-                self._con, family, dest,
-                fmts=list(opts.get("font_fmts") or ["woff2"]),
-                weights=opts.get("weights") or None,
-                progress=self._progress("export"))
+            with _job_con(self._db_path) as con:
+                return xp.export_fonts_web(
+                    con, family, dest,
+                    fmts=list(opts.get("font_fmts") or ["woff2"]),
+                    weights=opts.get("weights") or None,
+                    progress=self._progress("export"))
 
         self._start("export", job)
 
@@ -365,9 +405,10 @@ class DataIO(QObject):
                     out = core_colors.write_exports(name, list(hexes),
                                                     dest, k)
                     written.append(str(out))
-            core_settings.set(self._con, "last_export_dir", str(dest))
-            return {"written": len(written), "outputs": written,
-                    "files": len(hexes)}
+            rep = {"written": len(written), "outputs": written,
+                   "files": len(hexes)}
+            rep["last_export_dir"] = str(dest)
+            return rep
 
         def opts_names():
             return "null"
@@ -381,16 +422,17 @@ class DataIO(QObject):
         def job():
             cols = ("id, title, language, description, tags,"
                     " html, css, js")
-            if ids:
-                q = ",".join("?" * len(ids))
-                rows = [dict(r) for r in self._con.execute(
-                    f"SELECT {cols} FROM snippet WHERE id IN ({q})",
-                    list(ids))]
-            else:
-                rows = [dict(r) for r in self._con.execute(
-                    f"SELECT {cols} FROM snippet ORDER BY title")]
+            with _job_con(self._db_path) as con:
+                if ids:
+                    q = ",".join("?" * len(ids))
+                    rows = [dict(r) for r in con.execute(
+                        f"SELECT {cols} FROM snippet WHERE id IN ({q})",
+                        list(ids))]
+                else:
+                    rows = [dict(r) for r in con.execute(
+                        f"SELECT {cols} FROM snippet ORDER BY title")]
             rep = xp.export_snippets(rows, dest, kind=kind)
-            core_settings.set(self._con, "last_export_dir", str(dest))
+            rep["last_export_dir"] = str(dest)
             return rep
 
         self._start("export", job)
@@ -399,10 +441,11 @@ class DataIO(QObject):
     def exportBundle(self, scope: str, dest: str,
                      with_files: bool = True) -> None:
         def job():
-            rep = xp.export_bundle(self._con, dest, scope=scope,
-                                   with_files=with_files,
-                                   progress=self._progress("export"))
-            core_settings.set(self._con, "last_export_dir", str(dest))
+            with _job_con(self._db_path) as con:
+                rep = xp.export_bundle(con, dest, scope=scope,
+                                       with_files=with_files,
+                                       progress=self._progress("export"))
+            rep["last_export_dir"] = str(dest)
             return rep
 
         self._start("export", job)
@@ -490,9 +533,12 @@ class DataIO(QObject):
     # ── database administration ──────────────────────────────────────
     @Slot()
     def refreshStats(self) -> None:
+        db_path = self._db_path
+
         def job():
-            return {"kind": "stats",
-                    "data": core_backup.stats(self._con, self._db_path)}
+            with _job_con(db_path) as con:
+                return {"kind": "stats",
+                        "data": core_backup.stats(con, db_path)}
 
         def got(payload):
             self._stats = payload.get("data", {})
@@ -518,9 +564,11 @@ class DataIO(QObject):
             self.adminDone.emit(op, f"unknown operation: {op}")
             return
         fn = ops[op]
+        db_path = self._db_path
 
         def job():
-            return {"kind": op, "data": fn(self._con)}
+            with _job_con(db_path) as con:
+                return {"kind": op, "data": fn(con)}
 
         def got(payload):
             data = payload.get("data", {})
@@ -537,25 +585,32 @@ class DataIO(QObject):
         th = QThread(self)
         wk = _Worker(job)
         self._thread, self._worker = th, wk
+        # bound-method receivers → queued to the main thread (same rule
+        # as _start; a plain-closure connect would run in the worker)
+        self._pending_admin = (op, th, on_done)
         wk.moveToThread(th)
         th.started.connect(wk.run)
-
-        def _done(payload):
-            self._clear(th)
-            on_done(payload)
-
-        def _fail(err):
-            self._clear(th)
-            self.adminDone.emit(op, err)
-            self.message.emit(f"{op}: {err}")
-
-        wk.done.connect(_done)
-        wk.failed.connect(_fail)
+        wk.done.connect(self._admin_done)
+        wk.failed.connect(self._admin_failed)
         wk.done.connect(wk.deleteLater)
         wk.failed.connect(wk.deleteLater)
         th.finished.connect(th.deleteLater)
         self.busyChanged.emit()
         th.start()
+
+    @Slot(object)
+    def _admin_done(self, payload) -> None:
+        op, th, on_done = self._pending_admin
+        self._clear(th)
+        if on_done is not None:
+            on_done(payload)
+
+    @Slot(str)
+    def _admin_failed(self, err: str) -> None:
+        op, th, _ = self._pending_admin
+        self._clear(th)
+        self.adminDone.emit(op, err)
+        self.message.emit(f"{op}: {err}")
 
     # ── watch folders ────────────────────────────────────────────────
     @Slot(result="QVariantList")
@@ -632,6 +687,11 @@ class DataIO(QObject):
                 break
 
     def _run_watch(self, watch_id: int, force: bool) -> None:
+        # jobs are serialized — a second watch while one runs would
+        # overwrite self._thread/_worker and corrupt the busy state
+        if self._worker is not None:
+            self.message.emit("another data job is still running")
+            return
         row = self._con.execute(
             "SELECT * FROM watch_source WHERE id = ?", (watch_id,)
         ).fetchone()
@@ -699,15 +759,38 @@ class DataIO(QObject):
         th = QThread(self)
         wk = _Worker(job)
         self._thread, self._worker = th, wk
+        # bound-method receivers → queued to the main thread (a plain-
+        # closure connect would run these inside the worker thread)
+        self._pending_watch = th
         wk.moveToThread(th)
         th.started.connect(wk.run)
-        wk.done.connect(done)
-        wk.failed.connect(fail)
+        wk.done.connect(self._watch_done)
+        wk.failed.connect(self._watch_failed)
         wk.done.connect(wk.deleteLater)
         wk.failed.connect(wk.deleteLater)
         th.finished.connect(th.deleteLater)
         self.busyChanged.emit()
         th.start()
+
+    @Slot(object)
+    def _watch_done(self, payload) -> None:
+        self._clear(self._pending_watch)
+        if payload.get("quiet"):
+            return
+        self.watchesChanged.emit()
+        if payload.get("rescan"):
+            self.message.emit(
+                f"Watch {payload.get('watch', '')}: "
+                f"{payload.get('files', 0)} new/changed")
+            self.importFinished.emit(payload)
+        self.jobDone.emit("watch", f"{payload.get('files', 0)} files")
+
+    @Slot(str)
+    def _watch_failed(self, err: str) -> None:
+        self._clear(self._pending_watch)
+        self.jobFailed.emit("watch", err)
+        self.message.emit(f"watch failed: {err}")
+        self.watchesChanged.emit()
 
     def _relaunch(self) -> None:
         """Restart into the restored database (argv preserved minus the
