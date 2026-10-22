@@ -1,0 +1,730 @@
+openapi: "3.0.3"
+info:
+  title: Fengrid REST API
+  version: "1.0.0"
+  description: |
+    Control Fengrid programmatically: ingest/import, export/distribute,
+    characterize/inventory/describe assets, edit/update/save metadata,
+    tag, collect, and reference assets, collections, libraries, and
+    projects — plus backups, database administration, and job tracking.
+
+    Run: `python -m api.v1 --db <library.db> --port 8642`
+
+    Every request needs `Authorization: Bearer <token>`. Long operations
+    return `202` with a job handle; poll `GET /jobs/{id}` for state and
+    result.
+servers:
+  - url: http://127.0.0.1:8642/api/v1
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        data:
+          type: object
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            status:
+              type: integer
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        state:
+          type: string
+          enum: [queued, running, done, failed]
+        progress:
+          type: object
+        result:
+          type: object
+        error:
+          type: string
+  responses:
+    Err:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Envelope'
+security:
+  - bearer: []
+paths:
+  /health:
+    get:
+      summary: Liveness + version
+      responses:
+        '200':
+          description: OK
+  /inventory:
+    get:
+      summary: >-
+        Aggregate inventory — counts by kind, starred, collections,
+        libraries, projects, tags, sources, watch folders.
+      responses:
+        '200':
+          description: OK
+  /assets:
+    get:
+      summary: List assets (one kind at a time)
+      parameters:
+        - name: kind
+          in: query
+          schema:
+            type: string
+            enum: [icon, font, palette, snippet]
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: collection
+          in: query
+          schema:
+            type: integer
+        - name: starred
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+  /assets/{kind}/{id}:
+    get:
+      summary: >-
+        Describe — full metadata, tags, custom fields, collections, file
+        stats.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    patch:
+      summary: Edit/update/save — rename, sync tags, set custom field values
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                fields:
+                  type: object
+                  description: '{field_name: value}'
+      responses:
+        '200':
+          description: OK
+  /assets/{kind}/{id}/star:
+    post:
+      summary: Star / unstar (writes the Starred Assets collection)
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                on:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: OK
+  /assets/{kind}/{id}/tags:
+    post:
+      summary: Replace the tag set (sync)
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tags]
+              properties:
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+  /assets/{kind}/{id}/collect:
+    post:
+      summary: Add to a collection (reference)
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [collection_id]
+              properties:
+                collection_id:
+                  type: integer
+      responses:
+        '200':
+          description: OK
+  /assets/{kind}/{id}/collect/{ref_id}:
+    delete:
+      summary: Remove a collection reference
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: ref_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /assets/{kind}/{id}/copy:
+    post:
+      summary: >-
+        Copy/duplicate — file-level for icons/fonts, row-level for
+        palettes/snippets; tags carried over.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '409':
+          $ref: '#/components/responses/Err'
+  /assets/ingest:
+    post:
+      summary: >-
+        Ingest/import files, a zip, or a folder (mode copy|link) — async
+        job.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paths:
+                  type: array
+                  items:
+                    type: string
+                zip_path:
+                  type: string
+                folder:
+                  type: string
+                mode:
+                  type: string
+                  enum: [copy, link]
+                  default: copy
+      responses:
+        '202':
+          description: Job accepted
+        '400':
+          $ref: '#/components/responses/Err'
+  /assets/export:
+    post:
+      summary: >-
+        Export with per-type extended options — async job. Scopes: icons
+        (formats, size, tint, script), fonts (formats, weights,
+        webfonts), palettes (formats incl. txt/csv/md code lists),
+        snippets (zip/vscode/massCode), bundle (full library package
+        with files).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope]
+              properties:
+                scope:
+                  type: string
+                  enum: [icons, fonts, palettes, snippets, bundle]
+                dest:
+                  type: string
+                paths:
+                  type: array
+                  items:
+                    type: string
+                family:
+                  type: string
+                name:
+                  type: string
+                colors:
+                  type: array
+                  items:
+                    type: string
+                ids:
+                  type: array
+                  items:
+                    type: integer
+                with_files:
+                  type: boolean
+                opts:
+                  type: object
+                  properties:
+                    formats:
+                      type: array
+                      items:
+                        type: string
+                    size:
+                      type: integer
+                    tint:
+                      type: string
+                    script:
+                      type: string
+                    script_enabled:
+                      type: boolean
+                    weights:
+                      type: array
+                      items:
+                        type: integer
+                    snippet_kind:
+                      type: string
+      responses:
+        '202':
+          description: Job accepted
+  /collections:
+    get:
+      summary: List collections (tree)
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create a collection (optionally nested)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                parent_id:
+                  type: integer
+                tags:
+                  type: string
+      responses:
+        '200':
+          description: OK
+  /collections/{id}:
+    get:
+      summary: Describe a collection with its refs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    delete:
+      summary: Delete a collection (refs cascade)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /collections/{id}/refs:
+    get:
+      summary: List a collection's member references
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Add a member reference
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, item_id]
+              properties:
+                kind:
+                  type: string
+                item_id:
+                  type: integer
+      responses:
+        '200':
+          description: OK
+  /libraries:
+    get:
+      summary: List saved library views (tag-driven) with resolved members
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create a library view
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                tags:
+                  type: string
+                match_all:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+  /tags:
+    get:
+      summary: List tags with use counts
+      responses:
+        '200':
+          description: OK
+  /tags/{name}:
+    patch:
+      summary: Rename a tag everywhere
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new]
+              properties:
+                new:
+                  type: string
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: Delete a tag everywhere
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /fields:
+    get:
+      summary: List custom field definitions
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create a custom field (text|number|bool|date|select|id)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                options:
+                  type: object
+      responses:
+        '200':
+          description: OK
+  /fields/{id}:
+    delete:
+      summary: Delete a custom field (values cascade)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /projects:
+    get:
+      summary: List projects
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /projects/{id}:
+    get:
+      summary: Describe a project with its asset list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+  /backups:
+    get:
+      summary: List backup packages in the backups dir
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: >-
+        Create a backup package (tar.gz + manifest + restore scripts) —
+        async job.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dest:
+                  type: string
+      responses:
+        '202':
+          description: Job accepted
+  /backup/restore:
+    post:
+      summary: >-
+        Restore a backup package — async job. The desktop app restarts
+        itself after a restore; via API the swap happens on the next
+        clean start (current DB saved as .pre-restore).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+      responses:
+        '202':
+          description: Job accepted
+  /db/{op}:
+    post:
+      summary: >-
+        Database administration — op: check | vacuum | checkpoint |
+        optimize | rebuild_fts | sweep.
+      parameters:
+        - name: op
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [check, vacuum, checkpoint, optimize, rebuild_fts, sweep]
+      responses:
+        '202':
+          description: Job accepted
+  /watch:
+    get:
+      summary: List watch folders / remote sources
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: >-
+        Create a watch source (local filesystem, FTP, SFTP, SCP, HTTP,
+        rsync, S3-compatible).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, remote]
+              properties:
+                name:
+                  type: string
+                remote:
+                  type: string
+                transport:
+                  type: string
+                interval:
+                  type: integer
+      responses:
+        '200':
+          description: OK
+  /watch/{id}:
+    delete:
+      summary: Delete a watch source
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /watch/{id}/run:
+    post:
+      summary: >-
+        Run-now — 501 in headless API v1; the Qt watch worker owns
+        pulling.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '501':
+          $ref: '#/components/responses/Err'
+  /jobs:
+    get:
+      summary: List jobs (active=1 for queued/running only)
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: OK
+  /jobs/{id}:
+    get:
+      summary: Poll a job's state and result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    delete:
+      summary: Best-effort cooperative cancel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK

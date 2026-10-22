@@ -1,0 +1,1468 @@
+{
+  "info": {
+    "name": "Fengrid REST API v1",
+    "_postman_id": "fengrid-api-v1-0001",
+    "description": "Fengrid asset manager \u2014 REST API v1. Set {{base}} (e.g. http://127.0.0.1:8642/api/v1) and {{token}} as collection variables. Long operations return 202 + a job id; poll /jobs/{id}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://127.0.0.1:8642/api/v1"
+    },
+    {
+      "key": "token",
+      "value": "PASTE-TOKEN"
+    },
+    {
+      "key": "kind",
+      "value": "icon"
+    },
+    {
+      "key": "id",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/health",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Inventory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/inventory",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "inventory"
+              ]
+            },
+            "description": "Counts by kind, starred, collections, libraries, projects, tags, sources, watch folders."
+          }
+        },
+        {
+          "name": "Jobs list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/jobs?active=1",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "jobs?active=1"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Job status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/jobs/{{job_id}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Cancel job",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/jobs/{{job_id}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "jobs",
+                "{{job_id}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assets",
+      "item": [
+        {
+          "name": "List assets",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets?kind={{kind}}&limit=100",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets?kind={{kind}}&limit=100"
+              ]
+            },
+            "description": "Filters: q, collection, starred, limit, offset."
+          }
+        },
+        {
+          "name": "Describe asset",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/{{kind}}/{{id}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "{{kind}}",
+                "{{id}}"
+              ]
+            },
+            "description": "Full metadata + tags + custom fields + collections + file stats."
+          }
+        },
+        {
+          "name": "Edit / update / save",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/{{kind}}/{{id}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "{{kind}}",
+                "{{id}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Renamed\",\n  \"tags\": [\n    \"hero\"\n  ],\n  \"fields\": {\n    \"client\": \"Acme\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Star / unstar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/{{kind}}/{{id}}/star",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "{{kind}}",
+                "{{id}}",
+                "star"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"on\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Sync tags",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/{{kind}}/{{id}}/tags",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "{{kind}}",
+                "{{id}}",
+                "tags"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tags\": [\n    \"hero\",\n    \"ui\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Collect (reference)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/{{kind}}/{{id}}/collect",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "{{kind}}",
+                "{{id}}",
+                "collect"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"collection_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Uncollect",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/{{kind}}/{{id}}/collect/1",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "{{kind}}",
+                "{{id}}",
+                "collect",
+                "1"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Copy / duplicate",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/{{kind}}/{{id}}/copy",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "{{kind}}",
+                "{{id}}",
+                "copy"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Ingest files",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/ingest",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "ingest"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paths\": [\n    \"/path/to/a.png\"\n  ],\n  \"mode\": \"copy\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ingest zip",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/ingest",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "ingest"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"zip_path\": \"/path/to/pack.zip\",\n  \"mode\": \"copy\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ingest folder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/ingest",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "ingest"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"folder\": \"/path/to/folder\",\n  \"mode\": \"link\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Export icons",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/export",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "export"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"icons\",\n  \"dest\": \"/tmp/out\",\n  \"paths\": [\n    \"/path/a.svg\"\n  ],\n  \"opts\": {\n    \"formats\": [\n      \"png\",\n      \"svg\",\n      \"webp\"\n    ],\n    \"size\": 256,\n    \"tint\": \"#ff5500\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Export webfonts",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/export",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "export"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"fonts\",\n  \"dest\": \"/tmp/out\",\n  \"family\": \"Inter\",\n  \"opts\": {\n    \"formats\": [\n      \"woff2\",\n      \"woff\"\n    ],\n    \"weights\": [\n      400,\n      700\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Export palette",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/export",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "export"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"palettes\",\n  \"dest\": \"/tmp/out\",\n  \"name\": \"Brand\",\n  \"colors\": [\n    \"#ff0000\",\n    \"#00ff00\"\n  ],\n  \"opts\": {\n    \"formats\": [\n      \"css\",\n      \"json\",\n      \"txt\",\n      \"csv\",\n      \"md\"\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Export snippets",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/export",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "export"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"snippets\",\n  \"dest\": \"/tmp/out\",\n  \"opts\": {\n    \"snippet_kind\": \"zip\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Export bundle",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/assets/export",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "assets",
+                "export"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scope\": \"bundle\",\n  \"dest\": \"/tmp/out\",\n  \"with_files\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Collections",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/collections",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "collections"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/collections",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "collections"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Heroes\",\n  \"parent_id\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Describe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/collections/{{cid}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "collections",
+                "{{cid}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/collections/{{cid}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "collections",
+                "{{cid}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Refs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/collections/{{cid}}/refs",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "collections",
+                "{{cid}}",
+                "refs"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Add ref",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/collections/{{cid}}/refs",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "collections",
+                "{{cid}}",
+                "refs"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"icon\",\n  \"item_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Libraries",
+      "item": [
+        {
+          "name": "List views",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/libraries",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "libraries"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Create view",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/libraries",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "libraries"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Brand\",\n  \"tags\": \"hero ui\",\n  \"match_all\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/tags",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "tags"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Rename",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/tags/{{tag}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "tags",
+                "{{tag}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new\": \"renamed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/tags/{{tag}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "tags",
+                "{{tag}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Custom fields",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/fields",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "fields"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/fields",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "fields"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"client\",\n  \"type\": \"text\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/fields/{{fid}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "fields",
+                "{{fid}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/projects",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "projects"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Describe",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/projects/{{pid}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "projects",
+                "{{pid}}"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Backup & DB admin",
+      "item": [
+        {
+          "name": "Backups list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/backups",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "backups"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Create backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/backups",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "backups"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dest\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Restore backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/backup/restore",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "backup",
+                "restore"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"path\": \"/path/to/backup.tar.gz\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DB admin (check|vacuum|checkpoint|optimize|rebuild_fts|sweep)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/db/check",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "db",
+                "check"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "Watch folders",
+      "item": [
+        {
+          "name": "List",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/watch",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "watch"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/watch",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "watch"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Dropbox\",\n  \"remote\": \"/path/to/dir\",\n  \"transport\": \"local\",\n  \"interval\": 300\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/watch/{{wid}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "watch",
+                "{{wid}}"
+              ]
+            },
+            "description": ""
+          }
+        },
+        {
+          "name": "Run now (501 headless)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/watch/{{wid}}/run",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "watch",
+                "{{wid}}",
+                "run"
+              ]
+            },
+            "description": ""
+          }
+        }
+      ]
+    }
+  ]
+}
