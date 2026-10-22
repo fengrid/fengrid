@@ -9,7 +9,16 @@ per-pane server SQLite) into one database with unified tags and collections
 from __future__ import annotations
 
 import sqlite3
+import time
+import uuid
 from pathlib import Path
+
+
+def new_guid() -> str:
+    """Canonical 36-char GUID — generated once when a row is first
+    tracked, stable for its lifetime."""
+    return str(uuid.uuid4())
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS source (
@@ -35,7 +44,9 @@ CREATE TABLE IF NOT EXISTS asset (
     colorspace  TEXT,
     color_count INTEGER,
     mono        INTEGER,              -- 1 monochrome, 0 color, NULL unknown
-    mtime       REAL
+    mtime       REAL,
+    guid        TEXT,                 -- generated unique GUID (set at ingest)
+    slug        TEXT                  -- user-defined short link name ('' default)
 );
 CREATE INDEX IF NOT EXISTS idx_asset_theme ON asset(theme);
 CREATE INDEX IF NOT EXISTS idx_asset_ext   ON asset(ext);
@@ -53,7 +64,9 @@ CREATE TABLE IF NOT EXISTS asset_tag (
 CREATE TABLE IF NOT EXISTS collection (
     id   INTEGER PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
-    query TEXT
+    query TEXT,
+    guid TEXT,
+    slug TEXT
 );
 CREATE TABLE IF NOT EXISTS collection_item (
     collection_id INTEGER NOT NULL REFERENCES collection(id) ON DELETE CASCADE,
@@ -66,7 +79,9 @@ CREATE TABLE IF NOT EXISTS palette (
     name    TEXT NOT NULL,
     tags    TEXT,
     created REAL,
-    updated REAL
+    updated REAL,
+    guid    TEXT,
+    slug    TEXT
 );
 CREATE TABLE IF NOT EXISTS palette_color (
     palette_id INTEGER NOT NULL REFERENCES palette(id) ON DELETE CASCADE,
@@ -94,7 +109,9 @@ CREATE TABLE IF NOT EXISTS snippet (
     js          TEXT NOT NULL DEFAULT '',
     tags        TEXT NOT NULL DEFAULT '',
     created     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-    updated     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    updated     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    guid        TEXT,
+    slug        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_snippet_updated ON snippet(updated DESC);
 
@@ -105,7 +122,9 @@ CREATE TABLE IF NOT EXISTS projects (
     tags        TEXT NOT NULL DEFAULT '',
     settings    TEXT NOT NULL DEFAULT '{}',
     created     TEXT NOT NULL DEFAULT (datetime('now')),
-    updated     TEXT NOT NULL DEFAULT (datetime('now'))
+    updated     TEXT NOT NULL DEFAULT (datetime('now')),
+    guid        TEXT,
+    slug        TEXT
 );
 CREATE TABLE IF NOT EXISTS project_asset (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,7 +156,9 @@ CREATE TABLE IF NOT EXISTS library_view (
     tags      TEXT NOT NULL DEFAULT '',   -- comma-separated tag names
     match_all INTEGER NOT NULL DEFAULT 0, -- 1 = asset must carry every tag
     created   REAL NOT NULL,
-    updated   REAL NOT NULL
+    updated   REAL NOT NULL,
+    guid      TEXT,
+    slug      TEXT
 );
 
 -- Smart collections: stored criteria, evaluated live (no membership rows)
@@ -207,6 +228,17 @@ CREATE TABLE IF NOT EXISTS watch_state (
     last_sig  TEXT NOT NULL DEFAULT '',
     last_hits INTEGER NOT NULL DEFAULT 0
 );
+
+-- Live content for structured-data assets (data / timeseries kinds):
+-- the REST API and sensors read/write the payload here. Revision bumps
+-- on every write so clients can detect changes; timeseries points ride
+-- inside the payload ({points: [...]}).
+CREATE TABLE IF NOT EXISTS asset_data (
+    asset_id INTEGER PRIMARY KEY REFERENCES asset(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL DEFAULT 1,
+    payload  TEXT NOT NULL DEFAULT '{}',   -- JSON document
+    updated  REAL NOT NULL DEFAULT 0
+);
 """
 
 # External-content FTS5 kept in sync by triggers (the indexer UPDATEs an
@@ -254,8 +286,131 @@ def _migrate(con: sqlite3.Connection) -> None:
             if "duplicate column" not in str(e).lower():
                 raise
     con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
+    _migrate_guid_slug(con)
     _migrate_collections(con)
     _migrate_taxonomy_items(con)
+
+
+# Every tracked object carries a generated GUID (assigned at first
+# ingest/creation, backfilled here for pre-existing rows) and a user
+# slug (empty by default, unique when set). Slug uniqueness is GLOBAL
+# across all tracked tables — [[ slug ]] references must resolve to
+# exactly one object — so it is enforced in set_slug() rather than by
+# per-table indexes.
+_SLUG_TABLES = (
+    "asset", "snippet", "palette", "collection", "library_view", "projects",
+)
+
+
+def _migrate_guid_slug(con: sqlite3.Connection) -> None:
+    for table in _SLUG_TABLES:
+        cols = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+        if "guid" not in cols:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN guid TEXT")
+        if "slug" not in cols:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN slug TEXT")
+    # backfill GUIDs — one uuid4 per row missing one (id-preserving:
+    # existing taxonomy/link rows keep pointing at the same ids)
+    for table in _SLUG_TABLES:
+        rows = con.execute(
+            f"SELECT id FROM {table} WHERE guid IS NULL OR guid = ''"
+        ).fetchall()
+        for r in rows:
+            con.execute(f"UPDATE {table} SET guid = ? WHERE id = ?",
+                        (new_guid(), r["id"]))
+    # the guid index lives HERE (not in SCHEMA): on legacy databases the
+    # column only exists once the ALTERs above have run
+    con.execute("CREATE INDEX IF NOT EXISTS idx_asset_guid ON asset(guid)")
+    con.commit()
+
+
+def set_slug(con: sqlite3.Connection, kind: str, item_id: int,
+             slug: str) -> str:
+    """Set an object's user-facing slug (the [[ slug ]] link name).
+
+    Slugs are normalized to lowercase-hyphen and must be globally unique
+    across every tracked table; '' clears the slug. Returns the stored
+    value; raises ValueError on an invalid or taken slug.
+    """
+    table = _SLUG_TABLE_FOR[kind]
+    slug = (slug or "").strip().lower()
+    slug = "-".join(slug.split())
+    if slug:
+        import re as _re
+        if not _re.fullmatch(r"[a-z0-9][a-z0-9._-]*", slug):
+            raise ValueError(
+                f"invalid slug {slug!r}: use letters, digits, . _ -")
+        for other in _SLUG_TABLES:
+            row = con.execute(
+                f"SELECT 1 FROM {other} WHERE slug = ? AND id != ?",
+                (slug, item_id if other == table else -1)).fetchone()
+            if row is not None:
+                raise ValueError(f"slug {slug!r} is already taken")
+    con.execute(f"UPDATE {table} SET slug = ? WHERE id = ?",
+                (slug, item_id))
+    con.commit()
+    return slug
+
+
+_SLUG_TABLE_FOR = {
+    "icon": "asset", "font": "asset", "image": "asset", "video": "asset",
+    "audio": "asset", "doc": "asset", "data": "asset",
+    "spatial": "asset", "timeseries": "asset", "markdown": "asset",
+    "snippet": "snippet", "palette": "palette", "collection": "collection",
+    "library": "library_view", "project": "projects",
+}
+
+
+def lookup_by_slug(con: sqlite3.Connection, slug: str) -> dict | None:
+    """[[ slug ]] resolution: first match across the tracked tables.
+
+    Asset-table hits report the row's real kind (icon/image/data/…), not
+    the alias that happened to match first."""
+    slug = (slug or "").strip().lower()
+    if not slug:
+        return None
+    row = con.execute(
+        "SELECT id, kind, guid FROM asset WHERE slug = ?", (slug,)
+    ).fetchone()
+    if row is not None:
+        return {"kind": row["kind"], "id": row["id"], "guid": row["guid"],
+                "table": "asset"}
+    for kind, table in (("snippet", "snippet"), ("palette", "palette"),
+                        ("collection", "collection"),
+                        ("library", "library_view"),
+                        ("project", "projects")):
+        row = con.execute(
+            f"SELECT id, guid FROM {table} WHERE slug = ?", (slug,)
+        ).fetchone()
+        if row is not None:
+            return {"kind": kind, "id": row["id"], "guid": row["guid"],
+                    "table": table}
+    return None
+
+
+def lookup_by_guid(con: sqlite3.Connection, guid: str) -> dict | None:
+    """[[ GUID ]] resolution across the tracked tables (the row's real
+    kind is reported for asset-table hits)."""
+    guid = (guid or "").strip()
+    if not guid:
+        return None
+    row = con.execute(
+        "SELECT id, kind, slug FROM asset WHERE guid = ?", (guid,)
+    ).fetchone()
+    if row is not None:
+        return {"kind": row["kind"], "id": row["id"],
+                "slug": row["slug"] or "", "table": "asset"}
+    for kind, table in (("snippet", "snippet"), ("palette", "palette"),
+                        ("collection", "collection"),
+                        ("library", "library_view"),
+                        ("project", "projects")):
+        row = con.execute(
+            f"SELECT id, slug FROM {table} WHERE guid = ?", (guid,)
+        ).fetchone()
+        if row is not None:
+            return {"kind": kind, "id": row["id"], "slug": row["slug"] or "",
+                    "table": table}
+    return None
 
 
 def _migrate_taxonomy_items(con: sqlite3.Connection) -> None:
@@ -346,8 +501,9 @@ def ensure_defaults(con: sqlite3.Connection) -> None:
     """The 'starred' tag and 'Starred Assets' collection exist from the
     first launch (idempotent — INSERT OR IGNORE on the unique names)."""
     con.execute("INSERT OR IGNORE INTO tag(name) VALUES (?)", (STARRED_TAG,))
-    con.execute("INSERT OR IGNORE INTO collection(name) VALUES (?)",
-                (STARRED_COLLECTION,))
+    con.execute(
+        "INSERT OR IGNORE INTO collection(name, guid) VALUES (?, ?)",
+        (STARRED_COLLECTION, new_guid()))
 
 
 def _starred_ids(con: sqlite3.Connection) -> tuple[int, int]:
@@ -412,7 +568,9 @@ def delete_tag(con: sqlite3.Connection, name: str) -> bool:
     return True
 
 
-COLLECTION_KINDS = ("icon", "font", "snippet", "palette")
+COLLECTION_KINDS = ("icon", "font", "image", "video", "audio", "doc",
+                    "data", "spatial", "timeseries", "markdown",
+                    "snippet", "palette")
 
 
 def collection_tree(con: sqlite3.Connection) -> list[dict]:
@@ -438,8 +596,9 @@ def create_sub_collection(con: sqlite3.Connection, name: str,
                           parent_id: int = 0, tags: str = "") -> int:
     name = (name or "").strip() or "Untitled collection"
     cur = con.execute(
-        "INSERT INTO collection(name, parent_id, tags) VALUES (?, ?, ?)",
-        (name, int(parent_id) if parent_id else None, tags))
+        "INSERT INTO collection(name, parent_id, tags, guid)"
+        " VALUES (?, ?, ?, ?)",
+        (name, int(parent_id) if parent_id else None, tags, new_guid()))
     con.commit()
     return int(cur.lastrowid or 0)
 
@@ -467,15 +626,15 @@ def add_collection_ref(con: sqlite3.Connection, coll_id: int, kind: str,
     unknown kind or a row that does not exist."""
     if kind not in COLLECTION_KINDS:
         return False
-    if kind in ("icon", "font"):
-        ok = con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
-                         (item_id, kind)).fetchone()
-    elif kind == "snippet":
+    if kind == "snippet":
         ok = con.execute("SELECT 1 FROM snippet WHERE id = ?",
                          (item_id,)).fetchone()
-    else:
+    elif kind == "palette":
         ok = con.execute("SELECT 1 FROM palette WHERE id = ?",
                          (item_id,)).fetchone()
+    else:
+        ok = con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
+                         (item_id, kind)).fetchone()
     if not ok:
         return False
     con.execute(
@@ -657,3 +816,77 @@ def variants_for(con: sqlite3.Connection, asset_id: int) -> list[dict]:
         (row["theme"], row["name"], asset_id),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── structured-data content (data / timeseries kinds) ────────────────
+# Sensors and services push updates through the REST API; the GUI reads
+# the same rows. Payload is one JSON document per asset; every write
+# bumps `revision` so pollers can detect change.
+
+def get_asset_data(con: sqlite3.Connection, asset_id: int) -> dict | None:
+    import json as _json
+    row = con.execute(
+        "SELECT revision, payload, updated FROM asset_data WHERE asset_id = ?",
+        (asset_id,)).fetchone()
+    if row is None:
+        return None
+    try:
+        doc = _json.loads(row["payload"])
+    except ValueError:
+        doc = {}
+    return {"asset_id": int(asset_id), "revision": row["revision"],
+            "payload": doc, "updated": row["updated"]}
+
+
+def put_asset_data(con: sqlite3.Connection, asset_id: int,
+                   payload: dict) -> dict:
+    """Create or fully replace an asset's data payload."""
+    import json as _json
+    row = con.execute("SELECT revision FROM asset_data WHERE asset_id = ?",
+                      (asset_id,)).fetchone()
+    rev = (row["revision"] + 1) if row else 1
+    con.execute(
+        "INSERT INTO asset_data(asset_id, revision, payload, updated)"
+        " VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(asset_id) DO UPDATE SET revision = excluded.revision,"
+        " payload = excluded.payload, updated = excluded.updated",
+        (asset_id, rev, _json.dumps(payload or {}), time.time()))
+    con.commit()
+    return get_asset_data(con, asset_id) or {
+        "asset_id": int(asset_id), "revision": rev, "payload": payload or {},
+        "updated": 0.0}
+
+
+def patch_asset_data(con: sqlite3.Connection, asset_id: int,
+                     merge: dict) -> dict:
+    """Merge keys into an existing payload (shallow; nested paths via
+    dotted keys are NOT expanded — clients send full subtrees)."""
+    import json as _json
+    cur = get_asset_data(con, asset_id) or {"payload": {}, "revision": 0}
+    doc = dict(cur["payload"])
+    doc.update(merge or {})
+    return put_asset_data(con, asset_id, doc)
+
+
+def delete_asset_data(con: sqlite3.Connection, asset_id: int) -> bool:
+    cur = con.execute("DELETE FROM asset_data WHERE asset_id = ?",
+                      (asset_id,))
+    con.commit()
+    return cur.rowcount > 0
+
+
+def append_asset_points(con: sqlite3.Connection, asset_id: int,
+                        points: list) -> dict:
+    """Timeseries append: points [{t, v} or {t, k: v, ...}] land at the
+    end of payload.points; the document stays bounded by _MAX_TS_POINTS."""
+    import json as _json
+    if not isinstance(points, list):
+        raise ValueError("points must be a list")
+    cur = get_asset_data(con, asset_id) or {"payload": {}, "revision": 0}
+    doc = dict(cur["payload"])
+    existing = doc.get("points") or []
+    doc["points"] = (existing + list(points))[-_MAX_TS_POINTS:]
+    return put_asset_data(con, asset_id, doc)
+
+
+_MAX_TS_POINTS = 100000

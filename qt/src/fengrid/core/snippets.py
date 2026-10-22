@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+
+from . import db as core_db
 from pathlib import Path
 
 # --------------------------------------------------------------------------
@@ -417,9 +419,10 @@ def get_snippet(con, sid):
 
 def create_snippet(con, title, description, language, html, css, js, tags):
     cur = con.execute(
-        "INSERT INTO snippet (title, description, language, html, css, js, tags)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (title, description, language, html, css, js, tags))
+        "INSERT INTO snippet (title, description, language, html, css, js,"
+        " tags, guid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (title, description, language, html, css, js, tags,
+         core_db.new_guid()))
     con.commit()
     return cur.lastrowid
 

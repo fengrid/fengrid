@@ -528,6 +528,14 @@ class Library(QObject):
         QGuiApplication.clipboard().setText(row["name"])
         self.message.emit(f"Copied '{row['name']}'")
 
+    @Slot(str)
+    def copy_text(self, text: str) -> None:
+        """Clipboard helper for inspector fields (GUID copy etc.)."""
+        if not text:
+            return
+        QGuiApplication.clipboard().setText(str(text))
+        self.message.emit("Copied to clipboard")
+
     @Slot(int, result="QVariantMap")
     def get_details(self, index: int) -> dict:
         row = self._model.row(index)

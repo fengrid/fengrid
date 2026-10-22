@@ -178,6 +178,93 @@ Rectangle {
             }
         }
 
+        // ── IDENTITY: the generated GUID + the user slug ([[ … ]] links) ──
+        SectionHeader { text: qsTr("Identity"); Layout.fillWidth: true }
+        ColumnLayout {
+            visible: d !== null
+            spacing: 4
+            Layout.fillWidth: true
+            RowLayout {
+                spacing: 6
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("GUID")
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
+                    color: theme.tokens.textMuted
+                    Layout.preferredWidth: 56
+                }
+                Text {
+                    id: guidText
+                    text: d ? (d.guid || "") : ""
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
+                    color: theme.tokens.text
+                    elide: Text.ElideMiddle
+                    Layout.fillWidth: true
+                }
+                IconButton {
+                    icon_name: "copy"
+                    icon_px: 11
+                    implicitWidth: 22
+                    implicitHeight: 22
+                    ToolTip.text: qsTr("Copy GUID")
+                    onClicked: {
+                        if (guidText.text !== "" && library !== null)
+                            library.copy_text(guidText.text)
+                    }
+                }
+            }
+            RowLayout {
+                spacing: 6
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("Slug")
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
+                    color: theme.tokens.textMuted
+                    Layout.preferredWidth: 56
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 24
+                    radius: 6
+                    color: theme.tokens.surface2
+                    border.color: slugField.activeFocus
+                                  ? theme.tokens.accent : theme.tokens.border
+                    TextInput {
+                        id: slugField
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        verticalAlignment: TextInput.AlignVCenter
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
+                        color: theme.tokens.text
+                        clip: true
+                        text: d ? (d.slug || "") : ""
+                        onAccepted: commitSlug()
+                        onEditingFinished: commitSlug()
+                        function commitSlug() {
+                            if (d === null || taxonomy === null)
+                                return
+                            if (text === (d.slug || ""))
+                                return
+                            taxonomy.set_slug("icon", d.id, text)
+                            panel.reload()
+                        }
+                    }
+                }
+            }
+            Text {
+                visible: slugField.text !== ""
+                text: qsTr("link with [[ %1 ]]").arg(slugField.text)
+                font.family: theme.monoFont
+                font.pixelSize: 9
+                color: theme.tokens.textMuted
+            }
+        }
+
         SectionHeader {
             text: qsTr("Variants")
             visible: d && d.variants.length > 0

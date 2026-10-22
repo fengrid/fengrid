@@ -64,7 +64,11 @@ Item {
         function onCurrentChanged() { projectsRoot.syncSettings() }
         function onProjectsChanged() { projectsRoot.refreshPickers() }
     }
-    Component.onCompleted: { syncSettings(); refreshPickers() }
+    Component.onCompleted: {
+        syncSettings(); refreshPickers()
+        if (projects !== null && projects.currentId >= 0 && sc !== null)
+            sc.attach(projects.current().name || "", "project")
+    }
 
     Toast { id: toast }
 
@@ -964,7 +968,8 @@ Item {
                             spacing: 2
                             Repeater {
                                 model: [qsTr("Console"), qsTr("Logs"),
-                                        qsTr("Revisions"), qsTr("Ask")]
+                                        qsTr("Revisions"), qsTr("Ask"),
+                                        qsTr("Source")]
                                 delegate: Rectangle {
                                     id: dockTabBtn
                                     required property string modelData
@@ -1226,6 +1231,12 @@ Item {
                                     }
                                 }
                             }
+                            // ── Source tab: git panel (VS Code-style) ──
+                            Item {
+                                visible: projectsRoot.bottomTab === 4
+                                anchors.fill: parent
+                                SourceControlPanel { anchors.fill: parent }
+                            }
                         }
                     }
 
@@ -1450,7 +1461,7 @@ Item {
     property var selInfo: ({})          // selected element descriptor
     property string consoleText: ""
     property string logText: ""
-    property int bottomTab: 0           // 0 console 1 logs 2 revisions 3 ask
+    property int bottomTab: 0           // 0 console 1 logs 2 revisions 3 ask 4 source
     property string askText: ""
 
     function sendAsk() {

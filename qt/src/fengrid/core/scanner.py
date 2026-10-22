@@ -90,6 +90,27 @@ def iter_icon_files(root: str | Path):
                 yield p
 
 
+def iter_asset_files(root: str | Path):
+    """Yield every trackable asset file under root (icons, fonts excluded —
+    they have their own scan — plus media/data/spatial/markdown kinds).
+
+    Fonts are excluded here so a folder source never gets double-counted
+    by the font scanner; the kinds registry classifies each file later.
+    """
+    from . import kinds as core_kinds
+    root = str(root)
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        for fn in filenames:
+            ext = fn.rsplit(".", 1)[-1].lower() if "." in fn else ""
+            kind = core_kinds.kind_for_ext(ext)
+            if kind is None or kind == "font":
+                continue
+            p = os.path.join(dirpath, fn)
+            if os.path.isfile(p):  # False for dangling symlinks
+                yield p
+
+
 def derive_meta(path: str | Path, source_root: str | Path) -> dict:
     """Derive (name, theme, context, size_px) from a path, porting the 0.x
     path parser (list.txt entries like <root>/<Theme>/<size>/<context>/f.png).

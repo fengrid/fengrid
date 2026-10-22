@@ -39,6 +39,19 @@ Rectangle {
         return counts[paneKind] || 0
     }
 
+    // COLLAPSIBLE SECTIONS — every list section in the rail carries a
+    // chevron header that toggles its rows; state lives for the session
+    property var sectOpen: ({
+        "families": true, "ftypes": true, "themes": true, "contexts": true,
+        "exts": true, "collections": true, "smart": true,
+        "libraries": true, "tags": true
+    })
+    function toggleSection(key) {
+        var next = Object.assign({}, sectOpen)
+        next[key] = !next[key]
+        sectOpen = next
+    }
+
     // `library !== null` guards: context properties are nulled during app
     // teardown while lingering bindings re-evaluate — without the guard the
     // exit path spams TypeErrors (seen in the first offscreen QA run).
@@ -114,6 +127,45 @@ Rectangle {
         font.letterSpacing: 1.4
         font.capitalization: Font.AllUppercase
         color: theme.tokens.textMuted
+    }
+
+    // collapsible section header — chevron + label; clicking toggles the
+    // section's rows (the visible bindings of the section's items AND in
+    // rail.sectOpen[key])
+    component SectionHeader: Item {
+        id: sectHdr
+        property string label
+        property string sectionKey
+        property bool open: rail.sectOpen[sectionKey] !== false
+        Layout.fillWidth: true
+        height: 26
+        IconImage {
+            name: sectHdr.open ? "chevron-down" : "chevron-right"
+            px: 12
+            anchors.left: parent.left
+            anchors.leftMargin: 2
+            anchors.verticalCenter: parent.verticalCenter
+            tint: theme.tokens.textMuted
+        }
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 18
+            anchors.verticalCenter: parent.verticalCenter
+            text: sectHdr.label
+            topPadding: 6
+            bottomPadding: 4
+            font.family: theme.headingFont
+            font.pixelSize: 12
+            font.letterSpacing: 1.4
+            font.capitalization: Font.AllUppercase
+            color: theme.tokens.textMuted
+        }
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: rail.toggleSection(sectHdr.sectionKey)
+        }
     }
 
     // ------------------------------------------------------------- pane tabs
@@ -230,8 +282,9 @@ Rectangle {
             // pane items carry their category accent (Icons teal, Fonts
             // violet, Colors rose, Code coral, Projects green)
 
-            // FONTS-pane rail content — font families and file types live
-            // here, not in the Icons pane's theme/type lists
+            // FONTS-pane rail content — font TYPES first, then FAMILIES
+            // (families moved beneath types so the format filter reads
+            // before the long family list); both sections collapse
             SectionLabel { text: qsTr("Fonts"); visible: rail.pane === 1 }
             RailItem {
                 visible: rail.pane === 1
@@ -247,33 +300,16 @@ Rectangle {
                     fonts.set_type_filter("")
                 }
             }
-            SectionLabel {
-                text: qsTr("Families")
-                visible: rail.pane === 1 && fonts !== null
-                         && fonts.families.length > 0
-            }
-            Repeater {
-                model: fonts !== null && rail.pane === 1 ? fonts.families : []
-                RailItem {
-                    id: famNavRow
-                    visible: rail.pane === 1
-                    required property var modelData
-                    label: famNavRow.modelData.name
-                    count: String(famNavRow.modelData.n)
-                    accent: theme.tokens.accentFont
-                    active: fonts !== null && fonts.familyFilter
-                            === String(famNavRow.modelData.name)
-                    onPicked: fonts !== null && fonts.set_family_filter(
-                        String(famNavRow.modelData.name))
-                }
-            }
-            SectionLabel {
-                text: qsTr("Types")
+            SectionHeader {
+                label: qsTr("Types")
+                sectionKey: "ftypes"
                 visible: rail.pane === 1 && fonts !== null
                          && fonts.fontTypes.length > 0
             }
             Repeater {
-                model: fonts !== null && rail.pane === 1 ? fonts.fontTypes : []
+                model: fonts !== null && rail.pane === 1
+                       && rail.sectOpen.ftypes !== false
+                       ? fonts.fontTypes : []
                 RailItem {
                     id: fontTypeRow
                     visible: rail.pane === 1
@@ -285,6 +321,29 @@ Rectangle {
                             === String(fontTypeRow.modelData.name)
                     onPicked: fonts !== null && fonts.set_type_filter(
                         String(fontTypeRow.modelData.name))
+                }
+            }
+            SectionHeader {
+                label: qsTr("Families")
+                sectionKey: "families"
+                visible: rail.pane === 1 && fonts !== null
+                         && fonts.families.length > 0
+            }
+            Repeater {
+                model: fonts !== null && rail.pane === 1
+                       && rail.sectOpen.families !== false
+                       ? fonts.families : []
+                RailItem {
+                    id: famNavRow
+                    visible: rail.pane === 1
+                    required property var modelData
+                    label: famNavRow.modelData.name
+                    count: String(famNavRow.modelData.n)
+                    accent: theme.tokens.accentFont
+                    active: fonts !== null && fonts.familyFilter
+                            === String(famNavRow.modelData.name)
+                    onPicked: fonts !== null && fonts.set_family_filter(
+                        String(famNavRow.modelData.name))
                 }
             }
 
@@ -302,11 +361,14 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Themes")
-                           visible: rail.showIconSections
-                                    && library.themes.length > 0 }
+            SectionHeader {
+                label: qsTr("Themes")
+                sectionKey: "themes"
+                visible: rail.showIconSections
+                         && library.themes.length > 0 }
             Repeater {
-                model: library.themes
+                model: library !== null && rail.sectOpen.themes !== false
+                       ? library.themes : []
                 RailItem {
                     visible: rail.showIconSections
                     required property var modelData
@@ -318,11 +380,14 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Contexts")
-                           visible: rail.showIconSections
-                                    && library.contexts.length > 0 }
+            SectionHeader {
+                label: qsTr("Contexts")
+                sectionKey: "contexts"
+                visible: rail.showIconSections
+                         && library.contexts.length > 0 }
             Repeater {
-                model: library.contexts
+                model: library !== null && rail.sectOpen.contexts !== false
+                       ? library.contexts : []
                 RailItem {
                     visible: rail.showIconSections
                     required property var modelData
@@ -334,11 +399,14 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Types")
-                           visible: rail.showIconSections
-                                    && library.exts.length > 0 }
+            SectionHeader {
+                label: qsTr("Types")
+                sectionKey: "exts"
+                visible: rail.showIconSections
+                         && library.exts.length > 0 }
             Repeater {
-                model: library.exts
+                model: library !== null && rail.sectOpen.exts !== false
+                       ? library.exts : []
                 RailItem {
                     visible: rail.showIconSections
                     required property var modelData
@@ -350,12 +418,15 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Collections")
-                           visible: rail.showCollections }
+            SectionHeader {
+                label: qsTr("Collections")
+                sectionKey: "collections"
+                visible: rail.showCollections }
             // ── pinned pseudo-collections: everything (works even for
             // items never added to any collection) and the starred view ──
             RailItem {
                 visible: rail.showCollections
+                         && rail.sectOpen.collections !== false
                 label: qsTr("All assets")
                 count: rail.pane === 0
                        ? String(library !== null ? library.totalAssets : 0)
@@ -396,7 +467,8 @@ Rectangle {
                 }
             }
             Repeater {
-                model: library.collections
+                model: library !== null && rail.sectOpen.collections !== false
+                       ? library.collections : []
                 RailItem {
                     id: collRow
                     required property var modelData
@@ -568,6 +640,7 @@ Rectangle {
             }
             Rectangle {
                 visible: rail.showCollections
+                         && rail.sectOpen.collections !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
                 Layout.rightMargin: 8
@@ -621,10 +694,14 @@ Rectangle {
 
             // smart collections — live criteria membership; listed under the
             // collections block on every pane that carries their kind
-            SectionLabel { text: qsTr("Smart")
-                           visible: rail.showCollections }
+            SectionHeader {
+                label: qsTr("Smart")
+                sectionKey: "smart"
+                visible: rail.showCollections }
             Repeater {
                 model: {
+                    if (rail.sectOpen.smart === false)
+                        return []
                     var out = []
                     var all = taxonomy !== null ? taxonomy.smartCollections : []
                     for (var i = 0; i < all.length; i++)
@@ -670,6 +747,7 @@ Rectangle {
             // add/configure affordance for smart collections
             Rectangle {
                 visible: rail.showCollections
+                         && rail.sectOpen.smart !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
                 Layout.rightMargin: 8
@@ -710,10 +788,14 @@ Rectangle {
 
             // saved libraries (tag sets) — Icons pane: they resolve to asset
             // views; clicking one activates the multi-tag filter
-            SectionLabel { text: qsTr("Libraries")
-                           visible: rail.showIconSections }
+            SectionHeader {
+                label: qsTr("Libraries")
+                sectionKey: "libraries"
+                visible: rail.showIconSections }
             Repeater {
-                model: taxonomy !== null ? taxonomy.libraryViews : []
+                model: taxonomy !== null
+                       && rail.sectOpen.libraries !== false
+                       ? taxonomy.libraryViews : []
                 RailItem {
                     id: libRow
                     required property var modelData
@@ -741,6 +823,7 @@ Rectangle {
             // section (creates and later edits via right-click)
             Rectangle {
                 visible: rail.showIconSections
+                         && rail.sectOpen.libraries !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
                 Layout.rightMargin: 8
@@ -778,9 +861,13 @@ Rectangle {
                 }
             }
 
-            SectionLabel { text: qsTr("Tags"); visible: rail.showIconSections }
+            SectionHeader {
+                label: qsTr("Tags")
+                sectionKey: "tags"
+                visible: rail.showIconSections }
             Repeater {
-                model: library.tags
+                model: library !== null && rail.sectOpen.tags !== false
+                       ? library.tags : []
                 RailItem {
                     id: tagRow
                     visible: rail.showIconSections
@@ -803,6 +890,7 @@ Rectangle {
             }
             Text {
                 visible: rail.showIconSections
+                         && rail.sectOpen.tags !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
                 topPadding: 6

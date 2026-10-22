@@ -24,6 +24,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+from . import db as core_db
+from . import kinds as core_kinds
+from . import scanner
+
 try:
     # hardened parser when available (entity-expansion hardening); the files
     # parsed here are user-indexed local SVGs, so the stdlib fallback is
@@ -57,9 +61,10 @@ def identify(path: str) -> dict[str, Any]:
     info: dict[str, Any] = dict(width=None, height=None,
                                 bytes=os.path.getsize(path),
                                 colorspace=None, color_count=None, mono=None)
-    ext = os.path.splitext(path)[1].lower()
+    ext = os.path.splitext(path)[1].lower().lstrip(".")
+    from . import kinds as core_kinds
 
-    if ext == ".svg":
+    if ext == "svg":
         # dims from the SVG root (width/height attrs, then viewBox)
         try:
             if info["bytes"] <= _MAX_SVG_PARSE_BYTES:
@@ -87,7 +92,9 @@ def identify(path: str) -> dict[str, Any]:
             pass
         return info
 
-    if Image is None or ext == ".xpm":
+    # non-raster kinds (video/audio/doc/data/spatial/timeseries/markdown)
+    # carry no pixel metadata — skip Pillow entirely
+    if Image is None or ext == "xpm" or not core_kinds.is_raster(ext):
         return info
 
     try:
@@ -192,15 +199,16 @@ def _sweep_disabled(con: sqlite3.Connection, kinds: tuple[str, ...],
 
 
 def _upsert_asset(con: sqlite3.Connection, source_id: int, path: str,
-                  meta: dict, info: dict, now: float, fp: str) -> None:
-    """Index one icon file, preserving its asset id when the path is
-    already known.
+                  meta: dict, info: dict, now: float, fp: str,
+                  kind: str = "icon") -> None:
+    """Index one icon/media/data file, preserving its asset id when the
+    path is already known.
 
     UPDATE (not DELETE+INSERT) for existing paths: the id must survive a
     re-identification — a git checkout or touch bumps mtimes, and a new
     id would orphan every item_tag / collection_ref / asset_link row the
     user attached to that asset. The FTS AFTER UPDATE trigger reindexes
-    the search row.
+    the search row. New rows get a generated GUID at first tracking.
     """
     args = (source_id, meta["name"], meta["theme"], meta["context"],
             meta["ext"], meta["size_px"], info["width"], info["height"],
@@ -219,10 +227,10 @@ def _upsert_asset(con: sqlite3.Connection, source_id: int, path: str,
         con.execute(
             "INSERT INTO asset(source_id, kind, path, name, theme,"
             " context, ext, size_px, width, height, bytes,"
-            " colorspace, color_count, mono, mtime)"
-            " VALUES (?, 'icon', ?, ?, ?, ?, ?, ?, ?, ?, ?,"
-            " ?, ?, ?, ?)",
-            (source_id, path, *args[1:]))
+            " colorspace, color_count, mono, mtime, guid)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+            " ?, ?, ?, ?, ?)",
+            (source_id, kind, path, *args[1:], core_db.new_guid()))
     con.execute(
         "INSERT INTO scan_state(path, fingerprint, last_seen)"
         " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
@@ -268,7 +276,7 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
         processed = 0
         for source_id, root in live:
             seen: set[str] = set()
-            for path in scanner.iter_icon_files(root):
+            for path in scanner.iter_asset_files(root):
                 seen.add(path)
                 counts["total"] += 1
                 fp = fingerprint(path)
@@ -284,10 +292,12 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                     counts["unchanged"] += 1
                 else:
                     meta = scanner.derive_meta(path, root)
+                    kind = core_kinds.kind_for_ext(meta["ext"]) or "icon"
+                    meta["kind"] = kind
                     info = identify(path)
                     try:
                         _upsert_asset(con, source_id, path, meta, info, now,
-                                      fp)
+                                      fp, kind=kind)
                     except sqlite3.IntegrityError:
                         # source removed mid-scan (FK on source_id) — skip
                         # this file; the next scan reconciles
@@ -302,13 +312,14 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                     con.execute("BEGIN IMMEDIATE")
 
             # prune assets + fingerprints that vanished from this source
-            # (kind-scoped: a source row is single-purpose, but belt-and-
-            # suspenders so an icon scan can never delete font rows)
+            # (kind-scoped: a source row is single-purpose, so font rows
+            # are never touched — the font scan owns them)
             rows = con.execute(
-                "SELECT id, path FROM asset WHERE source_id = ? AND kind = 'icon'",
+                "SELECT id, path, kind FROM asset"
+                " WHERE source_id = ? AND kind != 'font'",
                 (source_id,),
             ).fetchall()
-            vanished = [(r["id"], "icon", r["path"]) for r in rows
+            vanished = [(r["id"], r["kind"], r["path"]) for r in rows
                         if r["path"] not in seen]
             counts["pruned"] += purge_assets(con, vanished)
             st_rows = con.execute("SELECT path FROM scan_state").fetchall()
@@ -428,9 +439,9 @@ def _upsert_font(con: sqlite3.Connection, source_id: int, path: str,
     else:
         con.execute(
             "INSERT INTO asset(source_id, kind, path, name, theme,"
-            " ext, bytes, family, style, weight, italic, mtime)"
-            " VALUES (?, 'font', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (source_id, path, *args[1:]))
+            " ext, bytes, family, style, weight, italic, mtime, guid)"
+            " VALUES (?, 'font', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (source_id, path, *args[1:], core_db.new_guid()))
     con.execute(
         "INSERT INTO scan_state(path, fingerprint, last_seen)"
         " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"

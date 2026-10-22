@@ -347,9 +347,13 @@ Item {
     }
 
     function runPreview() {
-        var doc = "<!DOCTYPE html><html><head><style>" + editors.css +
-                  "</style></head><body>" + editors.html +
-                  "<script>" + editors.js + "</" + "script></body></html>"
+        // [[ asset ]] references expand via the bridge (slug / GUID /
+        // type/…/name forms → fengrid-asset:// urls)
+        var doc = code !== null
+                  ? code.fiddle_doc(editors.html, editors.css, editors.js)
+                  : ("<!DOCTYPE html><html><head><style>" + editors.css +
+                     "</style></head><body>" + editors.html +
+                     "<script>" + editors.js + "</" + "script></body></html>")
         previewDoc = doc
         previewActive = true
     }

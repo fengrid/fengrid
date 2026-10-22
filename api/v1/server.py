@@ -54,6 +54,21 @@ ROUTES: list[tuple[str, re.Pattern, str]] = [
                         r"/star$"), "assets_star"),
     ("POST", re.compile(r"^/api/v1/assets/(?P<kind>[a-z]+)/(?P<item_id>\d+)"
                         r"/tags$"), "assets_tags"),
+    ("GET",  re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/points$"),
+     "data_points_get"),
+    ("POST", re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/points$"),
+     "data_points_append"),
+    ("GET",  re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_get"),
+    ("PUT",  re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_put"),
+    ("PATCH", re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_patch"),
+    ("DELETE", re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_delete"),
+    ("GET",  re.compile(r"^/api/v1/links/resolve$"), "links_resolve"),
+    ("POST", re.compile(r"^/api/v1/links/expand$"), "links_expand"),
+    ("GET",  re.compile(r"^/api/v1/lookup$"), "assets_lookup"),
     ("POST", re.compile(r"^/api/v1/assets/(?P<kind>[a-z]+)/(?P<item_id>\d+)"
                         r"/collect$"), "assets_collect"),
     ("DELETE", re.compile(r"^/api/v1/assets/(?P<kind>[a-z]+)/(?P<item_id>\d+)"
@@ -162,8 +177,8 @@ def make_handler(api: Api, token: str | None):
             self._send(status, payload)
 
         def _route(self, method: str, path: str, params: dict):
-            body = read_json(self._body()) if method in ("POST", "PATCH") \
-                else {}
+            body = read_json(self._body()) \
+                if method in ("POST", "PATCH", "PUT") else {}
             matched_path = False
             for m, pattern, fname in ROUTES:
                 match = pattern.match(path)

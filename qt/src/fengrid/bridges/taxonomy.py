@@ -219,6 +219,28 @@ class Taxonomy(QObject):
     def is_starred(self, kind: str, item_id: int) -> bool:
         return core_db.is_starred(self._con, item_id, kind)
 
+    @Slot(str, int, str, result=bool)
+    def set_slug(self, kind: str, item_id: int, slug: str) -> bool:
+        """Set an object's [[ slug ]] link name (globally unique)."""
+        try:
+            core_db.set_slug(self._con, kind, int(item_id), str(slug or ""))
+        except ValueError as e:
+            self.message.emit(str(e))
+            return False
+        self.fieldsChanged.emit()
+        return True
+
+    @Slot(str, int, result=str)
+    def guid_for(self, kind: str, item_id: int) -> str:
+        """The tracked object's generated GUID (copyable in the inspector)."""
+        table = core_db._SLUG_TABLE_FOR.get(kind)
+        if table is None:
+            return ""
+        row = self._con.execute(
+            f"SELECT guid FROM {table} WHERE id = ?",
+            (int(item_id),)).fetchone()
+        return (row["guid"] if row is not None else "") or ""
+
     # ------------------------------------------------------------ item details
     @Slot(str, int, result="QVariantMap")
     def item_properties(self, kind: str, item_id: int) -> dict:

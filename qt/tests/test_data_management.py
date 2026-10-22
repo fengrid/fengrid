@@ -95,10 +95,11 @@ def test_import_files_copy_with_rename(tmp_path):
     rep = ingest.import_files(
         [str(src / "one.png"), str(src / "two.png"), str(src / "notes.txt")],
         str(data), mode="copy", prefix="ic_", style="enum", enum_pad=2)
-    assert rep["placed"] == 2 and rep["skipped"] == 1   # .txt skipped
+    # .txt is a doc-kind asset now — every tracked ext places
+    assert rep["placed"] == 3 and rep["skipped"] == 0
     dest = data / "imported" / "import"
     names = sorted(os.listdir(dest))
-    assert names == ["ic_one01.png", "ic_two02.png"]
+    assert names == ["ic_notes03.txt", "ic_one01.png", "ic_two02.png"]
     assert (dest / names[0]).is_file() and not (dest / names[0]).is_symlink()
 
 
@@ -128,12 +129,13 @@ def test_import_zip_streams_and_is_constant_memory(tmp_path):
         zf.writestr("../evil.png", b"zip-slip attempt")   # flattened
     data = tmp_path / "data"
     rep = ingest.import_zip(str(z), str(data), style="guid")
-    assert rep["placed"] == 6          # 5 icons + zip-slip member (basename)
-    assert rep["skipped"] == 1         # readme.md
+    # 5 icons + zip-slip member (basename) + readme.md (markdown kind)
+    assert rep["placed"] == 7
+    assert rep["skipped"] == 0
     names = os.listdir(data / "imported" / "zip-import")
     assert all(not n.startswith("..") for n in names)
-    # every name got a guid-ish suffix or kept ext
-    assert all(n.endswith(".png") for n in names)
+    # every name got a guid-ish suffix or kept ext (icons + the markdown doc)
+    assert all(n.endswith(".png") or n.endswith(".md") for n in names)
 
 
 def test_folder_sniff(tmp_path):

@@ -12,6 +12,7 @@ import json
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from ..core import assetrefs as core_assetrefs
 from ..core import db as core_db
 from ..core import settings
 from ..core import snippets as core_snippets
@@ -200,8 +201,31 @@ class Code(QObject):
 
     @Slot(str, bool, result=str)
     def markdown_html(self, md: str, dark: bool = False) -> str:
-        """GitHub-styled full HTML document for the markdown preview."""
-        return core_snippets.markdown_doc(md, bool(dark))
+        """GitHub-styled full HTML document for the markdown preview.
+
+        [[ asset ]] references are expanded first so `img src="[[ slug ]]"`
+        renders the tracked file through the hardened fengrid-asset://
+        scheme; unresolved refs stay visible as the literal token."""
+        expanded, _unresolved = core_assetrefs.expand(self._con, md or "")
+        return core_snippets.markdown_doc(expanded, bool(dark))
+
+    @Slot(str, result=str)
+    def expand_refs(self, text: str) -> str:
+        """Expand [[ slug ]] / [[ GUID ]] / [[ type/…/name ]] references
+        in a text block (snippet bodies, project templates)."""
+        expanded, _unresolved = core_assetrefs.expand(self._con, text or "")
+        return expanded
+
+    @Slot(str, str, str, result=str)
+    def fiddle_doc(self, html: str, css: str, js: str) -> str:
+        """The Run ▸ preview document with asset references expanded in
+        all three fiddle panes."""
+        exp_html, _u1 = core_assetrefs.expand(self._con, html or "")
+        exp_css, _u2 = core_assetrefs.expand(self._con, css or "")
+        exp_js, _u3 = core_assetrefs.expand(self._con, js or "")
+        return ("<!DOCTYPE html><html><head><style>" + exp_css
+                + "</style></head><body>" + exp_html
+                + "<script>" + exp_js + "</" + "script></body></html>")
 
     @Slot(str, int, result="QVariantList")
     def palette_search(self, query: str, limit: int = 8) -> list:

@@ -36,12 +36,9 @@ class IngestError(Exception):
 
 
 def kind_for(name: str) -> str | None:
-    ext = Path(name).suffix.lstrip(".").lower()
-    if ext in ICON_EXTS:
-        return "icon"
-    if ext in FONT_EXTS:
-        return "font"
-    return None
+    """Extension → asset kind via the central kinds registry."""
+    from . import kinds as core_kinds
+    return core_kinds.kind_for_file(name)
 
 
 def _target_dir(data_dir: str, mode: str, slug: str) -> Path:

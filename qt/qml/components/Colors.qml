@@ -62,8 +62,12 @@ Item {
             }
             Rectangle { width: 1; height: 18; color: theme.tokens.border }
 
+            // ── HARMONY MODE: rule picker + generator + palette naming ──
+            // (hidden in Terminal mode — the top bar switches contexts and
+            // shows the terminal theme's own name/save/export controls)
             ComboBox {
                 id: ruleBox
+                visible: !colorsRoot.termMode
                 Layout.preferredWidth: 160
                 Layout.preferredHeight: 28
                 model: [qsTr("Pleasing mix"), qsTr("Analogous"),
@@ -98,6 +102,7 @@ Item {
 
             Button {
                 id: genBtn
+                visible: !colorsRoot.termMode
                 text: qsTr("Generate")
                 ToolTip.visible: hovered
                 ToolTip.delay: 350
@@ -120,6 +125,7 @@ Item {
 
             Rectangle {
                 id: nameBox
+                visible: !colorsRoot.termMode
                 Layout.preferredWidth: 170
                 Layout.preferredHeight: 28
                 radius: 6
@@ -152,6 +158,7 @@ Item {
             }
 
             Rectangle {
+                visible: !colorsRoot.termMode
                 Layout.preferredWidth: 150
                 Layout.preferredHeight: 28
                 radius: 6
@@ -181,6 +188,41 @@ Item {
                 }
             }
 
+            // ── TERMINAL MODE: theme name + save/export for the theme ──
+            Rectangle {
+                id: termNameBox
+                visible: colorsRoot.termMode
+                Layout.preferredWidth: 200
+                Layout.preferredHeight: 28
+                radius: 6
+                color: theme.tokens.surface2
+                border.color: termNameField.activeFocus
+                              ? theme.tokens.accent : theme.tokens.border
+                TextInput {
+                    id: termNameField
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: theme.monoFont
+                    font.pixelSize: 11
+                    color: theme.tokens.text
+                    clip: true
+                    text: terms !== null && terms.theme
+                          ? (terms.theme.name || "") : ""
+                    onEditingFinished: terms !== null && terms.set_name(text)
+                }
+                Text {
+                    visible: termNameField.text === ""
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("theme name…")
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
+                    color: theme.tokens.textMuted
+                }
+            }
             component GenButton: AbstractButton {
                 id: genB
                 property string label
@@ -203,27 +245,88 @@ Item {
                                                : theme.tokens.border
                 }
             }
+            // ── ONE save/export drop-down for both interfaces ──
+            // (per user request: every individual save/export button is
+            // folded into this single menu; the items follow the mode)
             GenButton {
-                label: qsTr("Save")
-                onClicked: colors !== null && colors.save(tagsField.text)
-            }
-            GenButton {
-                label: qsTr("CSS")
-                onClicked: { exportKind = "css"; exportDialog.open() }
-            }
-            GenButton {
-                label: qsTr("JSON")
-                onClicked: { exportKind = "json"; exportDialog.open() }
-            }
-            GenButton {
-                label: qsTr("SVG")
-                onClicked: { exportKind = "svg"; exportDialog.open() }
-            }
-            GenButton {
-                label: qsTr("PNG")
-                onClicked: { exportKind = "png"; exportDialog.open() }
+                id: saveExportBtn
+                label: qsTr("Save / Export ▾")
+                onClicked: saveExportMenu.popup(saveExportBtn, 0,
+                                                saveExportBtn.height + 2)
             }
         }
+    }
+
+    // single save/export menu — harmony mode items (save scheme, CSS/
+    // JSON/SVG/PNG board) vs terminal mode items (save to snippets,
+    // iTerm2/Windows Terminal/kitty/… formats)
+    Menu {
+        id: saveExportMenu
+        width: 220
+        padding: 4
+        background: Rectangle {
+            radius: 8; color: theme.tokens.surface
+            border.color: theme.tokens.border
+        }
+        // ── harmony generator mode ──
+        FgMenuItem {
+            text: qsTr("Save scheme…")
+            height: 28
+            visible: !colorsRoot.termMode
+            onTriggered: colors !== null && colors.save(tagsField.text)
+        }
+        FgMenuSeparator {
+            visible: !colorsRoot.termMode
+            topPadding: 3; bottomPadding: 3
+            contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
+        }
+        Repeater {
+            model: !colorsRoot.termMode
+                   ? [{ label: qsTr("Export CSS…"), kind: "css" },
+                      { label: qsTr("Export JSON…"), kind: "json" },
+                      { label: qsTr("Export SVG…"), kind: "svg" },
+                      { label: qsTr("Export PNG…"), kind: "png" }]
+                   : []
+            FgMenuItem {
+                required property var modelData
+                text: modelData.label
+                height: 28
+                onTriggered: {
+                    colorsRoot.exportKind = modelData.kind
+                    exportDialog.open()
+                }
+            }
+        }
+        // ── terminal theme mode ──
+        FgMenuItem {
+            text: qsTr("Save theme to snippets")
+            height: 28
+            visible: colorsRoot.termMode
+            onTriggered: terms !== null && terms.save_as_snippet()
+        }
+        Repeater {
+            model: colorsRoot.termMode
+                   && terms !== null ? terms.formats() : []
+            FgMenuItem {
+                required property var modelData
+                text: qsTr("Export %1…").arg(
+                          String(modelData.label || modelData))
+                height: 28
+                onTriggered: {
+                    if (terms === null)
+                        return
+                    colorsRoot.termExportKind = String(modelData.key
+                                                       || modelData)
+                    termExportDialog.open()
+                }
+            }
+        }
+    }
+    property string termExportKind: "json"
+    FolderDialog {
+        id: termExportDialog
+        onAccepted: terms !== null && terms.export(
+            Icons.toLocalPath(selectedFolder), colorsRoot.termExportKind)
     }
 
     // editor sync: dragged sliders lose their `val` bindings, so values are
@@ -309,7 +412,13 @@ Item {
                     model: palCard.modelData.colors.length
                     Rectangle {
                         required property int index
-                        width: (strip.width - 4 * 2) / 5
+                        // chip run sized to the ACTUAL color count — 5 is
+                        // the default but schemes may hold up to 7
+                        width: palCard.modelData.colors.length > 0
+                               ? (strip.width
+                                  - (palCard.modelData.colors.length - 1) * 2)
+                                 / palCard.modelData.colors.length
+                               : strip.width
                         height: parent.height
                         radius: 3
                         color: palCard.modelData.colors[index]
@@ -668,6 +777,44 @@ Item {
                     }
                     onClicked: colors !== null && colors.select(swCard.index)
                 }
+            }
+        }
+
+        // add-swatch tile — schemes default to 5 colors and accept up to 7;
+        // disabled (invisible) once the scheme is full
+        Rectangle {
+            id: addSwatchTile
+            visible: colors !== null && colors.swatches.length < 7
+            Layout.preferredWidth: 44
+            Layout.fillHeight: true
+            radius: 10
+            color: addSwatchMa.containsMouse ? theme.tokens.surface2
+                                             : theme.tokens.surface
+            border.color: addSwatchMa.containsMouse
+                          ? theme.tokens.accentColor : theme.tokens.border
+            border.width: 1
+            IconImage {
+                name: "plus"
+                px: 18
+                anchors.centerIn: parent
+                tint: theme.tokens.textMuted
+            }
+            Text {
+                anchors.top: parent.verticalCenter
+                anchors.topMargin: 8
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: (colors !== null ? colors.swatches.length : 0)
+                      + "/7"
+                font.family: theme.monoFont
+                font.pixelSize: 9
+                color: theme.tokens.textMuted
+            }
+            MouseArea {
+                id: addSwatchMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: colors !== null && colors.add_swatch()
             }
         }
     }

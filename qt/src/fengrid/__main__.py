@@ -30,6 +30,7 @@ from fengrid.bridges.library import Library
 from fengrid.bridges.prefs import Prefs
 from fengrid.bridges.projects import Projects
 from fengrid.bridges.storage import Storage
+from fengrid.core import projects as core_projects
 from fengrid.bridges.termcolors import TermColors
 from fengrid.bridges.theme import Theme
 from fengrid.bridges.taxonomy import Taxonomy
@@ -188,6 +189,25 @@ def main(argv=None) -> int:
     term_bridge = TermColors(con)
     code_bridge = Code(con)
     projects_bridge = Projects(con)
+    # source control: one git repo per Project/Library under <data>/repos;
+    # projects.save() commits to fengrid-main through this bridge
+    from fengrid.bridges.source_control import SourceControl
+    from fengrid.bridges.undo import UndoBridge
+    sc_bridge = SourceControl(con, data_dir)
+    projects_bridge.bind_source_control(sc_bridge)
+    projects_undo = UndoBridge("projects")
+    projects_undo.register(
+        "projects.settings",
+        lambda d: core_projects.update_project(
+            con, int(d["id"]), settings=d["new"]),
+        lambda d: core_projects.update_project(
+            con, int(d["id"]), settings=d["old"]))
+    projects_undo.register(
+        "projects.meta",
+        lambda d: core_projects.update_project(
+            con, int(d["id"]), **d["new"]),
+        lambda d: core_projects.update_project(
+            con, int(d["id"]), **d["old"]))
     # demo suite: files under the data dir so removal never touches user folders
     demo_bridge = Demo(con, os.path.join(data_dir, "demo-assets"),
                        _asset_dir("fonts"))
@@ -208,6 +228,8 @@ def main(argv=None) -> int:
     ctx.setContextProperty("terms", term_bridge)
     ctx.setContextProperty("code", code_bridge)
     ctx.setContextProperty("projects", projects_bridge)
+    ctx.setContextProperty("sc", sc_bridge)
+    ctx.setContextProperty("undoProjects", projects_undo)
     ctx.setContextProperty("demo", demo_bridge)
     ctx.setContextProperty("updater", updater_bridge)
     ctx.setContextProperty("prefs", prefs_bridge)

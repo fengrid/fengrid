@@ -542,6 +542,18 @@ ApplicationWindow {
                 font.pixelSize: 11
                 color: theme.tokens.textMuted
             }
+            // uncommitted-changes reminder — discrete but bright red, per
+            // the source-control spec (dirty project repo at any time)
+            Text {
+                text: sc !== null && sc.hasUncommitted
+                      ? qsTr("● %1: uncommitted changes — commit or stash")
+                        .arg(sc.currentBranch) : ""
+                visible: text !== ""
+                font.family: theme.monoFont
+                font.pixelSize: 11
+                color: "#E5484D"
+            }
+
             // tip ticker / notification area — yields to every detail:
             // hidden while scanning, while a notice is live, and while
             // the version notice is up
@@ -874,6 +886,79 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+4"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 3 }
     Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 4 }
 
+    // global undo/redo — routes to the FOCUSED pane's undo bridge
+    // (project settings changes for the Projects pane; editors keep
+    // their own TextEdit undo for caret-level edits)
+    Shortcut {
+        sequence: StandardKey.Undo
+        enabled: !root.settingsOpen && !root.paletteOpen && root.pane === 4
+                 && undoProjects !== null && undoProjects.canUndo
+        onActivated: undoProjects.undo()
+    }
+    Shortcut {
+        sequence: StandardKey.Redo
+        enabled: !root.settingsOpen && !root.paletteOpen && root.pane === 4
+                 && undoProjects !== null && undoProjects.canRedo
+        onActivated: undoProjects.redo()
+    }
+    // uncommitted changes pending at close — prompt commit or stash first
+    onClosing: function (close) {
+        if (sc !== null && sc.hasRepo() && sc.hasUncommitted) {
+            close.accepted = false
+            closePrompt.open()
+        }
+    }
+    Dialog {
+        id: closePrompt
+        width: 340
+        padding: 16
+        modal: true
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        background: Rectangle {
+            radius: 12; color: theme.tokens.surface
+            border.color: theme.tokens.litPane
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                text: qsTr("Uncommitted changes")
+                font.family: theme.headingFont; font.pixelSize: 13
+            }
+            Text {
+                text: qsTr("The current project has uncommitted changes.")
+                      + " Commit them before closing, or stash them"
+                      + " to return later."
+                wrapMode: Text.Wrap
+                font.family: theme.uiFont; font.pixelSize: 11
+                color: theme.tokens.text
+                Layout.fillWidth: true
+            }
+            TextField {
+                id: closeMsg
+                Layout.fillWidth: true
+                placeholderText: qsTr("commit message…")
+                font.family: theme.monoFont; font.pixelSize: 11
+            }
+        }
+        footer: FgDialogFooter {
+            acceptLabel: qsTr("Commit")
+            acceptEnabled: closeMsg.text.trim() !== ""
+            onCancelClicked: closePrompt.closeAndQuit()
+            onAcceptClicked: closePrompt.commitAndClose()
+        }
+        function commitAndClose() {
+            sc.commit(closeMsg.text)
+            closeMsg.text = ""
+            close()
+            Qt.quit()
+        }
+        function closeAndQuit() {
+            close()
+            Qt.quit()
+        }
+    }
+
     // ── database pickers (menu → New/Open database…) ──
     FileDialog {
         id: openDbDialog
@@ -968,6 +1053,14 @@ ApplicationWindow {
         id: noticeDecay
         interval: 8000
         onTriggered: root.statusNotice = ""
+    }
+    // source control: refresh repo status so the red reminder tracks the
+    // working tree (cheap — one `git status --porcelain` per tick)
+    Timer {
+        interval: 15000
+        repeat: true
+        running: sc !== null && sc.hasRepo()
+        onTriggered: sc.refresh()
     }
     function statusNote(msg) {
         root.statusNotice = msg

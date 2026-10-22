@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+
+from . import db as core_db
 import time
 
 # --------------------------------------------------------------- saved libraries
@@ -46,9 +48,10 @@ def create_library_view(con: sqlite3.Connection, name: str, tags: str,
         raise ValueError("library needs a name")
     now = time.time()
     cur = con.execute(
-        "INSERT INTO library_view(name, tags, match_all, created, updated)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (name, _clean_tags(tags), 1 if match_all else 0, now, now))
+        "INSERT INTO library_view(name, tags, match_all, created, updated,"
+        " guid) VALUES (?, ?, ?, ?, ?, ?)",
+        (name, _clean_tags(tags), 1 if match_all else 0, now, now,
+         core_db.new_guid()))
     con.commit()
     return int(cur.lastrowid or 0)
 
@@ -102,7 +105,8 @@ def _clean_tags(tags: str) -> str:
 
 # ------------------------------------------------------------- smart collections
 
-SMART_KINDS = ("icon", "font", "snippet", "palette")
+SMART_KINDS = ("icon", "font", "image", "video", "audio", "doc", "data",
+               "spatial", "timeseries", "markdown", "snippet", "palette")
 
 
 def list_smart_collections(con: sqlite3.Connection) -> list[dict]:
@@ -157,8 +161,9 @@ def smart_asset_ids(con: sqlite3.Connection, item_kind: str,
                     criteria: dict) -> list[int]:
     """Resolve a smart collection's criteria to row ids in its own table."""
     crit = criteria or {}
-    if item_kind == "icon":
-        return _smart_icon_ids(con, crit)
+    from . import kinds as core_kinds
+    if item_kind in core_kinds.ALL_KINDS:
+        return _smart_icon_ids(con, crit, kind=item_kind)
     # snippet / palette carry a comma-separated tags column
     table = "snippet" if item_kind == "snippet" else "palette"
     tags = [t.strip() for t in crit.get("tags", []) if t.strip()]
@@ -180,28 +185,32 @@ def smart_asset_ids(con: sqlite3.Connection, item_kind: str,
     return [r["id"] for r in con.execute(sql, params)]
 
 
-def _smart_icon_ids(con: sqlite3.Connection, crit: dict) -> list[int]:
-    where: list[str] = []
-    params: list = []
+def _smart_icon_ids(con: sqlite3.Connection, crit: dict,
+                    kind: str = "icon") -> list[int]:
+    where: list[str] = ["a.kind = ?"]
+    params: list = [kind]
     tags = [t.strip() for t in crit.get("tags", []) if t.strip()]
     if tags:
         marks = ",".join("?" * len(tags))
         sub = ("SELECT it.item_id FROM item_tag it JOIN tag t"
-               f" ON t.id = it.tag_id WHERE it.item_kind = 'icon'"
+               f" ON t.id = it.tag_id WHERE it.item_kind = ?"
                f" AND t.name IN ({marks})")
         if crit.get("tag_match_all"):
-            sub += (" GROUP BY at.asset_id"
+            sub += (" GROUP BY it.item_id"
                     f" HAVING COUNT(DISTINCT t.name) = {len(tags)}")
         where.append(f"a.id IN ({sub})")
-        params += tags
+        params += [kind, *tags]
     for key, col in (("theme", "a.theme"), ("context", "a.context"),
                      ("ext", "a.ext")):
         if crit.get(key):
             where.append(f"{col} = ?")
             params.append(crit[key])
     if crit.get("starred"):
-        where.append("a.id IN (SELECT at.asset_id FROM asset_tag at"
-                     " JOIN tag t ON t.id = at.tag_id WHERE t.name = 'starred')")
+        where.append(
+            "a.id IN (SELECT it2.item_id FROM item_tag it2"
+            " JOIN tag t2 ON t2.id = it2.tag_id"
+            " WHERE it2.item_kind = ? AND t2.name = 'starred')")
+        params.append(kind)
     if crit.get("q"):
         where.append("(lower(a.name) LIKE ? OR lower(a.path) LIKE ?)")
         like = "%" + str(crit["q"]).lower() + "%"
@@ -253,9 +262,10 @@ def delete_field(con: sqlite3.Connection, field_id: int) -> None:
 
 
 def _item_exists(con: sqlite3.Connection, kind: str, item_id: int) -> bool:
-    """True when a (kind, id) pair names a real row — icons/fonts live in
-    `asset`, snippets and palettes in their own tables."""
-    if kind in ("icon", "font"):
+    """True when a (kind, id) pair names a real row — every asset-table
+    kind lives in `asset`; snippets and palettes in their own tables."""
+    from . import kinds as core_kinds
+    if kind in core_kinds.ALL_KINDS:
         return con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
                            (item_id, kind)).fetchone() is not None
     if kind == "snippet":

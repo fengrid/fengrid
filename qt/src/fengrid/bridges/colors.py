@@ -17,6 +17,9 @@ from ..core import db as core_db
 from ..core import settings
 
 
+_MAX_SWATCHES = 7
+
+
 class Colors(QObject):
     message = Signal(str)
     exportDone = Signal(str)
@@ -162,6 +165,27 @@ class Colors(QObject):
         if 0 <= i < len(self._swatches):
             self._swatches[i]["locked"] = not self._swatches[i]["locked"]
             self.swatchesChanged.emit()
+
+    @Slot()
+    def add_swatch(self) -> None:
+        """Append one unlocked swatch — hue rotates by the golden angle
+        off the last color so additions harmonize. Schemes default to 5
+        colors and accept up to 7."""
+        if len(self._swatches) >= _MAX_SWATCHES:
+            self.message.emit("A color scheme holds at most"
+                              f" {_MAX_SWATCHES} colors")
+            return
+        base = (self._swatches[-1]["hex"] if self._swatches
+                else "#3388cc")
+        h, s, l = core_colors.rgb2hsl(*core_colors.hex2rgb(base))
+        nh = (h + 137.5 * (len(self._swatches) + 1)) % 360
+        self._swatches.append({
+            "hex": core_colors.rgb2hex(
+                *core_colors.hsl2rgb(nh, s or 62, l or 50)),
+            "locked": False})
+        self._selected = len(self._swatches) - 1
+        self.selectionChanged.emit()
+        self.swatchesChanged.emit()
 
     @Slot(int)
     def remove_swatch(self, i: int) -> None:

@@ -177,6 +177,7 @@ Rectangle {
                         { k: "export", t: qsTr("Export") },
                         { k: "backup", t: qsTr("Backup") },
                         { k: "database", t: qsTr("Database") },
+                        { k: "sc", t: qsTr("Source control") },
                         { k: "editor", t: qsTr("Editor") },
                         { k: "colors", t: qsTr("Colors") },
                         { k: "updates", t: qsTr("Updates") },
@@ -1720,6 +1721,112 @@ Rectangle {
                                 acceptLabel: qsTr("Restore")
                                 onCancelClicked: restoreConfirm.reject()
                                 onAcceptClicked: restoreConfirm.accept()
+                            }
+                        }
+                    }
+
+                    // ───────────────────────────────── source control
+                    SettingsSection {
+                        section: "sc"
+                        title: qsTr("Source control")
+
+                        SettingRow {
+                            section: "sc"
+                            label: qsTr("Git availability")
+                            desc: qsTr("Revision control for Projects and Libraries — one repository per object, default branch fengrid-main.")
+                            keys: "git source control repository lfs version control project library"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                Layout.fillWidth: true
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: sc !== null && sc.gitAvailable()
+                                          ? (sc.lfsAvailable()
+                                             ? qsTr("git + git-lfs detected")
+                                             : qsTr("git detected (git-lfs not found — large files commit directly)"))
+                                          : qsTr("git not installed — install it to enable version control")
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                    color: theme.tokens.textMuted
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "sc"
+                            label: qsTr("Forge access token")
+                            desc: qsTr("Personal access token for GitHub / Codeberg / Forgejo / Gitea remotes. Stored locally, never committed.")
+                            keys: "token github codeberg forgejo gitea remote push access"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                Layout.fillWidth: true
+                                TextField {
+                                    id: scTokenField
+                                    Layout.fillWidth: true
+                                    echoMode: TextInput.Password
+                                    placeholderText: qsTr("ghp_… / token")
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "sc"
+                            label: qsTr("Forge remote URL")
+                            desc: qsTr("https URL of the project's remote (applied on the active repo's origin).")
+                            keys: "remote url origin forge https"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                Layout.fillWidth: true
+                                TextField {
+                                    id: scRemoteField
+                                    Layout.fillWidth: true
+                                    placeholderText: qsTr("https://github.com/user/repo.git")
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "sc"
+                            label: qsTr("Apply remote + push")
+                            desc: qsTr("Set origin from the URL/token above and push the active branch.")
+                            keys: "push remote apply upload"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                Button {
+                                    text: qsTr("Apply & push")
+                                    onClicked: {
+                                        if (sc === null)
+                                            return
+                                        if (scRemoteField.text.trim() !== "")
+                                            sc.set_remote(
+                                                "origin",
+                                                scRemoteField.text.trim(),
+                                                scTokenField.text.trim())
+                                        sc.push("origin")
+                                        scTokenField.text = ""
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "sc"
+                            label: qsTr("Maintain repositories")
+                            desc: qsTr("Sweep every Project/Library repo: report uncommitted changes, drop merged dangling branches (stale ones force-dropped), run git gc.")
+                            keys: "maintenance cleanup gc prune branches stale"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                Button {
+                                    text: qsTr("Run maintenance")
+                                    onClicked: sc !== null && sc.maintenance_all()
+                                }
                             }
                         }
                     }

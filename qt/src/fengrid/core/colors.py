@@ -21,6 +21,8 @@ import math
 import os
 import re
 import sqlite3
+
+from . import db as core_db
 import time
 from pathlib import Path
 
@@ -341,8 +343,9 @@ def save_palette(con: sqlite3.Connection, name: str, hexes: list[str],
     now = time.time()
     if palette_id is None:
         cur = con.execute(
-            "INSERT INTO palette(name, tags, created, updated)"
-            " VALUES (?, ?, ?, ?)", (name, tags, now, now))
+            "INSERT INTO palette(name, tags, created, updated, guid)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (name, tags, now, now, core_db.new_guid()))
         pid = cur.lastrowid
     else:
         if con.execute("SELECT 1 FROM palette WHERE id = ?",

@@ -15,6 +15,7 @@ import threading
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from ..core import assetrefs as core_assetrefs
 from ..core import projects as core_projects
 from ..core import settings as core_settings
 
@@ -60,7 +61,11 @@ class Projects(QObject):
         self._current_id = -1
         self._current: dict = {}
         self._ask_thread = None
+        self._sc_ref = None          # SourceControl bridge (optional)
         self._refresh()
+
+    def _sc_bridge(self):
+        return self._sc_ref
 
     # ------------------------------------------------------------ properties
 
@@ -115,6 +120,12 @@ class Projects(QObject):
         self._current = core_projects.get_project(self._con, pid) or {}
         self.currentChanged.emit()
         self.assetsChanged.emit()
+        # point source control at this project (auto git init on first
+        # open — the initial snapshot commit lands with the first Save)
+        sc = self._sc_bridge() if callable(getattr(self, "_sc_bridge",
+                                                   None)) else None
+        if sc is not None and self._current:
+            sc.attach(self._current.get("name", ""), "project")
 
     @Slot()
     def new_project(self):
@@ -151,9 +162,22 @@ class Projects(QObject):
         except ValueError as exc:
             self.message.emit("Bad settings JSON: %s" % exc)
             return
+        old = dict(self._current.get("settings") or {})
         core_projects.update_project(self._con, self._current_id, settings=s)
         self._current = core_projects.get_project(self._con, self._current_id) or {}
         self.currentChanged.emit()
+        # git: every Save is a commit on fengrid-main (bridge optional —
+        # the panel is inert when the sc bridge isn't wired in QA rigs)
+        sc = self._sc_bridge() if callable(getattr(self, "_sc_bridge", None)) \
+            else None
+        if sc is not None:
+            sc.attach(self._current.get("name", ""), "project")
+            sc.commit("Save: settings updated")
+
+    def bind_source_control(self, sc) -> None:
+        """__main__ wires the shared SourceControl bridge in (QA rigs may
+        omit it — every sc call site tolerates its absence)."""
+        self._sc_ref = sc
 
     @Slot(str, str, str)
     def set_setting(self, path: str, value: str, vtype: str):
@@ -301,7 +325,10 @@ class Projects(QObject):
                                              inline_css=True)
         for a, (arcname, abspath) in g["icons"] + g["fonts"]:
             html = html.replace(arcname, "fengrid-asset://" + abspath)
-        return html
+        # [[ asset ]] references (slug / GUID / path forms) expand to
+        # fengrid-asset:// urls the sandboxed preview can serve
+        expanded, _unresolved = core_assetrefs.expand(self._con, html)
+        return expanded
 
     @Slot(str, str)
     def export(self, dest: str, fmt: str):
