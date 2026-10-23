@@ -27,10 +27,12 @@ MAX_BYTES = 2 * 1024 * 1024          # 2 MB of payload text, hard cap
 
 
 class HistoryEntry:
-    __slots__ = ("label", "apply_data", "undo_data", "ts", "bytes")
+    __slots__ = ("label", "key", "apply_data", "undo_data", "ts", "bytes")
 
-    def __init__(self, label: str, apply_data: Any, undo_data: Any):
+    def __init__(self, label: str, apply_data: Any, undo_data: Any,
+                 key: str | None = None):
         self.label = label
+        self.key = key if key is not None else label
         self.apply_data = apply_data
         self.undo_data = undo_data
         self.ts = time.time()
@@ -50,14 +52,37 @@ class History:
         self._bytes = 0
 
     # ------------------------------------------------------------- push
-    def push(self, label: str, apply_data: Any, undo_data: Any) -> None:
+    def push(self, label: str, apply_data: Any, undo_data: Any,
+             key: str | None = None) -> None:
         """Record one user-scale change. Bulk callers MUST NOT call
         this — they call clear() instead (see `bulk_guard`)."""
-        entry = HistoryEntry(label, apply_data, undo_data)
+        entry = HistoryEntry(label, apply_data, undo_data, key=key)
         self._undo.append(entry)
         self._redo.clear()               # a new action kills the redo arm
         self._bytes += entry.bytes
         self._trim()
+
+    def coalesce(self, label: str, apply_data: Any, undo_data: Any,
+                 match: str | None = None, window: float = 1.5) -> None:
+        """Push, but merge into the previous entry when it is the same
+        kind of change (same `match` key, default the label) made within
+        `window` seconds. Continuous edits — slider drags, spinner
+        spins — then form ONE undo step instead of flooding the stack.
+        The merged entry keeps the FIRST undo_data (the pre-run state)
+        and takes the LATEST apply_data (the final state)."""
+        key = match if match is not None else label
+        if self._undo:
+            top = self._undo[-1]
+            if top.key == key and time.time() - top.ts <= window:
+                # top stays on the undo arm: replace its apply payload
+                new = HistoryEntry(label, apply_data, top.undo_data,
+                                   key=top.key)
+                self._bytes -= top.bytes
+                self._undo[-1] = new
+                self._bytes += new.bytes
+                self._trim()
+                return
+        self.push(label, apply_data, undo_data, key=key)
 
     def _trim(self) -> None:
         while len(self._undo) > self._max_entries or (

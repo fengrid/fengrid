@@ -262,3 +262,54 @@ def test_bridge_batch_finish_discard_reverts(repo):
     log = subprocess.run(["git", "-C", str(repo.path), "log", "--oneline"],
                          capture_output=True, text=True).stdout
     assert "batch: doomed" not in log
+
+
+# ─────────────────────────────────────── coalescing + colors undo
+def test_history_coalesce_merges_rapid_same_edits():
+    h = History()
+    h.coalesce("hsl:1", {"i": 1, "v": 10}, {"i": 1, "v": 0}, match="hsl:1")
+    h.coalesce("hsl:1", {"i": 1, "v": 20}, {"i": 1, "v": 10}, match="hsl:1")
+    h.coalesce("hsl:1", {"i": 1, "v": 30}, {"i": 1, "v": 20}, match="hsl:1")
+    assert h.depth == 1
+    e = h.pop_undo()
+    # one step: apply replays the FINAL state, undo restores the FIRST
+    assert e.apply_data == {"i": 1, "v": 30}
+    assert e.undo_data == {"i": 1, "v": 0}
+
+
+def test_history_coalesce_separate_edits_stay_apart():
+    h = History()
+    h.coalesce("hsl:0", {"i": 0}, {"i": 0}, match="hsl:0")
+    h.coalesce("hsl:1", {"i": 1}, {"i": 1}, match="hsl:1")
+    assert h.depth == 2
+
+
+def test_colors_undo_roundtrip():
+    """add → undo restores the pre-add swatch list (colors.editor)."""
+    from fengrid.bridges.undo import UndoBridge
+
+    class _ColorsStub:
+        # mirrors the Colors bridge's undo contract without the DB
+        def __init__(self):
+            self._swatches = [{"hex": "#111111", "locked": False}]
+
+        def _snapshot(self):
+            return {"swatches": [dict(s) for s in self._swatches]}
+
+        def restore_state(self, snap):
+            self._swatches = [dict(s) for s in snap.get("swatches", [])]
+
+    stub = _ColorsStub()
+    ub = UndoBridge("colors")
+    ub.register("colors.editor",
+                lambda d: stub.restore_state(d),
+                lambda d: stub.restore_state(d))
+    pre = stub._snapshot()
+    stub._swatches.append({"hex": "#222222", "locked": False})
+    ub.push("colors.editor", "Add swatch", stub._snapshot(), pre)
+    assert ub.canUndo
+    ub.undo()
+    assert len(stub._swatches) == 1
+    assert ub.canRedo
+    ub.redo()
+    assert len(stub._swatches) == 2

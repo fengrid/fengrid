@@ -209,6 +209,13 @@ def main(argv=None) -> int:
             con, int(d["id"]), **d["new"]),
         lambda d: core_projects.update_project(
             con, int(d["id"]), **d["old"]))
+    # colors pane edits are undoable the same way (swatch-list snapshots)
+    colors_undo = UndoBridge("colors")
+    colors_undo.register(
+        "colors.editor",
+        lambda d: colors_bridge.restore_state(d),
+        lambda d: colors_bridge.restore_state(d))
+    colors_bridge.bind_undo(colors_undo)
     # demo suite: files under the data dir so removal never touches user folders
     demo_bridge = Demo(con, os.path.join(data_dir, "demo-assets"),
                        _asset_dir("fonts"))
@@ -236,6 +243,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("projects", projects_bridge)
     ctx.setContextProperty("sc", sc_bridge)
     ctx.setContextProperty("undoProjects", projects_undo)
+    ctx.setContextProperty("undoColors", colors_undo)
     ctx.setContextProperty("demo", demo_bridge)
     ctx.setContextProperty("updater", updater_bridge)
     ctx.setContextProperty("prefs", prefs_bridge)

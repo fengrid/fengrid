@@ -888,19 +888,27 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 4 }
 
     // global undo/redo — routes to the FOCUSED pane's undo bridge
-    // (project settings changes for the Projects pane; editors keep
-    // their own TextEdit undo for caret-level edits)
+    // (project settings changes for Projects, palette edits for Colors;
+    // editors keep their own TextEdit undo for caret-level edits)
     Shortcut {
         sequence: StandardKey.Undo
-        enabled: !root.settingsOpen && !root.paletteOpen && root.pane === 4
-                 && undoProjects !== null && undoProjects.canUndo
-        onActivated: undoProjects.undo()
+        enabled: !root.settingsOpen && !root.paletteOpen
+                 && ((root.pane === 4 && undoProjects !== null
+                      && undoProjects.canUndo)
+                     || (root.pane === 2 && undoColors !== null
+                         && undoColors.canUndo))
+        onActivated: root.pane === 4 ? undoProjects.undo()
+                                     : undoColors.undo()
     }
     Shortcut {
         sequence: StandardKey.Redo
-        enabled: !root.settingsOpen && !root.paletteOpen && root.pane === 4
-                 && undoProjects !== null && undoProjects.canRedo
-        onActivated: undoProjects.redo()
+        enabled: !root.settingsOpen && !root.paletteOpen
+                 && ((root.pane === 4 && undoProjects !== null
+                      && undoProjects.canRedo)
+                     || (root.pane === 2 && undoColors !== null
+                         && undoColors.canRedo))
+        onActivated: root.pane === 4 ? undoProjects.redo()
+                                     : undoColors.redo()
     }
     // uncommitted changes pending at close — prompt commit or stash first
     onClosing: function (close) {

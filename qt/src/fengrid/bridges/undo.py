@@ -39,6 +39,18 @@ class UndoBridge(QObject):
                            {"h": handler_id, "d": undo_data})
         self.changed.emit()
 
+    def push_coalesce(self, handler_id: str, label: str,
+                      apply_data, undo_data, match: str | None = None,
+                      window: float = 1.5) -> None:
+        """Like push() but merges a rapid run of the same edit (slider
+        drags, spinner spins) into one undo step."""
+        if handler_id not in self._handlers:
+            return
+        self._history.coalesce(label, {"h": handler_id, "d": apply_data},
+                               {"h": handler_id, "d": undo_data},
+                               match=match, window=window)
+        self.changed.emit()
+
     def bulk(self):
         """Context manager: `with bridge.bulk(): <bulk mutation>` — no
         entries recorded, stack cleared after (bulk actions are not

@@ -49,9 +49,46 @@ class Colors(QObject):
         self._starred_only = False
         # active smart collection (sidebar) — criteria filtered in Python
         self._smart_id = 0
+        # optional undo bridge (projects.bind_source_control pattern):
+        # every editor-scale mutation snapshots the swatch list so
+        # Ctrl+Z can walk it back (spec: undo for fields/options)
+        self._undo_ref = None
         self._refresh_palettes()
         # seed the pane with one roll so it never opens empty
         self._swatches = core_colors.generate(self._rule, [], mode="dark")
+
+    # ---------------------------------------------------------------- undo
+    def bind_undo(self, undo) -> None:
+        self._undo_ref = undo
+
+    def _snapshot(self) -> dict:
+        return {
+            "swatches": [dict(s) for s in self._swatches],
+            "name": self._name,
+            "pid": self._palette_id,
+        }
+
+    def restore_state(self, snap: dict) -> None:
+        self._swatches = [dict(s) for s in snap.get("swatches", [])]
+        self._name = snap.get("name", "") or ""
+        self._palette_id = snap.get("pid")
+        self._selected = -1
+        self.swatchesChanged.emit()
+        self.nameChanged.emit()
+        self.selectionChanged.emit()
+
+    def _begin(self):
+        return self._snapshot() if self._undo_ref is not None else None
+
+    def _end(self, pre, label: str, match: str | None = None) -> None:
+        if pre is None or self._undo_ref is None:
+            return
+        post = self._snapshot()
+        if match:
+            self._undo_ref.push_coalesce("colors.editor", label, post,
+                                         pre, match=match)
+        else:
+            self._undo_ref.push("colors.editor", label, post, pre)
 
     # ---------------------------------------------------------------- state
     @Property("QVariantList", notify=swatchesChanged)
@@ -155,9 +192,11 @@ class Colors(QObject):
 
     @Slot()
     def generate(self) -> None:
+        pre = self._begin()
         self._variation += 1
         self._swatches = core_colors.generate(
             self._rule, self._swatches, variation=self._variation)
+        self._end(pre, "Re-roll colors")
         self.swatchesChanged.emit()
 
     @Slot(int)
@@ -175,6 +214,7 @@ class Colors(QObject):
             self.message.emit("A color scheme holds at most"
                               f" {_MAX_SWATCHES} colors")
             return
+        pre = self._begin()
         base = (self._swatches[-1]["hex"] if self._swatches
                 else "#3388cc")
         h, s, l = core_colors.rgb2hsl(*core_colors.hex2rgb(base))
@@ -184,31 +224,39 @@ class Colors(QObject):
                 *core_colors.hsl2rgb(nh, s or 62, l or 50)),
             "locked": False})
         self._selected = len(self._swatches) - 1
+        self._end(pre, "Add swatch")
         self.selectionChanged.emit()
         self.swatchesChanged.emit()
 
     @Slot(int)
     def remove_swatch(self, i: int) -> None:
         if 0 <= i < len(self._swatches) and len(self._swatches) > 2:
+            pre = self._begin()
             del self._swatches[i]
             if self._selected >= len(self._swatches):
                 self._selected = -1
                 self.selectionChanged.emit()
+            self._end(pre, "Remove swatch")
             self.swatchesChanged.emit()
 
     @Slot(int, int)
     def move_swatch(self, frm: int, to: int) -> None:
         if (0 <= frm < len(self._swatches) and 0 <= to < len(self._swatches)
                 and frm != to):
+            pre = self._begin()
             moved = self._swatches.pop(frm)
             self._swatches.insert(to, moved)
+            self._end(pre, "Reorder swatches")
             self.swatchesChanged.emit()
 
     @Slot(int, float, float, float)
     def set_hsl(self, i: int, h: float, s: float, l: float) -> None:
         if 0 <= i < len(self._swatches):
+            pre = self._begin()
             rgb = core_colors.hsl2rgb(h, s, l)
             self._swatches[i]["hex"] = core_colors.rgb2hex(*rgb)
+            # coalesced: a slider drag is ONE undo step, not 60
+            self._end(pre, f"Adjust swatch {i + 1}", match=f"hsl:{i}")
             self.swatchesChanged.emit()
 
     @Slot(int, str)
@@ -221,7 +269,9 @@ class Colors(QObject):
                 core_colors.hex2rgb(hex_str)
             except ValueError:
                 return  # half-typed hex — ignore until valid
+            pre = self._begin()
             self._swatches[i]["hex"] = hex_str
+            self._end(pre, f"Set swatch {i + 1}", match=f"hex:{i}")
             self.swatchesChanged.emit()
 
     @Slot(int)
