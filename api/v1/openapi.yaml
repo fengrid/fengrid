@@ -69,6 +69,12 @@ paths:
       responses:
         '200':
           description: OK
+  /version:
+    get:
+      summary: Version/build info (alias of /health)
+      responses:
+        '200':
+          description: OK
   /inventory:
     get:
       summary: >-
@@ -85,7 +91,8 @@ paths:
           in: query
           schema:
             type: string
-            enum: [icon, font, palette, snippet]
+            enum: [icon, font, palette, snippet, image, video, audio,
+                   doc, data, spatial, timeseries, markdown]
         - name: q
           in: query
           schema:
@@ -378,6 +385,188 @@ paths:
       responses:
         '202':
           description: Job accepted
+  /assets/data/{id}/content:
+    get:
+      summary: Read the stored structured-data payload of a data asset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    put:
+      summary: Replace the payload wholesale
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  type: object
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+    patch:
+      summary: Merge keys into the existing payload
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  type: object
+                  description: keys merged into the existing payload
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+    delete:
+      summary: Delete the stored payload
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+  /assets/data/{id}/points:
+    get:
+      summary: >-
+        Read timeseries points, optionally filtered by from/to and
+        capped by limit.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: from
+          in: query
+          schema:
+            type: number
+        - name: to
+          in: query
+          schema:
+            type: number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10000
+            maximum: 100000
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    post:
+      summary: >-
+        Timeseries ingest — sensors append points; each point needs at
+        least a numeric t (epoch seconds or any consistent ordering).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [points]
+              properties:
+                points:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      t:
+                        type: number
+                      v: {}
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+  /links/resolve:
+    get:
+      summary: Resolve one [[ ref ]] (slug | GUID | type/ns/coll/name)
+      parameters:
+        - name: ref
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+  /links/expand:
+    post:
+      summary: Expand every [[ … ]] reference in a block of text
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+  /lookup:
+    get:
+      summary: Slug or GUID -> the tracked object (for link authoring/UI)
+      parameters:
+        - name: slug
+          in: query
+          schema:
+            type: string
+        - name: guid
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+        '404':
+          $ref: '#/components/responses/Err'
   /collections:
     get:
       summary: List collections (tree)
