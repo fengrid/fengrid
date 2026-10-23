@@ -21,6 +21,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
 from fengrid.bridges.code import Code
+from fengrid.bridges.editor_highlight import EditorHighlighter
 from fengrid.bridges.colors import Colors
 from fengrid.bridges.data import DataIO
 from fengrid.bridges.databases import Databases
@@ -227,6 +228,11 @@ def main(argv=None) -> int:
     ctx.setContextProperty("colors", colors_bridge)
     ctx.setContextProperty("terms", term_bridge)
     ctx.setContextProperty("code", code_bridge)
+    # real QSyntaxHighlighter for the snippet editor — one layout for
+    # glyphs, cursor and selection (the old overlay desynced them);
+    # colors are pulled from the theme bridge (tokensChanged-driven)
+    snip_highlighter = EditorHighlighter(theme)
+    ctx.setContextProperty("snipHl", snip_highlighter)
     ctx.setContextProperty("projects", projects_bridge)
     ctx.setContextProperty("sc", sc_bridge)
     ctx.setContextProperty("undoProjects", projects_undo)

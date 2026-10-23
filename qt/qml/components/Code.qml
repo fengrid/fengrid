@@ -60,54 +60,14 @@ Item {
             vimMode = "normal"
         }
     }
-    Component.onCompleted: applyKeymapVim()
-
-    // syntax token colors — same roles as the 0.x .tk-* classes
-    readonly property var tkColors: ({
-        "t": theme.tokens.accent,     // tags
-        "k": theme.tokens.accent,     // JS keywords
-        "a": theme.tokens.hlInk,      // attribute names / CSS props
-        "s": "#98C379",               // strings (theme-independent, 0.x)
-        "c": theme.tokens.inkFaint,   // comments
-        "n": theme.tokens.hlInk,      // numbers
-        "f": theme.tokens.text        // CSS selectors / JS functions
-    })
-
-    function highlight(code, lang) {
-        var s = code.replace(/&/g, "&amp;").replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-        var tokens = []
-        function wrap(cls, m) {
-            tokens.push('<span style="color: ' + tkColors[cls] + '">'
-                        + m + '</span>')
-            return "\uE000" + String.fromCharCode(0xE001 + tokens.length - 1)
-                   + "\uE000"
-        }
-        if (lang === "html") {
-            s = s.replace(/&lt;!--[\s\S]*?--&gt;/g, function (m) { return wrap("c", m) })
-            s = s.replace(/&lt;!DOCTYPE[^&]*&gt;/g, function (m) { return wrap("k", m) })
-            s = s.replace(/&lt;\/?[\w-]+/g, function (m) { return wrap("t", m) })
-            s = s.replace(/[\w-]+(?==)/g, function (m) { return wrap("a", m) })
-            s = s.replace(/&quot;[^&]*?&quot;/g, function (m) { return wrap("s", m) })
-        } else if (lang === "css") {
-            s = s.replace(/\/\*[\s\S]*?\*\//g, function (m) { return wrap("c", m) })
-            s = s.replace(/@[\w-]+/g, function (m) { return wrap("k", m) })
-            s = s.replace(/[.#][\w-]+(?=[\s,{:.])/g, function (m) { return wrap("f", m) })
-            s = s.replace(/:{1,2}[\w-]+(?=[\s,{)])/g, function (m) { return wrap("f", m) })
-            s = s.replace(/\b[\w-]+(?=\()/g, function (m) { return wrap("f", m) })
-            s = s.replace(/[\w-]+(?=\s*:)/g, function (m) { return wrap("a", m) })
-            s = s.replace(/#[0-9a-fA-F]{3,8}\b|\b\d+\.?\d*(?:px|em|rem|%|vh|vw|s|ms|deg|fr)?\b/g, function (m) { return wrap("n", m) })
-        } else {  // js
-            s = s.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, function (m) { return wrap("c", m) })
-            s = s.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g, function (m) { return wrap("s", m) })
-            s = s.replace(/\b(var|let|const|function|return|if|else|for|while|do|switch|case|break|continue|new|this|typeof|instanceof|null|undefined|true|false|class|extends|import|export|from|async|await|try|catch|finally|throw|delete|in|of)\b/g, function (m) { return wrap("k", m) })
-            s = s.replace(/\b[\w$]+(?=\s*\()/g, function (m) { return wrap("f", m) })
-            s = s.replace(/\b\d+\.?\d*\b/g, function (m) { return wrap("n", m) })
-        }
-        return s.replace(/\uE000(.)\uE000/g, function (_, c) {
-            return tokens[c.charCodeAt(0) - 0xE001] || ""
-        })
+    Component.onCompleted: {
+        applyKeymapVim()
+        // attach the real highlighter to the TextArea's own document —
+        // one layout for glyphs, cursor and selection (no overlay drift).
+        // Colors are theme-driven inside the snipHl bridge.
+        snipHl.attach(edTa.textDocument, currentPane)
     }
+    onCurrentPaneChanged: snipHl.set_language(currentPane)
 
     function setPane(lang) {
         if (code === null)
@@ -117,7 +77,6 @@ Item {
         edTa.text = editors[lang]
         vimAnchor = -1
         colGoal = -1
-        refreshHighlight()
         dirty = true
     }
 
@@ -134,7 +93,6 @@ Item {
         vimAnchor = -1
         colGoal = -1
         dirty = true
-        refreshHighlight()
         updateMarkdown()
     }
 
@@ -337,15 +295,6 @@ Item {
         vimAnchor = -1; colGoal = -1
     }
 
-    function refreshHighlight() {
-        // the overlay is StyledText — raw \n collapses to a space (HTML
-        // whitespace rules), so every multiline snippet displayed on ONE
-        // line with the caret drifting off the visible glyphs. Break
-        // lines explicitly with <br>.
-        edHl.text = highlight(edTa.text, currentPane)
-                    .replace(/\n/g, "<br>") + "<br>"
-    }
-
     function runPreview() {
         // [[ asset ]] references expand via the bridge (slug / GUID /
         // type/…/name forms → fengrid-asset:// urls)
@@ -382,7 +331,6 @@ Item {
             edTa.text = editors[currentPane]
             titleField.text = code.current.title || ""
             tagsField.text = code.current.tags || ""
-            refreshHighlight()
             dirty = false
         }
         function onMessage(msg) { toast.show(msg) }
@@ -397,10 +345,7 @@ Item {
             }
         }
     }
-    Connections {
-        target: theme
-        function onTokensChanged() { refreshHighlight() }
-    }
+
 
     Toast { id: toast }
 
@@ -1052,7 +997,10 @@ Item {
                     TextArea.flickable: TextArea {
                         id: edTa
                         width: Math.max(edFlick.width, contentWidth)
-                        color: "transparent"     // glyphs come from edHl
+                        // glyphs render natively (QSyntaxHighlighter
+                        // attached via snipHl) — no transparent-text
+                        // overlay, so cursor and selection can't drift
+                        color: theme.tokens.text
                         selectionColor: theme.tokens.accent
                         selectedTextColor: theme.tokens.bg
                         cursorDelegate: Rectangle {
@@ -1064,13 +1012,11 @@ Item {
                         wrapMode: TextArea.NoWrap
                         padding: 8
                         background: null
-                        // the glyph layer is edHl; this field only edits
                         placeholderText: qsTr("write %1 here…").arg(currentPane)
                         placeholderTextColor: theme.tokens.inkFaint
                         onTextChanged: {
                             editors[currentPane] = text
                             dirty = true
-                            refreshHighlight()
                             updateMarkdown()
                         }
                         Keys.onPressed: function (event) {
@@ -1430,21 +1376,6 @@ Item {
                                 break
                             }
                         }
-                    }
-
-                    Text {
-                        id: edHl
-                        x: 0
-                        y: 0
-                        width: Math.max(edFlick.width, implicitWidth)
-                        enabled: false                // clicks fall through
-                        font.family: theme.monoFont
-                        font.pixelSize: 12
-                        textFormat: Text.StyledText
-                        text: ""
-                        leftPadding: 8
-                        topPadding: 8
-                        color: theme.tokens.text
                     }
                 }
             }
