@@ -93,10 +93,18 @@ Item {
         vimAnchor = -1
         colGoal = -1
         dirty = true
-        updateMarkdown()
+        updateMarkdown()   // pane switch: refresh immediately (no debounce)
     }
 
-    // live markdown preview — regenerate while typing
+    // live markdown preview — regenerated ≤1x per 150 ms while typing
+    // (PERF-3: markdown_html over a big document on every keystroke
+    // stalls the editor; the debounce keeps the preview "live" without
+    // the per-keystroke re-parse)
+    Timer {
+        id: mdDebounce
+        interval: 150
+        onTriggered: updateMarkdown()
+    }
     function updateMarkdown() {
         if (isMarkdown && code !== null)
             markdownDoc = code.markdown_html(editors[currentPane],
@@ -1017,7 +1025,7 @@ Item {
                         onTextChanged: {
                             editors[currentPane] = text
                             dirty = true
-                            updateMarkdown()
+                            mdDebounce.restart()
                         }
                         Keys.onPressed: function (event) {
                             var v = text, pos = cursorPosition
