@@ -72,6 +72,18 @@ def main(argv=None) -> int:
     from fengrid import qtlog
     qtlog.install()
 
+    # freeze diagnostics: `kill -USR1 <pid>` dumps every thread's stack
+    # to stderr (and faulthandler prints native crash traces on abort).
+    # A frozen UI with no stack is undebuggable from a user report alone.
+    import faulthandler
+    import signal
+    faulthandler.enable()
+    try:
+        faulthandler.register(signal.SIGUSR1, all_threads=True,
+                              chain=False)
+    except (AttributeError, ValueError, OSError):
+        pass                     # not available on this platform
+
     parser = argparse.ArgumentParser(prog="fengrid")
     parser.add_argument("--screenshot", metavar="PATH",
                         help="render the shell, save a PNG and exit (headless QA)")

@@ -721,15 +721,13 @@ Rectangle {
                             SettingsButton {
                                 text: qsTr("Add icon folder…")
                                 onClicked: {
-                                    folderDialog.kind = "folder"
-                                    folderDialog.open()
+                                    folderDialogLoader.open("folder")
                                 }
                             }
                             SettingsButton {
                                 text: qsTr("Add font folder…")
                                 onClicked: {
-                                    folderDialog.kind = "fontroot"
-                                    folderDialog.open()
+                                    folderDialogLoader.open("fontroot")
                                 }
                             }
                             Item { Layout.fillWidth: true }
@@ -777,8 +775,7 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: qsTr("Add folder…")
                                 onClicked: {
-                                    folderDialog.kind = "folder"
-                                    folderDialog.open()
+                                    folderDialogLoader.open("folder")
                                 }
                             }
                         }
@@ -1377,27 +1374,63 @@ Rectangle {
                                 dataio.importStart(paths)
                             }
                         }
-                        FileDialog {
-                            id: zipDialog
-                            title: qsTr("Import ZIP archive")
-                            fileMode: FileDialog.OpenFile
-                            nameFilters: [qsTr("ZIP archives (*.zip)")]
-                            onAccepted: dataio.importZip(settingsRoot.url2path(selectedFile))
-                        }
-                        FileDialog {
-                            id: csvDialog
-                            title: qsTr("CSV name list")
-                            fileMode: FileDialog.OpenFile
-                            nameFilters: [qsTr("CSV files (*.csv)")]
-                            onAccepted: {
-                                settingsRoot.csvPath = settingsRoot.url2path(selectedFile)
-                                settingsRoot.setImportOpt("csv_path", settingsRoot.csvPath)
+                        // native dialogs load lazily: instantiating a
+                        // QtQuick.Dialogs object on a real desktop session
+                        // touches the XDG portal — a hanging portal on
+                        // some desktops froze the whole Settings screen
+                        // at open (elementary/GNOME reports). Nothing
+                        // portal-related is created until the user
+                        // clicks a browse button.
+                        Loader {
+                            id: zipDialogLoader
+                            active: false
+                            sourceComponent: FileDialog {
+                                id: zipDialog
+                                title: qsTr("Import ZIP archive")
+                                fileMode: FileDialog.OpenFile
+                                nameFilters: [qsTr("ZIP archives (*.zip)")]
+                                onAccepted: {
+                                    dataio.importZip(
+                                        settingsRoot.url2path(selectedFile))
+                                    zipDialogLoader.active = false
+                                }
+                                onRejected: zipDialogLoader.active = false
                             }
+                            function open() { active = true; item.open() }
                         }
-                        FolderDialog {
-                            id: folderImportDialog
-                            title: qsTr("Import folder as source")
-                            onAccepted: dataio.importFolder(settingsRoot.url2path(selectedFolder))
+                        Loader {
+                            id: csvDialogLoader
+                            active: false
+                            sourceComponent: FileDialog {
+                                id: csvDialog
+                                title: qsTr("CSV name list")
+                                fileMode: FileDialog.OpenFile
+                                nameFilters: [qsTr("CSV files (*.csv)")]
+                                onAccepted: {
+                                    settingsRoot.csvPath =
+                                        settingsRoot.url2path(selectedFile)
+                                    settingsRoot.setImportOpt(
+                                        "csv_path", settingsRoot.csvPath)
+                                    csvDialogLoader.active = false
+                                }
+                                onRejected: csvDialogLoader.active = false
+                            }
+                            function open() { active = true; item.open() }
+                        }
+                        Loader {
+                            id: folderImportLoader
+                            active: false
+                            sourceComponent: FolderDialog {
+                                id: folderImportDialog
+                                title: qsTr("Import folder as source")
+                                onAccepted: {
+                                    dataio.importFolder(
+                                        settingsRoot.url2path(selectedFolder))
+                                    folderImportLoader.active = false
+                                }
+                                onRejected: folderImportLoader.active = false
+                            }
+                            function open() { active = true; item.open() }
                         }
                     }
 
@@ -1593,11 +1626,22 @@ Rectangle {
                             }
                         }
 
-                        FolderDialog {
-                            id: exportDestDialog
-                            title: qsTr("Export library bundle to…")
-                            onAccepted: dataio.exportBundle(
-                                "library", settingsRoot.url2path(selectedFolder), true)
+                        Loader {
+                            id: exportDestLoader
+                            active: false
+                            sourceComponent: FolderDialog {
+                                id: exportDestDialog
+                                title: qsTr("Export library bundle to…")
+                                onAccepted: {
+                                    dataio.exportBundle(
+                                        "library",
+                                        settingsRoot.url2path(selectedFolder),
+                                        true)
+                                    exportDestLoader.active = false
+                                }
+                                onRejected: exportDestLoader.active = false
+                            }
+                            function open() { active = true; item.open() }
                         }
                         FileDialog {
                             id: bundleImportDialog
@@ -1800,7 +1844,10 @@ Rectangle {
                             rowMatches: settingsRoot.matches(section, label, keys)
                             RowLayout {
                                 Button {
-                                    text: qsTr("Apply & push")
+                                    // literal & — plain string, NOT qsTr:
+                                    // Button mnemonics turn "&" into an
+                                    // underline and ate it ("Apply_push")
+                                    text: "Apply & push"
                                     onClicked: {
                                         if (sc === null)
                                             return
@@ -2165,14 +2212,26 @@ Rectangle {
         }
     }
 
-    FolderDialog {
-        id: folderDialog
+    // lazy: the shared folder picker — portal-free until opened
+    Loader {
+        id: folderDialogLoader
+        active: false
         property string kind: "folder"
-        onAccepted: {
-            var p = Icons.toLocalPath(selectedFolder)
-            library.add_folder(p, kind)
-            if (kind === "fontroot")
-                fonts.rescan()
+        sourceComponent: FolderDialog {
+            id: folderDialog
+            onAccepted: {
+                var p = Icons.toLocalPath(selectedFolder)
+                library.add_folder(p, folderDialogLoader.kind)
+                if (folderDialogLoader.kind === "fontroot")
+                    fonts.rescan()
+                folderDialogLoader.active = false
+            }
+            onRejected: folderDialogLoader.active = false
+        }
+        function open(kind_) {
+            kind = kind_ || "folder"
+            active = true
+            item.open()
         }
     }
 
