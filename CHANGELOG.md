@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+
+- **The 0.x web interface is retired** — Qt 6 is now the only Fengrid.
+  Deleted: the five single-file HTML panes (`index.html`, `fonts.html`,
+  `code.html`, `colors.html`, `projects.html`), the old webshare server
+  (`server/` — serve.py, import_engine, connect page, vendored QR lib),
+  the web-app installers and updater (`install.sh`, `install.ps1`,
+  `update.sh`), and the 0.x shell tooling (`scan-icons.sh`,
+  `scan-fonts.sh`, `icon-meta.sh`, `refresh-icons.sh`) whose behaviour
+  lives on as in-process Python (`core/scanner.py`, `core/fonts.py`,
+  `core/indexer.py`). The GitHub Pages landing page and 0.x screenshots
+  are removed too; README/QUICKSTART/DEVELOPMENT are rewritten for the
+  Qt6 app. Migration note: 0.x installs are detected by the restore
+  script (running `serve.py` refuses a restore).
+
 ### Added
 
 - **REST API v1** — `api/v1`: stdlib `ThreadingHTTPServer` with bearer-token

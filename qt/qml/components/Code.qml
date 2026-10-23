@@ -750,6 +750,16 @@ Item {
                         font.pixelSize: 10
                         color: codeRoot.vimEnabled && codeRoot.vimMode !== "insert"
                                ? theme.tokens.accent : theme.tokens.textMuted
+                        ToolTip.visible: posMouse.containsMouse
+                        ToolTip.delay: 400
+                        ToolTip.text: qsTr("Cursor position — line : column" +
+                                           (codeRoot.vimEnabled
+                                            ? " · vim mode" : ""))
+                        MouseArea {
+                            id: posMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                        }
                     }
                     Item { Layout.fillWidth: true }
                     IconButton {
