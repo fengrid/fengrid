@@ -520,20 +520,75 @@ Item {
 
             handle: Rectangle { color: theme.tokens.border; width: 1 }
 
-            // ---- parameters column
-            Flickable {
+            // ---- studio screen rail + screen area
+            ColumnLayout {
                 SplitView.preferredWidth: 360
                 SplitView.minimumWidth: 360
                 SplitView.maximumWidth: 420
-                clip: true
-                contentHeight: paramsCol.implicitHeight + 20
-                ScrollBar.vertical: ScrollBar { }
+                spacing: 0
 
-                ColumnLayout {
-                    id: paramsCol
-                    width: parent.width - 8
-                    x: 4
-                    spacing: 10
+                // screen rail: Design · Theme · Assets · Templates ·
+                // Docker · Docs (Revisions lives in the bottom dock)
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Repeater {
+                        model: [
+                            { k: "design", l: qsTr("Design") },
+                            { k: "theme", l: qsTr("Theme") },
+                            { k: "assets", l: qsTr("Assets") },
+                            { k: "templates", l: qsTr("Templates") },
+                            { k: "docker", l: qsTr("Docker") },
+                            { k: "docs", l: qsTr("Docs") }
+                        ]
+                        Button {
+                            id: screenBtn
+                            required property var modelData
+                            required property int index
+                            property int idx: index
+                            Layout.preferredHeight: 22
+                            text: modelData.l
+                            font.family: theme.uiFont; font.pixelSize: 10
+                            onClicked: studioScreen = idx
+                            background: Rectangle {
+                                radius: 5
+                                color: studioScreen === screenBtn.idx
+                                       ? theme.tokens.accentProject
+                                       : theme.tokens.surface2
+                                border.color: theme.tokens.border
+                            }
+                            contentItem: Text {
+                                text: screenBtn.text
+                                font.family: theme.uiFont; font.pixelSize: 10
+                                color: studioScreen === screenBtn.idx
+                                       ? theme.tokens.bg : theme.tokens.text
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+
+                StackLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    currentIndex: studioScreen
+
+                    // 0 · DESIGN — block canvas + inspector
+                    StudioDesign { st: studio; prj: projects }
+
+                    // 1 · THEME — the token configurator (was the only
+                    // pane before the rework)
+                    Flickable {
+                        clip: true
+                        contentHeight: paramsCol.implicitHeight + 20
+                        ScrollBar.vertical: ScrollBar { }
+
+                        ColumnLayout {
+                            id: paramsCol
+                            width: parent.width - 8
+                            x: 4
+                            spacing: 10
 
                     // COLORS -------------------------------------------------
                     SectionLabel { text: qsTr("Colors") }
@@ -918,8 +973,22 @@ Item {
                         }
                     }
                     Item { Layout.preferredHeight: 8 }
-                }
-            }
+                        }   // paramsCol
+                    }       // Flickable — Theme screen
+
+                    // 2 · ASSETS — attached artifacts + library pickers
+                    StudioAssets { prj: projects }
+
+                    // 3 · TEMPLATES — vars + tenant instances
+                    StudioTemplates { st: studio }
+
+                    // 4 · DOCKER — package/ship/inspect containers
+                    StudioDocker { st: studio }
+
+                    // 5 · DOCS — characterization + link health
+                    StudioDocs { st: studio }
+                }           // StackLayout
+            }               // screen-area column
 
             // ---- live preview + bottom dock + status bar
             Rectangle {
@@ -1476,6 +1545,9 @@ Item {
     // shared preview state
     property string previewDoc: ""
     property bool previewActive: false
+    // studio screens: 0 Design · 1 Theme · 2 Assets · 3 Templates ·
+    // 4 Docker · 5 Docs (Revisions stays in the bottom dock)
+    property int studioScreen: 0
     // live mode: every settings/meta change regenerates the preview
     // (debounced) — the old behaviour needed a manual Run click and the
     // user read it as "edits don't reach the preview"
@@ -1513,7 +1585,11 @@ Item {
             return
         if (previewProfile === null)
             return          // no WebEngine: the sandboxed view can't run
-        var html = projects.preview_html()
+        // Design screen renders the block canvas page; other screens
+        // render the boilerplate site as before
+        var html = (studio !== null && studioScreen === 0
+                    && studio.currentPageId >= 0)
+                   ? studio.pageHtml() : projects.preview_html()
         // WYSIWYG hooks: hover/click/contextmenu capture + console capture,
         // consumed by the inspector poller. Appended only to the PREVIEW
         // doc — exports never carry them.
@@ -1551,6 +1627,18 @@ Item {
         id: liveDebounce
         interval: 350
         onTriggered: projectsRoot.regeneratePreview()
+    }
+    // canvas edits refresh the live preview too (debounced like settings)
+    Connections {
+        target: studio
+        function onPageChanged() {
+            if (studioScreen === 0)
+                liveDebounce.restart()
+        }
+        function onPagesChanged() {
+            if (studioScreen === 0)
+                liveDebounce.restart()
+        }
     }
 
     Connections {

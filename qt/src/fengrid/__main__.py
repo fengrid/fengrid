@@ -163,6 +163,10 @@ def main(argv=None) -> int:
         else:
             db_path = default_db
     con = core_db.connect(db_path)
+    # studio pages (Projects pane rework) — same migration discipline
+    # as the guid/slug backfill: run after connect, before any bridge
+    from fengrid.core import studio as core_studio
+    core_studio.migrate(con)
     core_registry.seed_globals(con, reg_con)
     core_registry.set_active(reg_con, db_path)
     prefs_bridge = Prefs(con, db_path)
@@ -190,6 +194,10 @@ def main(argv=None) -> int:
     term_bridge = TermColors(con)
     code_bridge = Code(con)
     projects_bridge = Projects(con)
+    # studio workspace (Design/Templates/Docker/Docs screens)
+    from fengrid.bridges.studio import Studio
+    studio_bridge = Studio(con)
+    studio_bridge.bind_projects(projects_bridge)
     # source control: one git repo per Project/Library under <data>/repos;
     # projects.save() commits to fengrid-main through this bridge
     from fengrid.bridges.source_control import SourceControl
@@ -241,6 +249,7 @@ def main(argv=None) -> int:
     snip_highlighter = EditorHighlighter(theme)
     ctx.setContextProperty("snipHl", snip_highlighter)
     ctx.setContextProperty("projects", projects_bridge)
+    ctx.setContextProperty("studio", studio_bridge)
     ctx.setContextProperty("sc", sc_bridge)
     ctx.setContextProperty("undoProjects", projects_undo)
     ctx.setContextProperty("undoColors", colors_undo)
@@ -315,6 +324,12 @@ def main(argv=None) -> int:
                 (f"%{args.qa_select}%",)).fetchone()
             if row:
                 code_bridge.open_snippet(row["id"])
+        elif args.pane == 4:
+            row = con.execute(
+                "SELECT id FROM projects WHERE name LIKE ?",
+                (f"%{args.qa_select}%",)).fetchone()
+            if row:
+                projects_bridge.open(row["id"])
 
     def _start_initial_scans():
         if args.no_scan:
