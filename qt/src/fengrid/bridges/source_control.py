@@ -275,14 +275,28 @@ class SourceControl(QObject):
     @Slot(str, bool)
     def batch_finish(self, label: str, keep: bool) -> None:
         """Review outcome for a batch: commit+merge-back or discard; the
-        batch branch is deleted either way."""
+        batch branch is deleted either way.
+
+        BatchOp.__exit__ (commit_all + checkout back) never runs for
+        QML-initiated batches — QML cannot drive a Python context
+        manager — so this slot does that work explicitly: commit the
+        batch-branch working tree, return to fengrid-main, then merge
+        or drop. Committing before checkout also makes the discard
+        path safe (checkout won't refuse a dirty tree)."""
         repo = self._current_repo
         if repo is None:
             return
         op = core_git.BatchOp(repo, label)
         try:
-            if keep and op.branch in repo.branches():
-                ahead, _ = repo.ahead_behind_from(op.branch)
+            if op.branch not in repo.branches():
+                self.message.emit("No batch branch to finish")
+                return
+            if repo.branch() == op.branch:
+                op.committed = repo.commit_all(f"batch: {op.label}")
+                repo.checkout(core_git.DEFAULT_BRANCH)
+            if keep and op.committed:
+                ahead, _ = repo.ahead_behind_from(op.branch,
+                                                  core_git.DEFAULT_BRANCH)
                 if ahead > 0:
                     repo.merge_into_current(op.branch)
             repo.delete_branch(op.branch, force=True)

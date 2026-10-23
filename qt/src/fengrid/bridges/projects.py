@@ -179,6 +179,23 @@ class Projects(QObject):
         omit it — every sc call site tolerates its absence)."""
         self._sc_ref = sc
 
+    # ------------------------------------------------------- batch support
+    @Slot(str, result=bool)
+    def batch_begin(self, label: str) -> bool:
+        """Auto-branch before a bulk change (git spec: batch operations
+        create a branch first, then the user reviews commit/discard).
+        False = no repo attached, the operation runs unprotected."""
+        sc = self._sc_ref
+        if sc is None:
+            return False
+        return sc.batch_begin(label) is not None
+
+    @Slot(str, bool)
+    def batch_finish(self, label: str, keep: bool) -> None:
+        sc = self._sc_ref
+        if sc is not None:
+            sc.batch_finish(label, keep)
+
     @Slot(str, str, str)
     def set_setting(self, path: str, value: str, vtype: str):
         """Convenience setter for one nested key: path in

@@ -39,6 +39,18 @@ Item {
         fontsModel = projects.family_options()
     }
 
+    // git spec: batch operations auto-branch before changing anything,
+    // then prompt to commit or discard. No repo → run unprotected.
+    property string batchLabel: ""
+    function runBatch(label, op) {
+        var guarded = projects !== null && projects.batch_begin(label)
+        op()
+        if (guarded) {
+            batchLabel = label
+            batchReview.open()
+        }
+    }
+
     Connections {
         target: projects
         function onMessage(msg) {
@@ -305,10 +317,15 @@ Item {
                                     onTriggered: {
                                         if (projList.currentItem
                                                 && projects !== null)
-                                            projects.add_asset(
-                                                "collection",
-                                                attachCollTarget.modelData.id,
-                                                attachCollTarget.modelData.name)
+                                            projectsRoot.runBatch(
+                                                "attach-"
+                                                + attachCollTarget.modelData.name,
+                                                function () {
+                                                    projects.add_asset(
+                                                        "collection",
+                                                        attachCollTarget.modelData.id,
+                                                        attachCollTarget.modelData.name)
+                                                })
                                     }
                                     contentItem: Text {
                                         text: attachCollTarget.modelData.name
@@ -470,7 +487,8 @@ Item {
                         if (demo !== null && demo.installed)
                             demoDialog.open()
                         else
-                            demo.install()
+                            projectsRoot.runBatch("demo-suite",
+                                function () { demo.install() })
                     }
                     ToolTip.visible: hovered
                     ToolTip.text: demo !== null && demo.installed
@@ -642,8 +660,13 @@ Item {
                             text: qsTr("apply")
                             onClicked: {
                                 if (palApply.currentIndex < 0) return
-                                projects.apply_palette(
-                                    projectsRoot.paletteOpts[palApply.currentIndex].id)
+                                var pal = projectsRoot.paletteOpts[
+                                    palApply.currentIndex]
+                                projectsRoot.runBatch(
+                                    "palette-" + pal.name,
+                                    function () {
+                                        projects.apply_palette(pal.id)
+                                    })
                             }
                         }
                     }
@@ -1573,6 +1596,57 @@ Item {
     }
 
     // demo removal dialog — per-kind checkboxes (keep tags, drop the rest…)
+    Popup {
+        id: batchReview
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(400, projectsRoot.width - 40)
+        padding: 16
+        background: Rectangle {
+            radius: 12
+            color: theme.tokens.surface
+            border.color: theme.tokens.border
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                text: qsTr("Batch complete — review")
+                font.family: theme.headingFont
+                font.pixelSize: 14
+                color: theme.tokens.accent
+            }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                font.family: theme.uiFont
+                font.pixelSize: 11
+                color: theme.tokens.textMuted
+                text: qsTr("The batch ran on its own branch «%1». Keep it " +
+                           "(merge into fengrid-main) or discard it " +
+                           "(changes revert). The branch is removed " +
+                           "either way.").arg(projectsRoot.batchLabel)
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                spacing: 8
+                Button {
+                    text: qsTr("Discard")
+                    onClicked: {
+                        projects.batch_finish(projectsRoot.batchLabel, false)
+                        batchReview.close()
+                    }
+                }
+                Button {
+                    text: qsTr("Commit & merge")
+                    onClicked: {
+                        projects.batch_finish(projectsRoot.batchLabel, true)
+                        batchReview.close()
+                    }
+                }
+            }
+        }
+    }
+
     Popup {
         id: demoDialog
         modal: true

@@ -210,3 +210,55 @@ def test_slugify():
     assert pg.slugify("My Cool Project!") == "my-cool-project"
     assert pg.slugify("") == "project"
     assert pg.slugify("a/b\\c") == "a-b-c"
+
+
+# ───────────────────────── QML-driven batch path (bridge batch_finish)
+def test_bridge_batch_finish_keep_merges(repo):
+    """QML cannot run BatchOp as a context manager: batch_begin enters it
+    and the review dialog calls batch_finish. The slot must commit the
+    working tree, return to fengrid-main, merge, and delete the branch."""
+    import subprocess
+
+    from fengrid.bridges.source_control import SourceControl
+    from PySide6.QtCore import QObject
+
+    parent = QObject()
+    bridge = SourceControl(None, str(repo.path.parent), parent)
+    bridge._current_repo = repo
+    bridge._current_label = "t"
+
+    # enter the batch (same path QML takes via projects.batch_begin)
+    op = bridge.batch_begin("recolor")
+    assert op is not None
+    assert repo.branch() == op.branch
+    (repo.path / "batch.txt").write_text("b")
+
+    # nothing committed yet — batch_finish must do the commit itself
+    bridge.batch_finish("recolor", True)
+    assert repo.branch() == "fengrid-main"
+    assert "batch/recolor" not in repo.branches()
+    assert (repo.path / "batch.txt").exists()
+    log = subprocess.run(["git", "-C", str(repo.path), "log", "--oneline"],
+                         capture_output=True, text=True).stdout
+    assert "batch: recolor" in log
+
+
+def test_bridge_batch_finish_discard_reverts(repo):
+    import subprocess
+
+    from fengrid.bridges.source_control import SourceControl
+    from PySide6.QtCore import QObject
+
+    parent = QObject()
+    bridge = SourceControl(None, str(repo.path.parent), parent)
+    bridge._current_repo = repo
+
+    op = bridge.batch_begin("doomed")
+    (repo.path / "batch.txt").write_text("b")
+    bridge.batch_finish("doomed", False)
+    assert repo.branch() == "fengrid-main"
+    assert "batch/doomed" not in repo.branches()
+    assert not (repo.path / "batch.txt").exists()
+    log = subprocess.run(["git", "-C", str(repo.path), "log", "--oneline"],
+                         capture_output=True, text=True).stdout
+    assert "batch: doomed" not in log
