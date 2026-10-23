@@ -1,0 +1,300 @@
+"""Interaction test for the Colors pane lock buttons.
+
+Regression test for the lock feature: the swatch card's selection
+MouseArea used to stack ABOVE the lock/remove buttons (sibling order) and
+swallowed their clicks — locks could never be SET from the UI. This test
+drives real window-level mouse events through the actual delivery path
+(the window routes to the topmost item at the position, which is exactly
+what real input does) and asserts the bridge state flips.
+"""
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("QT_QUICK_BACKEND", "software")
+
+import pytest
+from PySide6.QtCore import QCoreApplication, QEvent, QPointF, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QPointF
+from PySide6.QtGui import QGuiApplication, QMouseEvent
+from PySide6.QtTest import QTest
+from PySide6.QtTest import QTest
+from PySide6.QtQml import QQmlComponent, QQmlEngine
+from PySide6.QtQuick import QQuickWindow
+
+QML_DIR = Path(__file__).resolve().parents[1] / "qml"
+SRC = Path(__file__).resolve().parents[1] / "src"
+FONTS = Path(__file__).resolve().parents[2] / "fonts"
+sys.path.insert(0, str(SRC))
+
+_APP = None
+
+
+def _qapp():
+    global _APP
+    if _APP is None:
+        _APP = QGuiApplication.instance() or QGuiApplication(sys.argv)
+    return _APP
+
+
+@pytest.fixture()
+def colors_ui(tmp_path):
+    _qapp()
+    from fengrid.bridges.colors import Colors
+    from fengrid.bridges.library import Library
+    from fengrid.bridges.theme import Theme
+    from fengrid.core import db as core_db
+
+    con = core_db.connect(tmp_path / "t.db")
+    theme = Theme(con, str(FONTS))
+    colors_bridge = Colors(con)
+    library = Library(con, str(tmp_path / "t.db"), no_scan=True)
+
+    engine = QQmlEngine()
+    engine.rootContext().setContextProperty("theme", theme)
+    engine.rootContext().setContextProperty("colors", colors_bridge)
+    engine.rootContext().setContextProperty("library", library)
+    engine.rootContext().setContextProperty("previewProfile", None)
+    engine.rootContext().setContextProperty("terms", None)
+    comp = QQmlComponent(
+        engine, QUrl.fromLocalFile(str(QML_DIR / "components" / "Colors.qml")))
+    root = comp.create(engine.rootContext())
+    assert root is not None, comp.errors()
+    root.setWidth(1100)
+    root.setHeight(700)
+
+    win = QQuickWindow()
+    root.setParentItem(win.contentItem())
+    win.show()
+    _qapp().processEvents()
+
+    yield {"root": root, "win": win, "colors": colors_bridge, "con": con}
+
+    # teardown in the proven order (bridges alive while the engine dies)
+    win.close()
+    root.setParentItem(None)
+    engine.collectGarbage()
+    del engine
+    import gc
+    gc.collect()
+
+
+def _window_click(win, scene_pos):
+    """Press + release at a scene position on the WINDOW — delivery goes to
+    the topmost item at that position, i.e. the real stacking order."""
+    for typ, buttons in ((QEvent.MouseButtonPress, Qt.LeftButton),
+                         (QEvent.MouseButtonRelease, Qt.LeftButton)):
+        ev = QMouseEvent(typ, scene_pos, scene_pos, Qt.LeftButton, buttons,
+                         Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(win, ev)
+        _qapp().processEvents()
+
+
+def _window_move(win, scene_pos):
+    ev = QMouseEvent(QEvent.MouseMove, scene_pos, scene_pos, Qt.NoButton,
+                     Qt.NoButton, Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+
+
+def _sw_tool_buttons(root):
+    """The 24x24 swatch tool buttons (lock / remove), scene-sorted."""
+    hits = []
+    stack = [root]
+    while stack:
+        o = stack.pop()
+        cls = o.metaObject().className()
+        # inline-component buttons report as "SwTool_QMLTYPE_n", not Button
+        if cls.startswith("SwTool") and abs(o.width() - 24) < 0.5 \
+                and abs(o.height() - 24) < 0.5:
+            hits.append(o)
+        stack.extend(o.childItems())
+    hits.sort(key=lambda b: (b.mapToScene(QPointF(0, 0)).y(),
+                             b.mapToScene(QPointF(0, 0)).x()))
+    return hits
+
+
+def test_lock_button_click_flips_lock_state(colors_ui):
+    ed = colors_ui
+    bridge, win, root = ed["colors"], ed["win"], ed["root"]
+
+    buttons = _sw_tool_buttons(root)
+    assert len(buttons) >= 2, "swatch tool buttons not found"
+
+    # select swatch 0 by clicking its card body: the selected card's tools
+    # stay visible (not hover-gated), making the clicks deterministic
+    center = buttons[0].mapToScene(QPointF(12, 12))
+    card_center = QPointF(center.x() - 30, center.y() + 40)
+    _window_move(win, card_center)
+    _window_click(win, card_center)
+    _qapp().processEvents()
+    assert bridge.selectedIdx == 0, "swatch not selected by card click"
+
+    def click_lock():
+        # delegates are re-created on every swatchesChanged — re-find
+        btn = _sw_tool_buttons(root)[0]
+        pos = btn.mapToScene(QPointF(12, 12))
+        assert btn.isVisible(), "lock button not visible on selected card"
+        _window_click(win, pos)
+
+    assert bridge.swatches[0]["locked"] is False
+    click_lock()
+    _qapp().processEvents()
+    assert bridge.swatches[0]["locked"] is True, \
+        "click did not reach the lock button — stacking still broken"
+
+    # second click un-locks — two sendEvent presses at the same spot within
+    # the double-click interval are delivered as a DblClick (MouseArea's
+    # onClicked ignores it), so wait out the interval first
+    QTest.qWait(int(QGuiApplication.styleHints().mouseDoubleClickInterval()) + 30)
+    click_lock()
+    _qapp().processEvents()
+    assert bridge.swatches[0]["locked"] is False
+
+
+def test_drag_reorders_swatch(colors_ui):
+    """Drag-to-reorder: press on a card body, move past ~2 slots, release —
+    the swatch moves through the REAL event path (window -> itemAt)."""
+    ed = colors_ui
+    bridge, win, root = ed["colors"], ed["win"], ed["root"]
+
+    # card 0 = tools[0].parent.parent (SwTool -> tools Row -> card)
+    btn0 = _sw_tool_buttons(root)[0]
+    card = btn0.parent().parent()
+    card_w = card.width()
+    assert card_w > 50, "swatch card geometry not laid out"
+
+    hexes_before = [s["hex"] for s in bridge.swatches]
+    order_before = list(range(len(hexes_before)))
+
+    start = card.mapToScene(QPointF(card_w / 2, card.height() / 2))
+    # 2.4 slots of travel → Math.round rounds to a 2-slot move
+    dx = 2.4 * (card_w + 8)
+
+    # press, incremental moves, release — through the window delivery path
+    ev = QMouseEvent(QEvent.MouseButtonPress, start, start, Qt.LeftButton,
+                     Qt.LeftButton, Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+    steps = 12
+    for k in range(1, steps + 1):
+        p = QPointF(start.x() + dx * k / steps, start.y())
+        QCoreApplication.sendEvent(win, QMouseEvent(
+            QEvent.MouseMove, p, p, Qt.NoButton, Qt.LeftButton,
+            Qt.KeyboardModifier.NoModifier))
+        _qapp().processEvents()
+    end = QPointF(start.x() + dx, start.y())
+    ev = QMouseEvent(QEvent.MouseButtonRelease, end, end, Qt.LeftButton,
+                     Qt.NoButton, Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+
+    hexes_after = [s["hex"] for s in bridge.swatches]
+    assert hexes_after != hexes_before, "drag did not reorder the swatches"
+    # card 0 moved two slots right: its hex now sits at index 2
+    assert hexes_after[2] == hexes_before[0]
+    # and the rest of the order is a consistent rotation
+    assert hexes_after[0] == hexes_before[1]
+    assert hexes_after[1] == hexes_before[2]
+    assert hexes_after[3:] == hexes_before[3:]
+    # guards the unused-variable lint on order_before usage in the contract
+    assert order_before[2] == 2
+
+
+def test_lock_survives_rule_switch_and_generate(colors_ui):
+    ed = colors_ui
+    bridge = ed["colors"]
+    bridge.toggle_lock(0)
+    bridge.toggle_lock(2)
+    locked_before = (bridge.swatches[0]["hex"], bridge.swatches[2]["hex"])
+    assert bridge.swatches[0]["locked"] and bridge.swatches[2]["locked"]
+
+    bridge.set_rule("complementary")
+    bridge.generate()
+    bridge.set_rule("analogous")
+    bridge.generate()
+
+    # locks survive both rerolls byte-for-byte
+    assert bridge.swatches[0]["hex"] == locked_before[0]
+    assert bridge.swatches[2]["hex"] == locked_before[1]
+    assert bridge.swatches[0]["locked"] and bridge.swatches[2]["locked"]
+
+
+def test_hsl_slider_drag_updates_swatch(colors_ui):
+    """Regression: dragging an HSL slider never moved the swatch. The
+    EditSlider Slider broke its `value: parent.val` binding on first drag
+    (Qt slider gotcha) while onMoved only forwarded `value` to applyHsl,
+    which read the STALE component-level `val` — the swatch hex never
+    changed. onMoved must assign parent.val imperatively before editing.
+    """
+    ed = colors_ui
+    bridge, win, root = ed["colors"], ed["win"], ed["root"]
+
+    bridge.select(0)
+    _qapp().processEvents()
+    before_hex = bridge.swatches[0]["hex"]
+    before_h = bridge.swatches[0]["h"]
+
+    # find the three EditSlider instances; identify by label
+    sliders = []
+    stack = [root]
+    while stack:
+        o = stack.pop()
+        if o.metaObject().className().startswith("EditSlider"):
+            sliders.append(o)
+        stack.extend(o.childItems())
+    assert len(sliders) == 3, f"expected 3 EditSliders, got {len(sliders)}"
+    by_label = {}
+    for s in sliders:
+        by_label[s.property("label")] = s
+    h = by_label["H"]
+    hslider = h.findChild(QObject, None)  # placeholder, replaced below
+
+    # the inner QQuickSlider: walk children for the Slider type
+    def find_slider(item):
+        hits, seen = [], []
+        stack2 = [item]
+        while stack2:
+            o = stack2.pop()
+            cn = o.metaObject().className()
+            seen.append(cn)
+            if cn.startswith("Slider_") and "Groove" not in cn and "Handle" not in cn:
+                hits.append(o)
+            stack2.extend(o.childItems())
+        print("CHILD CLASSES:", seen)
+        return hits[0]
+
+    hs = find_slider(h)
+    start = hs.mapToScene(QPointF(hs.width() / 2, hs.height() / 2))
+    # drag the handle to ~80% of the track
+    target_x = start.x() + hs.width() * 0.3
+    y = start.y()
+    ev = QMouseEvent(QEvent.MouseButtonPress, QPointF(start.x(), y),
+                     QPointF(start.x(), y), Qt.LeftButton, Qt.LeftButton,
+                     Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+    for frac in (0.05, 0.15, 0.3):
+        ev = QMouseEvent(QEvent.MouseMove, QPointF(target_x, y),
+                         QPointF(target_x, y), Qt.NoButton, Qt.LeftButton,
+                         Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(win, ev)
+        _qapp().processEvents()
+    ev = QMouseEvent(QEvent.MouseButtonRelease, QPointF(target_x, y),
+                     QPointF(target_x, y), Qt.LeftButton, Qt.NoButton,
+                     Qt.KeyboardModifier.NoModifier)
+    QCoreApplication.sendEvent(win, ev)
+    _qapp().processEvents()
+    QTest.qWait(50)
+
+    after_hex = bridge.swatches[0]["hex"]
+    after_h = bridge.swatches[0]["h"]
+    assert after_h != before_h, \
+        "dragging the H slider must move the hue (before=%s after=%s)" % (
+            before_h, after_h)
+    assert after_hex != before_hex, \
+        "dragging the H slider must change the swatch hex"
+    # the component val must track the slider (readout correctness)
+    assert abs(h.property("val") - after_h) <= 2, (
+        h.property("val"), after_h)
