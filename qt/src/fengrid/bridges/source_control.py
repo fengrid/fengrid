@@ -162,7 +162,44 @@ class SourceControl(QObject):
         return _probe_lfs()
 
     # ------------------------------------------------------------- actions
+    # --------------------------------------------------------------- stash
     @Slot(str)
+    def stash(self, message: str = "") -> None:
+        repo = self._current_repo
+        if repo is None:
+            return
+        try:
+            if repo.stash(message):
+                self.message.emit("Changes stashed")
+            else:
+                self.message.emit("Nothing to stash")
+        except core_git.GitError as e:
+            self.message.emit(f"Stash failed: {e}")
+        self.refresh()
+
+    @Property("QVariantList", notify=statusChanged)
+    def stashList(self) -> list:
+        if self._current_repo is None:
+            return []
+        try:
+            return self._current_repo.stash_list()
+        except core_git.GitError:
+            return []
+
+    @Slot()
+    def pop_stash(self) -> None:
+        """Restore the newest stash (the close prompt's «stash them to
+        return later» path — the stash comes back on next open)."""
+        repo = self._current_repo
+        if repo is None:
+            return
+        try:
+            repo.pop_stash(0)
+            self.message.emit("Stash restored")
+        except core_git.GitError as e:
+            self.message.emit(f"Stash restore failed: {e}")
+        self.refresh()
+
     def commit(self, message: str) -> None:
         if self._current_repo is None or not (message or "").strip():
             return

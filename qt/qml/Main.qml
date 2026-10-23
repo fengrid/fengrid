@@ -950,11 +950,60 @@ ApplicationWindow {
                 font.family: theme.monoFont; font.pixelSize: 11
             }
         }
-        footer: FgDialogFooter {
-            acceptLabel: qsTr("Commit")
-            acceptEnabled: closeMsg.text.trim() !== ""
-            onCancelClicked: closePrompt.closeAndQuit()
-            onAcceptClicked: closePrompt.commitAndClose()
+        // three-way close: Quit anyway / Stash & close / Commit (primary)
+        footer: Item {
+            implicitHeight: closeRow.implicitHeight + 16
+            RowLayout {
+                id: closeRow
+                spacing: 8
+                anchors {
+                    left: parent.left; leftMargin: 16
+                    right: parent.right; rightMargin: 16
+                    bottom: parent.bottom; bottomMargin: 16
+                }
+                Button {
+                    text: qsTr("Quit anyway")
+                    onClicked: closePrompt.closeAndQuit()
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                }
+                Button {
+                    text: qsTr("Stash & close")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Set the changes aside — restore " +
+                                       "them with «Restore stash» in the " +
+                                       "Projects source panel")
+                    onClicked: {
+                        sc.stash(closeMsg.text.trim() !== ""
+                                 ? closeMsg.text : "WIP before close")
+                        closePrompt.stashAndClose()
+                    }
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                }
+                Button {
+                    text: qsTr("Commit")
+                    enabled: closeMsg.text.trim() !== ""
+                    onClicked: closePrompt.commitAndClose()
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.accent
+                    }
+                    contentItem: Text {
+                        text: qsTr("Commit")
+                        color: theme.tokens.bg
+                        font.family: theme.uiFont; font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
+        function stashAndClose() {
+            Qt.quit()
         }
         function commitAndClose() {
             sc.commit(closeMsg.text)

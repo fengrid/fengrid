@@ -107,6 +107,33 @@ class Repo:
     def exists(self) -> bool:
         return (self.path / ".git").exists()
 
+    # --------------------------------------------------------------- stash
+    def stash(self, message: str = "") -> bool:
+        """Stash all changes (including untracked); False when there was
+        nothing to stash (git exits 0 and says so — inspect the output)."""
+        if not self.exists():
+            return False
+        args = ["stash", "push", "-u"]
+        if (message or "").strip():
+            args += ["-m", message.strip()]
+        out = self._run(*args)
+        return "No local changes to save" not in (out or "")
+
+    def stash_list(self) -> list[str]:
+        if not self.exists():
+            return []
+        try:
+            out = self._run("stash", "list")
+        except GitError:
+            return []
+        return [ln for ln in out.splitlines() if ln.strip()]
+
+    def pop_stash(self, index: int = 0) -> None:
+        """Apply and drop stash@<index> (newest first)."""
+        if not self.exists():
+            raise GitError("not a repository", 128)
+        self._run("stash", "pop", f"stash@{{{int(index)}}}")
+
     # ------------------------------------------------------------- setup
     def init(self, author_name: str = "Fengrid",
              author_email: str = "fengrid@localhost") -> None:

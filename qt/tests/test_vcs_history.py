@@ -313,3 +313,18 @@ def test_colors_undo_roundtrip():
     assert ub.canRedo
     ub.redo()
     assert len(stub._swatches) == 2
+
+
+# ─────────────────────────────────────────────────────────── stash
+def test_stash_roundtrip(repo):
+    (repo.path / "wip.txt").write_text("half-done")
+    assert repo.stash("wip")
+    assert repo.status()["clean"]
+    assert len(repo.stash_list()) == 1
+    repo.pop_stash(0)
+    assert (repo.path / "wip.txt").read_text() == "half-done"
+    assert repo.stash_list() == []
+
+
+def test_stash_nothing_is_false(repo):
+    assert repo.stash("empty") is False

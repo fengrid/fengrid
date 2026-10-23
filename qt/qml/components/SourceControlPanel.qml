@@ -232,6 +232,41 @@ Rectangle {
             }
         }
 
+        // ── stashes ──
+        SectionHeader { text: qsTr("Stashes") }
+        Repeater {
+            model: hasRepo ? sc.stashList : []
+            RowLayout {
+                required property var modelData
+                Layout.fillWidth: true
+                spacing: 4
+                Text {
+                    text: modelData
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
+                    color: theme.tokens.text
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+                IconButton {
+                    icon_name: "download"
+                    icon_px: 10
+                    implicitWidth: 20; implicitHeight: 20
+                    ToolTip.text: qsTr("Restore this stash (apply and drop)")
+                    onClicked: sc.pop_stash()
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: hasRepo && sc.stashList.length === 0
+            text: qsTr("No stashes — «Stash & close» when quitting " +
+                       "puts pending changes here")
+            wrapMode: Text.Wrap
+            font.family: theme.uiFont; font.pixelSize: 10
+            color: theme.tokens.textMuted
+        }
+
         // ── history ──
         SectionHeader { text: qsTr("History") }
         Repeater {
