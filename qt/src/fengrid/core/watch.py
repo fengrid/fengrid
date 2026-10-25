@@ -20,9 +20,12 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat as _stat
 import subprocess
 import time
 from pathlib import Path
+
+stat_S_ISREG = _stat.S_ISREG
 
 TRANSPORTS = [
     {"key": "local", "label": "Local filesystem", "kind": "builtin"},
@@ -108,24 +111,27 @@ def _run(argv: list) -> int:
 
 def signature(path: str | Path) -> str:
     """Cheap change fingerprint: file count + newest mtime + total size.
-    One directory walk, no content reads — safe for huge trees."""
-    root = Path(path)
-    if not root.exists():
-        return "missing"
+    One directory walk, no content reads — safe for huge trees.
+    SEC-5: os.walk with followlinks=False (rglob follows directory
+    symlinks and can walk the whole filesystem)."""
     n = 0
     newest = 0.0
     total = 0
+    if not os.path.exists(str(path)):
+        return "missing"
     try:
-        for child in root.rglob("*"):
-            try:
-                st = child.stat() if child.is_file() else None
-            except OSError:
-                continue
-            if st is None:
-                continue
-            n += 1
-            total += st.st_size
-            newest = max(newest, st.st_mtime)
+        for dirpath, _dirs, files in os.walk(str(path), followlinks=False):
+            for fn in files:
+                try:
+                    st = os.stat(os.path.join(dirpath, fn),
+                                 follow_symlinks=False)
+                except OSError:
+                    continue
+                if not stat_S_ISREG(st.st_mode):
+                    continue
+                n += 1
+                total += st.st_size
+                newest = max(newest, st.st_mtime)
     except OSError as e:
         return f"error:{e.__class__.__name__}"
     return f"{n}:{total}:{int(newest)}"

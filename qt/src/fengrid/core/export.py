@@ -60,6 +60,14 @@ def export(src: str | Path, dest_dir: str | Path, stem: str, fmt: str,
     out = dest_dir / f"{safe}.{fmt}"
 
     with Image.open(src) as im:
+        # SEC-9: a huge raster opened at "orig" then converted can OOM —
+        # cap the working size (images above 128 Mpix are downscaled
+        # before the format conversion); the header dims stay honest on
+        # the source, only the export is capped
+        if im.width * im.height > 128 * 1024 * 1024:
+            scale = (128 * 1024 * 1024 / (im.width * im.height)) ** 0.5
+            im = im.resize((max(1, int(im.width * scale)),
+                            max(1, int(im.height * scale))))
         if size not in (None, "orig"):
             im = im.resize((int(size), int(size)), Image.Resampling.LANCZOS)
         im = _convert_for(fmt, im)

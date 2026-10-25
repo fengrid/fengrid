@@ -22,10 +22,19 @@ _FS_BAD = re.compile(r"[^\w.\- ]+", re.UNICODE)
 _MULTI_DOT = re.compile(r"\.{2,}")
 
 
+_NESTED_QUANT = re.compile(
+    r"\([^()]*[+*}]\s*[^()]*\)\s*[+*{]")  # (…+…)  +  → nested quantifier
+
+
 def apply_regex(stem: str, find: str, repl: str) -> str:
     """User find/replace. An invalid pattern must not kill a 10k-file
-    import — fall back to the unchanged stem."""
+    import — fall back to the unchanged stem. SEC-7: a pathological
+    pattern (nested quantifiers like `(a+)+`) can backtrack
+    catastrophically on every filename, burning CPU for the whole
+    import; such patterns are rejected up front."""
     if not find:
+        return stem
+    if len(find) > 512 or _NESTED_QUANT.search(find):
         return stem
     try:
         return re.sub(find, repl if repl is not None else "", stem)

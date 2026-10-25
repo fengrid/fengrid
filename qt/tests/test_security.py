@@ -109,6 +109,106 @@ def test_identify_small_raster_still_counts(tmp_path, monkeypatch):
     assert info["width"] == 4 and info["mono"] == 1
 
 
+# ------------------------------------------------------ SEC-5 (#7)
+def test_folder_sniff_ignores_symlinked_dirs(tmp_path):
+    from fengrid.core.ingest import import_folder
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "font.ttf").write_bytes(b"\x00\x01\x00\x00\x00")
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "pic.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n")                 # icon file
+    os.symlink(str(outside), str(root / "link"))
+    out = import_folder(str(root))
+    # the symlink must NOT drag the outside font tree into the sniff
+    assert out["kind"] == "folder"
+
+
+def test_watch_signature_ignores_symlink_targets(tmp_path):
+    from fengrid.core.watch import signature
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "a.png").write_bytes(b"x" * 10)
+    root = tmp_path / "watchroot"
+    root.mkdir()
+    os.symlink(str(outside), str(root / "link"))
+    sig = signature(str(root))
+    assert sig == "0:0:0"          # no regular files inside the root
+
+
+# ------------------------------------------------------ SEC-6 (#8)
+def test_import_zip_member_budget(tmp_path, monkeypatch):
+    import zipfile
+    from fengrid.core import ingest as core_ingest
+    monkeypatch.setattr(core_ingest, "_ZIP_MAX_MEMBER_BYTES", 100)
+    zpath = tmp_path / "bomb.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr("a.png", b"\x89PNG\r\n\x1a\n" + b"x" * 200)
+    out = core_ingest.import_zip(str(zpath), str(tmp_path / "data"))
+    assert out["placed"] == 0 and out["failed"] >= 1
+    assert any("member cap" in e for e in out["errors"])
+
+
+def test_import_zip_total_budget(tmp_path, monkeypatch):
+    import zipfile
+    from fengrid.core import ingest as core_ingest
+    monkeypatch.setattr(core_ingest, "_ZIP_MAX_TOTAL_BYTES", 150)
+    zpath = tmp_path / "two.zip"
+    with zipfile.ZipFile(zpath, "w") as zf:
+        zf.writestr("a.png", b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+        zf.writestr("b.png", b"\x89PNG\r\n\x1a\n" + b"x" * 100)
+    out = core_ingest.import_zip(str(zpath), str(tmp_path / "data"))
+    assert out["placed"] == 1
+    assert any("total uncompressed budget" in e for e in out["errors"])
+
+
+# ------------------------------------------------------ SEC-7 (#9)
+def test_apply_regex_rejects_nested_quantifiers():
+    from fengrid.core.patterns import apply_regex
+    stem = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaX"
+    # classic catastrophic pattern — must be rejected, not executed
+    assert apply_regex(stem, "(a+)+$", "x") == stem
+    # overlong patterns rejected outright
+    assert apply_regex(stem, "a" * 600, "x") == stem
+    # ordinary patterns still work
+    assert apply_regex("photo_0001", r"_(\d{4})$", r"-v\1") == "photo-v0001"
+
+
+# ------------------------------------------------------ SEC-8 (#10)
+def test_scheme_path_must_be_under_registered_roots(con, tmp_path):
+    import os as _os
+    from types import SimpleNamespace
+    from fengrid.web.handlers import AssetSchemeHandler
+    src = con.execute(
+        "INSERT INTO source(kind, path, label, enabled)"
+        " VALUES ('folder', ?, 't', 1)", (str(tmp_path / "lib"),)).lastrowid
+    outside = tmp_path / "outside" / "secret.txt"
+    outside.parent.mkdir()
+    outside.write_text("top secret")
+    # a CRAFTED row: asset table knows a path OUTSIDE any source root
+    con.execute(
+        "INSERT INTO asset(source_id, kind, name, path)"
+        " VALUES (?, 'icon', 'crafted', ?)", (src, str(outside)))
+    con.commit()
+    handler = SimpleNamespace(_con=con)
+    check = AssetSchemeHandler._path_is_registered.__get__(handler)
+    assert check(str(outside)) is False           # crafted row rejected
+    inside = tmp_path / "lib" / "ok.svg"
+    inside.parent.mkdir()
+    inside.write_text("<svg/>")
+    con.execute(
+        "INSERT INTO asset(source_id, kind, name, path)"
+        " VALUES (?, 'icon', 'ok', ?)", (src, str(inside)))
+    con.commit()
+    assert check(str(inside)) is True
+    # post-scan symlink swap: index points inside the root, but the
+    # file is now a symlink OUT of it → rejected
+    link = tmp_path / "lib" / "swap.svg"
+    os.symlink(str(outside), link)
+    assert check(str(link)) is False
+
+
 # ------------------------------------------------------ SEC-4 (#6)
 def test_svg_doctype_rejected_without_defusedxml(tmp_path, monkeypatch):
     p = tmp_path / "bomb.svg"

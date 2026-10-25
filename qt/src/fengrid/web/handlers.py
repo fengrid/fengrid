@@ -9,6 +9,7 @@ every entry into it).
 from __future__ import annotations
 
 import mimetypes
+import os
 
 from PySide6.QtCore import QFile, QUrl
 from PySide6.QtWebEngineCore import (QWebEngineProfile,
@@ -38,14 +39,50 @@ class AssetSchemeHandler(QWebEngineUrlSchemeHandler):
         path = url.path()
         # allowlist: only files the scan index knows about resolve
         row = self._con.execute(
-            "SELECT 1 FROM asset WHERE path = ?", (path,)).fetchone()
-        if row is None:
+            "SELECT 1 FROM asset WHERE path = ?",
+            (path,)).fetchone() is not None
+        # SEC-8: a crafted DB row (malicious import, direct DB edit) or
+        # a post-scan symlink swap could otherwise serve ANY local file.
+        # Defense in depth at serve time: the REAL path must resolve
+        # under a registered source root, and it must be a regular file.
+        if row:
+            row = self._path_is_registered(path)
+        if not row:
             job.fail(QWebEngineUrlRequestJob.Error.UrlNotFound)
             return
         mime = (_MIME_OVERRIDES.get(_ext(path))
                 or mimetypes.guess_type(path)[0]
                 or "application/octet-stream")
         job.reply(mime.encode(), _open_local(path))
+
+    def _path_is_registered(self, path: str) -> bool:
+        """True when the real (symlink-resolved) path lies under one of
+        the enabled source roots."""
+        try:
+            real = os.path.realpath(path)
+            if not os.path.isfile(real):
+                return False
+            roots = [r[0] for r in self._con.execute(
+                "SELECT path FROM source WHERE enabled = 1")]
+            for root in roots:
+                if not root:
+                    continue
+                root_real = os.path.realpath(root)
+                if (real == root_real
+                        or real.startswith(root_real.rstrip(os.sep)
+                                           + os.sep)):
+                    return True
+            # staged/temp files the importer just wrote (import of a
+            # file the scanner has not indexed yet) live under the data
+            # dir — accept that too
+            data_dir = os.environ.get("FENGRID_DATA_DIR", "")
+            if data_dir:
+                data_real = os.path.realpath(data_dir)
+                if real.startswith(data_real.rstrip(os.sep) + os.sep):
+                    return True
+        except Exception:                        # noqa: BLE001
+            return False
+        return False
 
 
 def _ext(path: str) -> str:
