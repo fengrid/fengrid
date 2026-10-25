@@ -21,6 +21,8 @@ from PySide6.QtQuickControls2 import QQuickStyle
 from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
 from fengrid.bridges.code import Code
+from fengrid.bridges.presets import Presets
+from fengrid.core import presets as core_presets
 from fengrid.bridges.editor_highlight import EditorHighlighter
 from fengrid.bridges.colors import Colors
 from fengrid.bridges.data import DataIO
@@ -280,6 +282,11 @@ def main(argv=None) -> int:
     ctx.setContextProperty("startupNotice", startup_notice)
     taxonomy_bridge = Taxonomy(con, data_dir)
     ctx.setContextProperty("taxonomy", taxonomy_bridge)
+    # curated preset libraries (fonts / icon sets / site templates):
+    # register pack rows (idempotent), never download anything
+    core_presets.ensure_presets(con)
+    presets_bridge = Presets(con, data_dir)
+    ctx.setContextProperty("presets", presets_bridge)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the
     # Loader, which stays inactive there

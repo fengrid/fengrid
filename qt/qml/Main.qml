@@ -539,6 +539,11 @@ ApplicationWindow {
         }
     }
 
+    // ── preset libraries browser: curated remote catalogues ──
+    PresetsDialog {
+        id: presetsDialog
+    }
+
     // ── entity inspector overlay: Documentation / License / Sources for
     // Projects and saved Libraries, opened from their context menus ──
     Rectangle {
@@ -1118,6 +1123,10 @@ ApplicationWindow {
         }
         if (name === "firstRun") {
             root.setupOpen = true
+            return
+        }
+        if (name === "presets") {
+            presetsDialog.openLibrary(-1)
             return
         }
         if (name === "fonts-css") {

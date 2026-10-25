@@ -46,7 +46,7 @@ Rectangle {
     property var sectOpen: ({
         "families": true, "ftypes": true, "themes": true, "contexts": true,
         "exts": true, "collections": true, "smart": true,
-        "libraries": true, "tags": true
+        "libraries": true, "tags": true, "presets": true
     })
     function toggleSection(key) {
         var next = Object.assign({}, sectOpen)
@@ -784,6 +784,42 @@ Rectangle {
                         smartDialog.stashQ = ""
                         smartDialog.stashAll = false
                         smartDialog.open()
+                    }
+                }
+            }
+
+            // ── preset libraries: curated REMOTE catalogues (fonts,
+            // icon sets, site templates) — rows carry a remote badge;
+            // clicking browses without downloading ──
+            SectionHeader {
+                label: qsTr("Presets")
+                sectionKey: "presets"
+                visible: presets !== null
+                         && presets.libraries.length > 0 }
+            Repeater {
+                model: presets !== null
+                       && rail.sectOpen.presets !== false
+                       ? presets.libraries : []
+                RailItem {
+                    id: presetRow
+                    required property var modelData
+                    label: presetRow.modelData.name
+                    count: String(presetRow.modelData.entries)
+                    accent: theme.tokens.accent
+                    sub: presetRow.modelData.downloaded > 0
+                         ? presetRow.modelData.downloaded + " downloaded"
+                         : "remote"
+                    active: false
+                    onPicked: presetsDialog.openLibrary(
+                                  presetRow.modelData.id)
+                    MouseArea {
+                        anchors.fill: parent
+                        acceptedButtons: Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: function (mouse) {
+                            rail.entityProperties(
+                                "preset", presetRow.modelData.id)
+                        }
                     }
                 }
             }

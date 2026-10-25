@@ -104,6 +104,32 @@ class Repo:
                            proc.returncode)
         return proc.stdout
 
+    @staticmethod
+    def clone(url: str, dest: str | Path, branch: str = "",
+              timeout: int = 900) -> "Repo":
+        """Clone a remote repository into dest (must not exist yet).
+
+        Preset-library downloads use this: single-branch clone of the
+        configured source URL (branch empty = remote HEAD). Long
+        timeout — font/icon repos can be tens of megabytes.
+        """
+        if not git_available():
+            raise GitError("git is not installed", 127)
+        dest = Path(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        args = ["git", "clone", "--single-branch"]
+        if (branch or "").strip():
+            args += ["--branch", branch.strip()]
+        args += [url, str(dest)]
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0",
+               "GIT_ASKPASS": "echo"}
+        proc = subprocess.run(args, capture_output=True, text=True,
+                              timeout=timeout, env=env)
+        if proc.returncode != 0:
+            raise GitError((proc.stderr or proc.stdout).strip()[:300],
+                           proc.returncode)
+        return Repo(dest)
+
     def exists(self) -> bool:
         return (self.path / ".git").exists()
 

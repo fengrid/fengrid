@@ -126,6 +126,38 @@ CREATE TABLE IF NOT EXISTS projects (
     guid        TEXT,
     slug        TEXT
 );
+CREATE TABLE IF NOT EXISTS preset_library (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    kind       TEXT NOT NULL DEFAULT '',
+    summary    TEXT NOT NULL DEFAULT '',
+    tags       TEXT NOT NULL DEFAULT '',
+    remote_url TEXT NOT NULL DEFAULT '',
+    branch     TEXT NOT NULL DEFAULT '',
+    remote     INTEGER NOT NULL DEFAULT 1,
+    position   INTEGER NOT NULL DEFAULT 0,
+    guid       TEXT,
+    slug       TEXT
+);
+CREATE TABLE IF NOT EXISTS preset_entry (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id   INTEGER NOT NULL
+                 REFERENCES preset_library(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    repo         TEXT NOT NULL DEFAULT '',
+    url          TEXT NOT NULL DEFAULT '',
+    branch       TEXT NOT NULL DEFAULT '',
+    description  TEXT NOT NULL DEFAULT '',
+    license      TEXT NOT NULL DEFAULT '',
+    homepage     TEXT NOT NULL DEFAULT '',
+    tags         TEXT NOT NULL DEFAULT '',
+    position     INTEGER NOT NULL DEFAULT 0,
+    downloaded   INTEGER NOT NULL DEFAULT 0,
+    local_path   TEXT NOT NULL DEFAULT '',
+    preview_path TEXT NOT NULL DEFAULT '',
+    guid         TEXT,
+    slug         TEXT
+);
 CREATE TABLE IF NOT EXISTS project_asset (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -299,6 +331,7 @@ def _migrate(con: sqlite3.Connection) -> None:
 # per-table indexes.
 _SLUG_TABLES = (
     "asset", "snippet", "palette", "collection", "library_view", "projects",
+    "preset_library", "preset_entry",
 )
 
 
@@ -358,6 +391,7 @@ _SLUG_TABLE_FOR = {
     "spatial": "asset", "timeseries": "asset", "markdown": "asset",
     "snippet": "snippet", "palette": "palette", "collection": "collection",
     "library": "library_view", "project": "projects",
+    "preset": "preset_library", "preset_entry": "preset_entry",
 }
 
 
@@ -378,7 +412,9 @@ def lookup_by_slug(con: sqlite3.Connection, slug: str) -> dict | None:
     for kind, table in (("snippet", "snippet"), ("palette", "palette"),
                         ("collection", "collection"),
                         ("library", "library_view"),
-                        ("project", "projects")):
+                        ("project", "projects"),
+                        ("preset", "preset_library"),
+                        ("preset_entry", "preset_entry")):
         row = con.execute(
             f"SELECT id, guid FROM {table} WHERE slug = ?", (slug,)
         ).fetchone()
@@ -403,7 +439,9 @@ def lookup_by_guid(con: sqlite3.Connection, guid: str) -> dict | None:
     for kind, table in (("snippet", "snippet"), ("palette", "palette"),
                         ("collection", "collection"),
                         ("library", "library_view"),
-                        ("project", "projects")):
+                        ("project", "projects"),
+                        ("preset", "preset_library"),
+                        ("preset_entry", "preset_entry")):
         row = con.execute(
             f"SELECT id, slug FROM {table} WHERE guid = ?", (guid,)
         ).fetchone()

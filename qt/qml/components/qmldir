@@ -15,3 +15,4 @@ StudioDocker 1.0 StudioDocker.qml
 StudioDocs 1.0 StudioDocs.qml
 ExportDialog 1.0 ExportDialog.qml
 FontsCssDialog 1.0 FontsCssDialog.qml
+PresetsDialog 1.0 PresetsDialog.qml

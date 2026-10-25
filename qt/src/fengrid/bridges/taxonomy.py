@@ -598,6 +598,31 @@ class Taxonomy(QObject):
             # Documentation / License / Sources tabs read the entity's
             # repo tree under <data-dir>/repos/<kind>-<slug>
             return self._entity_meta(kind, item_id)
+        if kind == "preset":
+            row = self._con.execute(
+                "SELECT name, kind, summary, tags, remote FROM"
+                " preset_library WHERE id = ?", (item_id,)).fetchone()
+            if row is None:
+                return {}
+            n = self._con.execute(
+                "SELECT COUNT(*) FROM preset_entry WHERE library_id = ?",
+                (item_id,)).fetchone()[0]
+            return {"name": row["name"], "pack_kind": row["kind"],
+                    "summary": row["summary"], "entries": n,
+                    "remote": bool(row["remote"])}
+        if kind == "preset_entry":
+            row = self._con.execute(
+                "SELECT * FROM preset_entry WHERE id = ?",
+                (item_id,)).fetchone()
+            if row is None:
+                return {}
+            return {"name": row["name"], "repo": row["repo"],
+                    "url": row["url"], "branch": row["branch"],
+                    "description": row["description"],
+                    "license": row["license"],
+                    "homepage": row["homepage"],
+                    "downloaded": bool(row["downloaded"]),
+                    "local_path": row["local_path"]}
         return {}
 
     # ----------------------------------------------------------- internals

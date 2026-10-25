@@ -312,6 +312,12 @@ def _item_exists(con: sqlite3.Connection, kind: str, item_id: int) -> bool:
     if kind == "library":
         return con.execute("SELECT 1 FROM library_view WHERE id = ?",
                            (item_id,)).fetchone() is not None
+    if kind == "preset":
+        return con.execute("SELECT 1 FROM preset_library WHERE id = ?",
+                           (item_id,)).fetchone() is not None
+    if kind == "preset_entry":
+        return con.execute("SELECT 1 FROM preset_entry WHERE id = ?",
+                           (item_id,)).fetchone() is not None
     return False
 
 
@@ -469,7 +475,8 @@ def links_for(con: sqlite3.Connection, kind: str, item_id: int,
 # ---------------------------------------------------------------- tags as
 # cross-type taxonomy — entities of one kind surfaced through the tags of
 # another (the Properties panel's "Related by tag" section)
-_RELATED_KINDS = ("icon", "font", "snippet", "palette", "project", "library")
+_RELATED_KINDS = ("icon", "font", "snippet", "palette", "project", "library",
+                  "preset", "preset_entry")
 
 _RELATED_NAME_SQL = {
     "icon": "SELECT name FROM asset WHERE id = ?",
@@ -478,6 +485,8 @@ _RELATED_NAME_SQL = {
     "palette": "SELECT name FROM palette WHERE id = ?",
     "project": "SELECT name FROM projects WHERE id = ?",
     "library": "SELECT name FROM library_view WHERE id = ?",
+    "preset": "SELECT name FROM preset_library WHERE id = ?",
+    "preset_entry": "SELECT name FROM preset_entry WHERE id = ?",
 }
 
 
