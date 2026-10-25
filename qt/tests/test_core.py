@@ -241,9 +241,11 @@ def test_font_columns_migrate_from_m1_schema(tmp_path):
     """An M1-era db (no font columns) must migrate on connect, not crash."""
     old = tmp_path / "old.db"
     con = db.connect(old)
-    # simulate the M1 schema: drop the family index first (SQLite refuses to
-    # drop a column an index depends on), then the columns _migrate added
+    # simulate the M1 schema: drop the indexes that depend on the columns
+    # first (SQLite refuses to drop a column an index depends on), then
+    # the columns _migrate added
     con.execute("DROP INDEX IF EXISTS idx_asset_family")
+    con.execute("DROP INDEX IF EXISTS idx_asset_kind_family")
     for col in ("family", "style", "weight", "italic"):
         con.execute(f"ALTER TABLE asset DROP COLUMN {col}")
     con.commit()

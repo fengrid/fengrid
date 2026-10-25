@@ -672,4 +672,38 @@ Item {
             exportToast.show(qsTr("Export failed: %1").arg(err))
         }
     }
+
+    // keyset pagination (library.loadMore): the bridge pages the grid at
+    // _MAX_FILTER_ROWS rows; scrolling to the end appends the next page
+    // while gridCapped reports more matching rows than the model holds
+    Connections {
+        target: grid
+        function onAtYEndChanged() {
+            if (library !== null && grid.atYEnd && !library.scanning
+                    && library.gridCapped)
+                library.loadMore()
+        }
+    }
+    Rectangle {
+        id: pagerChip
+        visible: library !== null && library.gridCapped
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 12
+        width: pagerRow.implicitWidth + 24
+        height: 26
+        radius: height / 2
+        color: theme.tokens.surface2
+        border.color: theme.tokens.border
+        z: 5
+        Text {
+            id: pagerRow
+            anchors.centerIn: parent
+            text: qsTr("showing %1 of %2 · scroll to load more")
+                  .arg(grid.count).arg(library.gridTotal)
+            font.family: theme.monoFont
+            font.pixelSize: 10
+            color: theme.tokens.textMuted
+        }
+    }
 }

@@ -40,6 +40,20 @@ _ROLE_KEYS = ("name", "path", "theme", "context", "ext", "sizePx",
               "width", "height", "mono", "bytes", "id", "starred")
 
 _MAX_FILTER_ROWS = 20000
+
+
+def _page_limit() -> int:
+    """Grid page size. FENGRID_GRID_PAGE overrides it (QA renders of the
+    pagination chip + pagination stress tests; production never sets it)."""
+    raw = os.environ.get("FENGRID_GRID_PAGE", "")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    return _MAX_FILTER_ROWS
+
+
 # cumulative keyset-pagination ceiling for the grid model — loadMore()
 # stops appending here (each row dict ≈ 1 KB in memory; 100k ≈ 100 MB)
 _MAX_MODEL_ROWS = 100_000
@@ -1153,7 +1167,7 @@ class Library(QObject):
         # files in two sources) made the LIMIT boundary unstable — a row
         # could land on two pages or on none
         query += " ORDER BY a.theme, a.name, a.id LIMIT ?"
-        params.append(_MAX_FILTER_ROWS)
+        params.append(_page_limit())
         return query, params
 
     def _grid_count(self) -> int:
@@ -1187,7 +1201,7 @@ class Library(QObject):
         self._model.set_rows(rows)
         self._index_by_id = {row["id"]: i for i, row in enumerate(rows)}
         self._grid_total = self._grid_count()
-        self._grid_capped = (len(rows) >= _MAX_FILTER_ROWS
+        self._grid_capped = (len(rows) >= _page_limit()
                              and self._grid_total > len(rows))
         self.gridTotalChanged.emit()
 
