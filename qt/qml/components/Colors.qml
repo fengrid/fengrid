@@ -721,7 +721,10 @@ Item {
                         }
                         background: Rectangle {
                             radius: 6
-                            color: st.hovered ? "#40000000" : "#25000000"
+                            // theme-token scrims (hardcoded overlays broke
+                            // light-theme parity)
+                            color: st.hovered ? theme.tokens.scrim
+                                              : theme.tokens.scrimSoft
                         }
                     }
                     SwTool {

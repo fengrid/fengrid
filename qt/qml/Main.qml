@@ -1154,7 +1154,7 @@ ApplicationWindow {
             return
         }
         if (name.indexOf("settings-") === 0) {
-            // settings-storage, settings-import, settings-export, …
+            // settings-storage, settings-import, settings-sc, …
             root.openSettings(name.slice("settings-".length))
             return
         }

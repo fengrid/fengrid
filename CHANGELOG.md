@@ -6,6 +6,50 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security (pre-release review, issues #3–#11)
+
+- **SEC-1 (high, #3)** — fiddle preview: expanded asset paths are
+  context-escaped so `</script`/`</style` cannot break out of the
+  script/style elements and inject markup.
+- **SEC-2 (high, #4)** — markdown URLs and display text are
+  HTML-escaped before `src`/`href` embedding; project preview escapes
+  substituted `fengrid-asset://` paths in attribute values.
+- **SEC-3 (high, #5)** — raster identification caps declared
+  dimensions at 256 Mpix *before* decoding; a small file with a huge
+  header can no longer force a ~30 GB allocation.
+- **SEC-4 (high, #6)** — SVG parsing is fail-secure: without
+  `defusedxml`, SVGs carrying DOCTYPE/entity declarations are not
+  parsed (billion-laughs hardening).
+- **SEC-5 (medium, #7)** — import/watch directory walks no longer
+  follow symlinks (`rglob` → `os.walk(followlinks=False)`).
+- **SEC-6 (medium, #8)** — ZIP imports enforce 512 MB per-member and
+  2 GB total uncompressed budgets, aborting disk-fill bombs.
+- **SEC-8 (medium, #10)** — the `fengrid-asset://` scheme re-verifies
+  at serve time that the real path (symlink-resolved) lies under an
+  enabled source root — crafted DB rows and post-scan symlink swaps
+  cannot serve arbitrary local files.
+- **SEC-9 (medium, #11)** — exports cap the working raster at
+  128 Mpix before conversion ('orig' exports downscale, not OOM).
+
+### Performance (issues #12–#14)
+
+- Font rescan: single shared directory walk for pre-count + scan
+  (was: two walks per launch); fontTools identification of
+  changed/new files parallelised across 4 workers (#12, partial).
+- Rescan straggler sweep fetches only the current root's `scan_state`
+  rows (index-assisted LIKE) instead of the whole table (#13).
+- Markdown preview regeneration debounced to 150 ms (#14).
+
+### Accessibility (issues #15–#18)
+
+- Rail rows and section headers are keyboard-reachable (Tab, Return/
+  Space to activate, arrows to walk; visible focus rings).
+- Icon-only controls expose accessible names/descriptions.
+- Collapse state, repo clean/dirty and uncommitted-changes state are
+  announced to assistive technology.
+- LIGHT theme `text_muted` and code `ink_faint` darkened to meet
+  WCAG AA contrast on their surfaces.
+
 ### Removed
 
 - **The 0.x web interface is retired** — Qt 6 is now the only Fengrid.

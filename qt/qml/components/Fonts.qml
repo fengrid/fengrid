@@ -402,7 +402,8 @@ Item {
                 text: fonts !== null && fonts.scanning
                       ? qsTr("Indexing your font folders…")
                       : (fonts !== null && fonts.totalFonts === 0
-                         ? qsTr("No fonts indexed yet")
+                         ? qsTr("No fonts indexed yet — run a scan to "
+                                + "populate the Types and Families lists")
                          : qsTr("No families match the filter"))
                 color: theme.tokens.text
                 font.family: theme.uiFont

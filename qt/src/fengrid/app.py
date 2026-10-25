@@ -19,6 +19,9 @@ DARK = {
     "border": "#2A333B",
     "text": "#E7EDF2",
     "text_muted": "#6E7B86",
+    # translucent scrims for hover overlays on color chips (see LIGHT)
+    "scrim": "#40000000",
+    "scrim_soft": "#25000000",
     "accent": "#39B8C4",   # teal — pane outlines, active states
     "lit_pane": "#F5C25C",  # amber — the lit asset, selection highlights
     "success": "#5BB98B",
@@ -31,7 +34,9 @@ DARK = {
     "accent_project": "#63C48B",
     # syntax-highlight tokens (code pane); values from the 0.x pane CSS
     "hl_ink": "#F5C25C",    # attributes / CSS props / numbers
-    "ink_faint": "#5F6C78", # comments
+    "ink_faint": "#7E8B96",   # comment/placeholder ink (code pane) —
+                              # 4.87:1 on the editor surface #161B21;
+                              # the old #5F6C78 was 3.16:1, too faint
 }
 
 # Light theme (secondary); surface2 derived from the brand palette sheet.
@@ -44,6 +49,11 @@ LIGHT = {
     # A11Y-4: 4.97:1 on surface2 (#EEF1F3) — the old #6B7A88 was 3.9:1,
     # below AA for small text
     "text_muted": "#5A6977",
+    # translucent scrims for hover overlays on color chips (theme tokens,
+    # replacing Colors.qml's hardcoded #40000000/#25000000 — lighter on
+    # the light theme so swatches stay readable)
+    "scrim": "#26000000",
+    "scrim_soft": "#13000000",
     "accent": "#0E7C86",
     "lit_pane": "#F5B841",
     "success": "#2E7D4F",
