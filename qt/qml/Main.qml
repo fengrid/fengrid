@@ -1020,7 +1020,7 @@ ApplicationWindow {
     // (project settings changes for Projects, palette edits for Colors;
     // editors keep their own TextEdit undo for caret-level edits)
     Shortcut {
-        sequence: StandardKey.Undo
+        sequences: [StandardKey.Undo]
         enabled: !root.settingsOpen && !root.paletteOpen
                  && ((root.pane === 4 && undoProjects !== null
                       && undoProjects.canUndo)
@@ -1030,7 +1030,7 @@ ApplicationWindow {
                                      : undoColors.undo()
     }
     Shortcut {
-        sequence: StandardKey.Redo
+        sequences: [StandardKey.Redo]
         enabled: !root.settingsOpen && !root.paletteOpen
                  && ((root.pane === 4 && undoProjects !== null
                       && undoProjects.canRedo)
