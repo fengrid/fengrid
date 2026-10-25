@@ -35,12 +35,17 @@ ApplicationWindow {
     property string entityKind: ""
     property int entityId: -1
     // blur the main UI behind open modal windows (Preset Libraries,
-    // entity inspector, Settings) — read by the blur-behind host
-    readonly property bool blurUi: presetsDialog !== null
-                                   && presetsDialog.visible
-                                   || (entityInspector !== null
-                                       && entityInspector.visible)
-                                   || root.settingsOpen
+    // entity inspector, Settings) — read by the blur-behind host.
+    // CRASH GUARD: the MultiEffect layer is shader-based; on the
+    // software scene graph (QT_QUICK_BACKEND=software, GLX-less
+    // displays) engaging it segfaults (user report) — never enable it
+    // there
+    readonly property bool blurUi: softwareRenderer === false
+                                   && ((presetsDialog !== null
+                                        && presetsDialog.visible)
+                                       || (entityInspector !== null
+                                           && entityInspector.visible)
+                                       || root.settingsOpen)
     function openEntityInspector(kind, id) {
         entityKind = String(kind)
         entityId = parseInt(id)
@@ -998,7 +1003,9 @@ ApplicationWindow {
     }
     // Ctrl+, — settings (toggle); blocked while setup is modal
     Shortcut {
-        sequence: "Ctrl+,"
+        // sequences list form: some platforms map the sequence to
+        // multiple key bindings and QML warns on the single form
+        sequences: ["Ctrl+,"]
         enabled: !root.setupOpen && !root.paletteOpen && !Shell.capturing
         onActivated: root.settingsOpen = !root.settingsOpen
     }

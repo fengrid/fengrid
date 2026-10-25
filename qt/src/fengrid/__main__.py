@@ -127,6 +127,10 @@ def main(argv=None) -> int:
         os.environ["QT_XCB_GL_INTEGRATION"] = "none"
         print("warning: no usable hardware GL on this display —"
               " using the software renderer", file=sys.stderr)
+    # Exposed to QML: shader-based scene-graph effects (MultiEffect blur
+    # layer) must NEVER engage on the software backend — segfaults were
+    # observed there (user report, ElementaryOS/GLX-less display).
+    software_renderer = os.environ.get("QT_QUICK_BACKEND") == "software"
 
     # scheme registration must precede QGuiApplication (flags are read at
     # Chromium start), and initialize_webengine() must also run before the
@@ -330,6 +334,9 @@ def main(argv=None) -> int:
     # (popups are not reachable from the QObject tree, so the registry is
     # QML-side — see Main.openQaModal)
     ctx.setContextProperty("qaOpenModal", args.dialog)
+    # false on hardware-GL displays; true after the software fallback —
+    # QML gates its shader effects on this (crash guard)
+    ctx.setContextProperty("softwareRenderer", software_renderer)
 
     # QA affordance: --qa-select <name> pre-selects an item so the
     # Properties panel has a target in screenshots
