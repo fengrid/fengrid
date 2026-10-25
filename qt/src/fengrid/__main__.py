@@ -12,6 +12,7 @@ import argparse
 import gc
 import os
 import sys
+import time
 
 from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QGuiApplication, QIcon
@@ -74,17 +75,8 @@ def main(argv=None) -> int:
     from fengrid import qtlog
     qtlog.install()
 
-    # freeze diagnostics: `kill -USR1 <pid>` dumps every thread's stack
-    # to stderr (and faulthandler prints native crash traces on abort).
-    # A frozen UI with no stack is undebuggable from a user report alone.
-    import faulthandler
-    import signal
-    faulthandler.enable()
-    try:
-        faulthandler.register(signal.SIGUSR1, all_threads=True,
-                              chain=False)
-    except (AttributeError, ValueError, OSError):
-        pass                     # not available on this platform
+    # freeze/crash diagnostics are wired later, after data_dir is known —
+    # see the faulthandler setup below (crash.log persistence, #22)
 
     parser = argparse.ArgumentParser(prog="fengrid")
     parser.add_argument("--screenshot", metavar="PATH",
@@ -160,6 +152,36 @@ def main(argv=None) -> int:
 
     data_dir = _user_data_dir()
     default_db = os.path.join(data_dir, "library.db")
+
+    # #22: crash/freeze diagnostics persist to <data_dir>/crash.log —
+    # stderr dies with the terminal, and a SIGSEGV previously left
+    # nothing behind. `kill -USR1 <pid>` appends a full thread dump to
+    # the same file. Runs after data_dir resolution (honours --db by
+    # logging next to the actual database).
+    import faulthandler
+    import signal
+    crash_dir = (os.path.dirname(os.path.abspath(args.db))
+                 if args.db else data_dir)
+    try:
+        _crash_log = open(                      # noqa: SIM115 - process-lifetime
+            os.path.join(crash_dir, "crash.log"), "a", encoding="utf-8")
+        _crash_log.write(
+            f"\n===== launch {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            f" — fengrid {__version__} =====\n")
+        _crash_log.flush()
+        faulthandler.enable(file=_crash_log)
+        try:
+            faulthandler.register(signal.SIGUSR1, file=_crash_log,
+                                  all_threads=True, chain=False)
+        except (AttributeError, ValueError, OSError):
+            pass                 # not available on this platform
+    except OSError:
+        faulthandler.enable()    # no writable data dir — stderr as before
+        try:
+            faulthandler.register(signal.SIGUSR1, all_threads=True,
+                                  chain=False)
+        except (AttributeError, ValueError, OSError):
+            pass
 
     # App registry: known/starred/active databases + GLOBAL user prefs
     # (theme, icon size, …) — bound BEFORE any bridge reads settings so
@@ -325,6 +347,10 @@ def main(argv=None) -> int:
     ctx.setContextProperty(
         "qaInspectorScroll",
         int(os.environ.get("FENGRID_QA_INSPECTOR_SCROLL", "0") or 0))
+    # false on hardware-GL displays; true after the software fallback —
+    # QML gates its shader effects on this (crash guard). Must precede
+    # engine.load: Main.qml reads it in a root binding.
+    ctx.setContextProperty("softwareRenderer", software_renderer)
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
     if not engine.rootObjects():
         print("error: failed to load the QML shell", file=sys.stderr)
@@ -334,9 +360,6 @@ def main(argv=None) -> int:
     # (popups are not reachable from the QObject tree, so the registry is
     # QML-side — see Main.openQaModal)
     ctx.setContextProperty("qaOpenModal", args.dialog)
-    # false on hardware-GL displays; true after the software fallback —
-    # QML gates its shader effects on this (crash guard)
-    ctx.setContextProperty("softwareRenderer", software_renderer)
 
     # QA affordance: --qa-select <name> pre-selects an item so the
     # Properties panel has a target in screenshots
