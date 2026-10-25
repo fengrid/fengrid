@@ -12,7 +12,10 @@ Design notes:
 from __future__ import annotations
 
 import os
+import queue
+import sqlite3
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -98,6 +101,108 @@ class AssetModel(QAbstractListModel):
 
     def rows(self) -> list[dict]:
         return self._rows
+
+
+def _lists_snapshot(db_path: str) -> dict:
+    """PERF-6 (#28): the five rail aggregates, computed on a worker-owned
+    connection (WAL reader — never touches the main thread's handle).
+    Pure data; no Qt objects cross the thread boundary."""
+    # READ-ONLY open: never run schema/migrations from a worker thread —
+    # core_db.connect()'s executescript/migrate raced the main thread's
+    # own setup and aborted the process under concurrent test startup.
+    # A bare rw-open fallback covers the read-only WAL edge case
+    # ("disk I/O error" when the -shm can't be initialised read-only).
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True,
+                              timeout=30)
+        con.execute("SELECT 1")               # force the open to validate
+    except sqlite3.OperationalError:
+        con = sqlite3.connect(str(db_path), timeout=30)
+    con.row_factory = sqlite3.Row
+    try:
+        return _lists_queries(con)
+    finally:
+        con.close()
+
+
+def _lists_queries(con: sqlite3.Connection) -> dict:
+    # icon-scoped: font rows live in the same asset table and would
+    # otherwise pollute the icon rail with "truetype"/"opentype" themes
+    # and ttf/otf type entries (user report 2026-10-20)
+    themes = [{"name": r[0], "n": r[1]} for r in con.execute(
+        "SELECT theme, COUNT(*) FROM asset"
+        " WHERE kind = 'icon' AND theme IS NOT NULL"
+        " GROUP BY theme ORDER BY theme")]
+    contexts = [{"name": r[0], "n": r[1]} for r in con.execute(
+        "SELECT context, COUNT(*) FROM asset"
+        " WHERE kind = 'icon' AND context IS NOT NULL"
+        " GROUP BY context ORDER BY context")]
+    exts = [{"name": r[0], "n": r[1]} for r in con.execute(
+        "SELECT ext, COUNT(*) FROM asset"
+        " WHERE kind = 'icon' AND ext IS NOT NULL"
+        " GROUP BY ext ORDER BY ext")]
+    tags = []
+    kind_counts: dict[str, dict] = {}
+    for r in con.execute(
+            "SELECT t.name, it.item_kind, COUNT(*) AS n"
+            " FROM tag t JOIN item_tag it ON it.tag_id = t.id"
+            " GROUP BY t.id, it.item_kind ORDER BY t.name"):
+        kind_counts.setdefault(r["name"], {})[r["item_kind"]] = r["n"]
+    # name order preserved from the GROUP BY; n stays the ICON count
+    # (the icon rail's long-standing display), counts adds per-kind
+    for name in kind_counts:
+        tags.append({"name": name, "n": kind_counts[name].get("icon", 0),
+                     "counts": kind_counts[name]})
+    # collections v2: tree order + per-kind counts from collection_ref
+    counts: dict[int, dict] = {}
+    for r in con.execute(
+            "SELECT collection_id, item_kind, COUNT(*) AS n"
+            " FROM collection_ref GROUP BY collection_id, item_kind"):
+        counts.setdefault(r["collection_id"], {})[r["item_kind"]] = r["n"]
+    colls = []
+    for r in con.execute(
+            "SELECT id, name, parent_id, tags FROM collection"
+            " ORDER BY name COLLATE NOCASE"):
+        c = {"id": r["id"], "name": r["name"],
+             "parentId": r["parent_id"] or 0, "tags": r["tags"] or ""}
+        c["counts"] = counts.get(r["id"], {})
+        c["n"] = sum(c["counts"].values())
+        colls.append(c)
+    colls.sort(key=lambda c: (c["parentId"], c["name"].lower()))
+    return {"themes": themes, "contexts": contexts, "exts": exts,
+            "tags": tags, "collections": colls}
+
+
+class _ListsWorker(QObject):
+    """Owns the `done` signal for the PERF-6 lists worker.
+
+    The pumping side is a DAEMON `threading.Thread` (not a QThread):
+    a QThread that outlives its owner aborts the process at teardown
+    ("QThread: Destroyed while thread is still running" — qFatal), and
+    nothing forces every Library user (tests included) to call
+    _on_about_to_quit. A daemon thread dies with the process instead,
+    and emitting a QObject Signal from a foreign thread is queued to
+    the main thread as usual.
+    """
+    done = Signal(dict)
+
+    def __init__(self, db_path: str, parent=None):
+        super().__init__(parent)
+        self._db_path = db_path
+        self._queue: queue.Queue[str] = queue.Queue()
+        self._thread: threading.Thread | None = None
+
+    def pump(self) -> None:
+        while True:
+            db_path = self._queue.get()
+            if db_path is None:                   # explicit shutdown
+                break
+            try:
+                self.done.emit(_lists_snapshot(db_path))
+            except Exception:                     # noqa: BLE001
+                # an unreadable db must not hang the rail — empty lists
+                self.done.emit({"themes": [], "contexts": [], "exts": [],
+                                "tags": [], "collections": []})
 
 
 class _ScanWorker(QObject):
@@ -219,11 +324,15 @@ class Library(QObject):
         # whole batch costs one refresh)
         self._lists_dirty = False
         self._lists_timer: QTimer | None = None
+        # PERF-6 (#28): persistent background lists worker (daemon thread)
+        self._lists_thread: threading.Thread | None = None
+        self._lists_worker = None
+        self._lists_running = False
         # grid pagination state (idx_asset_grid keyset pages; see loadMore)
         self._grid_total = 0
         self._grid_capped = False
         self._apply_filters()
-        self._refresh_lists()
+        self._refresh_lists(background=True)   # PERF-6: aggregates off-main
         QCoreApplication.instance().aboutToQuit.connect(self._on_about_to_quit)
 
     def _mark_lists_dirty(self) -> None:
@@ -244,13 +353,15 @@ class Library(QObject):
         if not self._lists_dirty:
             return
         self._lists_dirty = False
-        self._refresh_lists()
+        self._refresh_lists(background=True)   # PERF-6: aggregates off-main
 
     def _on_about_to_quit(self) -> None:
         # the scan worker runs on its own connection; give the thread a chance
         # to stop before its object is torn down, otherwise Qt logs
         # "QThread: Destroyed while thread is still running" on exit
         self._rescan_pending = False  # a queued drain must not restart a scan
+        if self._lists_worker is not None:      # stop the daemon pump
+            self._lists_worker._queue.put(None)
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait(10000)
@@ -990,54 +1101,52 @@ class Library(QObject):
             self._rescan_pending = False
             QTimer.singleShot(0, self.rescan)
 
-    def _refresh_lists(self) -> None:
-        con = self._con
-        # icon-scoped: font rows live in the same asset table and would
-        # otherwise pollute the icon rail with "truetype"/"opentype" themes
-        # and ttf/otf type entries (user report 2026-10-20)
-        themes = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT theme, COUNT(*) FROM asset"
-            " WHERE kind = 'icon' AND theme IS NOT NULL"
-            " GROUP BY theme ORDER BY theme")]
-        contexts = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT context, COUNT(*) FROM asset"
-            " WHERE kind = 'icon' AND context IS NOT NULL"
-            " GROUP BY context ORDER BY context")]
-        exts = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT ext, COUNT(*) FROM asset"
-            " WHERE kind = 'icon' AND ext IS NOT NULL"
-            " GROUP BY ext ORDER BY ext")]
-        tags = []
-        kind_counts: dict[str, dict] = {}
-        for r in con.execute(
-                "SELECT t.name, it.item_kind, COUNT(*) AS n"
-                " FROM tag t JOIN item_tag it ON it.tag_id = t.id"
-                " GROUP BY t.id, it.item_kind ORDER BY t.name"):
-            kind_counts.setdefault(r["name"], {})[r["item_kind"]] = r["n"]
-        # name order preserved from the GROUP BY; n stays the ICON count
-        # (the icon rail's long-standing display), counts adds per-kind
-        for name in kind_counts:
-            tags.append({"name": name, "n": kind_counts[name].get("icon", 0),
-                         "counts": kind_counts[name]})
-        # collections v2: tree order + per-kind counts from collection_ref
-        counts: dict[int, dict] = {}
-        for r in con.execute(
-                "SELECT collection_id, item_kind, COUNT(*) AS n"
-                " FROM collection_ref GROUP BY collection_id, item_kind"):
-            counts.setdefault(r["collection_id"], {})[r["item_kind"]] = r["n"]
-        colls = []
-        for r in con.execute(
-                "SELECT id, name, parent_id, tags FROM collection"
-                " ORDER BY name COLLATE NOCASE"):
-            c = {"id": r["id"], "name": r["name"],
-                 "parentId": r["parent_id"] or 0, "tags": r["tags"] or ""}
-            c["counts"] = counts.get(r["id"], {})
-            c["n"] = sum(c["counts"].values())
-            colls.append(c)
-        colls.sort(key=lambda c: (c["parentId"], c["name"].lower()))
-        self._lists = {"themes": themes, "contexts": contexts, "exts": exts,
-                       "tags": tags, "collections": colls}
+    def _refresh_lists(self, background: bool = False) -> None:
+        """Rebuild the five rail aggregates.
+
+        PERF-6 (#28): at six-figure asset counts the GROUP BYs cost
+        seconds — on the main thread they stall first paint and every
+        debounced flush. With ``background`` the aggregates run on a
+        PERSISTENT worker thread (one per Library, own read-only WAL
+        connection) and the result is swapped in on the main thread
+        when it lands; the UI paints with (possibly stale) lists and
+        fills in when ready. Synchronous mode (default) is kept for
+        tests and forced refreshes.
+        """
+        if not background:
+            # sync path keeps the pre-PERF-6 behaviour exactly: read via
+            # the caller's own connection (tests pass odd db_paths — a
+            # data dir, a not-yet-created file — and must keep working)
+            self._lists = _lists_queries(self._con)
+            self.listsChanged.emit()
+            return
+        if self._lists_running:
+            self._lists_dirty = True      # trailing refresh after it lands
+            return
+        self._ensure_lists_thread()
+        self._lists_running = True
+        self._lists_worker._queue.put(self._db_path)
+
+    def _ensure_lists_thread(self) -> None:
+        if self._lists_thread is not None:
+            return
+        worker = _ListsWorker(self._db_path)
+        worker.done.connect(self._on_lists_ready)      # queued → main thread
+        thread = threading.Thread(target=worker.pump,
+                                  name="fengrid-lists", daemon=True)
+        thread.start()
+        self._lists_thread = thread
+        self._lists_worker = worker
+
+    def _on_lists_ready(self, snapshot: dict) -> None:
+        self._lists_running = False
+        self._lists = snapshot
         self.listsChanged.emit()
+        # a mutation may have landed while the worker ran — one trailing
+        # refresh coalesces all of them
+        if self._lists_dirty:
+            self._lists_dirty = False
+            self._refresh_lists(background=True)
 
     @staticmethod
     def _row_to_dict(r) -> dict:

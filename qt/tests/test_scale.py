@@ -289,13 +289,30 @@ def test_lists_refresh_coalesces_mutations(tmp_path):
         try:
             hits = []
             lib.listsChanged.connect(lambda: hits.append(1))
+            # PERF-6: the constructor's own fill is a background worker —
+            # let it land, then measure the COALESCING from here
+            for _ in range(50):
+                if not (lib._lists_thread is not None
+                        and lib._lists_thread.is_alive()):
+                    break
+                QTest.qWait(20)
+            QTest.qWait(50)                 # queued done→slot delivery
+            base = len(hits)
             for _ in range(5):
                 lib._mark_lists_dirty()
             assert lib._lists_dirty is True
-            assert hits == []               # nothing ran inline
+            assert len(hits) == base        # nothing ran inline
             QTest.qWait(300)                # > the 150 ms debounce
+            # background flush: wait for the (possibly trailing) worker
+            for _ in range(50):
+                if lib._lists_dirty is False and not (
+                        lib._lists_thread is not None
+                        and lib._lists_thread.is_alive()):
+                    break
+                QTest.qWait(20)
+            QTest.qWait(50)                 # queued done→slot delivery
             assert lib._lists_dirty is False
-            assert len(hits) == 1           # ONE flush for FIVE marks
+            assert len(hits) - base == 1    # ONE flush for FIVE marks
         finally:
             lib._on_about_to_quit()
     finally:
