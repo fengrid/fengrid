@@ -355,10 +355,15 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
             vanished = [(r["id"], r["kind"], r["path"]) for r in rows
                         if r["path"] not in seen]
             counts["pruned"] += purge_assets(con, vanished)
-            st_rows = con.execute("SELECT path FROM scan_state").fetchall()
+            # PERF-2: fetch only THIS root's scan_state rows (LIKE is
+            # index-assisted) instead of the whole table per source;
+            # the straggler filter (not in `seen`) stays in Python so
+            # freshly-scanned fingerprints are preserved.
             root_prefix = str(Path(root).resolve()) + os.sep
-            stragglers = [p for (p,) in st_rows
-                          if p.startswith(root_prefix) and p not in seen]
+            st_rows = con.execute(
+                "SELECT path FROM scan_state WHERE path LIKE ? ESCAPE '\\'",
+                (_like_escape(root_prefix) + "%",)).fetchall()
+            stragglers = [p for (p,) in st_rows if p not in seen]
             con.executemany("DELETE FROM scan_state WHERE path = ?",
                             [(p,) for p in stragglers])
             con.commit()
@@ -371,13 +376,20 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
 
 
 def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
-               progress=None, should_stop=None) -> dict:
+               progress=None, should_stop=None,
+               files_by_root: dict[str, list[str]] | None = None) -> dict:
     """Incrementally index font sources (kind='font' rows).
 
     Same fingerprint/incremental scheme as scan(); one row per FILE with the
     first face's metadata (core/fonts.identify_font documents the .ttc
     scope note). should_stop() is checked per file so an app quit ends the
     scan cleanly instead of leaving a QThread running (qa-gate tripwire).
+
+    PERF-1: `files_by_root` lets the caller share ONE directory walk with
+    the pre-count (the old code walked every root twice per launch), and
+    fontTools identification of changed/new files runs in a small thread
+    pool (identification is pure CPU; the DB writes stay serialized on
+    the scanning thread).
     """
     counts = {"total": 0, "new": 0, "changed": 0, "unchanged": 0,
               "pruned": 0, "errors": 0}
@@ -390,37 +402,63 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
         processed = 0
         for source_id, root in live:
             seen: set[str] = set()
-            for path in fonts_mod.iter_font_files(root):
+            file_list = ((files_by_root or {}).get(root)
+                         if files_by_root is not None else None)
+            paths = file_list if file_list is not None else \
+                fonts_mod.iter_font_files(root)
+            # pass 1 — fingerprint check; collect files that need
+            # fontTools identification
+            pending: list[tuple[str, str | None, str]] = []  # path, fp, prev
+            for path in paths:
                 if should_stop is not None and should_stop():
                     raise ScanAborted
                 seen.add(path)
                 counts["total"] += 1
                 fp = fingerprint(path)
-                prev = con.execute(
+                prev_row = con.execute(
                     "SELECT fingerprint FROM scan_state WHERE path = ?",
                     (path,),
                 ).fetchone()
-                if prev is not None and prev[0] == fp:
+                prev = prev_row[0] if prev_row is not None else None
+                if prev is not None and prev == fp:
                     con.execute(
                         "UPDATE scan_state SET last_seen = ? WHERE path = ?",
                         (now, path),
                     )
                     counts["unchanged"] += 1
                 else:
-                    meta = fonts_mod.identify_font(path)
-                    rel = os.path.relpath(path, root)
-                    parts = rel.split(os.sep)
-                    theme = (parts[0] if len(parts) > 1
-                             else os.path.basename(root))
-                    name = os.path.splitext(os.path.basename(path))[0]
-                    ext = os.path.splitext(path)[1].lower().lstrip(".")
-                    try:
-                        _upsert_font(con, source_id, path, name, theme, ext,
-                                     meta, now, fp)
-                    except sqlite3.IntegrityError:
-                        counts["total"] -= 1  # source removed mid-scan
-                        continue
-                    counts["changed" if prev is not None else "new"] += 1
+                    pending.append((path, fp, prev))
+            # pass 2 — identify in parallel (I/O + CPU bound fontTools
+            # parsing), then write serialized
+            metas: dict[str, dict | None] = {}
+            if len(pending) > 8:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    for path, meta in zip(
+                            [p for p, _f, _pr in pending],
+                            pool.map(fonts_mod.identify_font,
+                                     [p for p, _f, _pr in pending])):
+                        metas[path] = meta
+            else:
+                for path, _fp, _prev in pending:
+                    metas[path] = fonts_mod.identify_font(path)
+            for path, fp, prev in pending:
+                if should_stop is not None and should_stop():
+                    raise ScanAborted
+                meta = metas[path]
+                rel = os.path.relpath(path, root)
+                parts = rel.split(os.sep)
+                theme = (parts[0] if len(parts) > 1
+                         else os.path.basename(root))
+                name = os.path.splitext(os.path.basename(path))[0]
+                ext = os.path.splitext(path)[1].lower().lstrip(".")
+                try:
+                    _upsert_font(con, source_id, path, name, theme, ext,
+                                 meta, now, fp)
+                except sqlite3.IntegrityError:
+                    counts["total"] -= 1  # source removed mid-scan
+                    continue
+                counts["changed" if prev is not None else "new"] += 1
                 processed += 1
                 if progress:
                     progress(counts["total"], path)

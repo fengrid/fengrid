@@ -76,19 +76,24 @@ class _FontScanWorker(QObject):
                 roots = core_fonts.platform_font_dirs()
                 sources = indexer.ensure_sources(con, roots,
                                                  kinds=("fontroot",))
-                # pre-count for the launch splash's determinate bar
+                # pre-count for the launch splash's determinate bar —
+                # the walk result is SHARED with scan_fonts (PERF-1:
+                # the old code walked every root twice per launch)
                 rows = con.execute(
                     "SELECT path FROM source WHERE enabled = 1"
                     " AND kind = 'fontroot'").fetchall()
+                walk: dict[str, list] = {}
                 total = 0
                 for r in rows:
-                    for _f in core_fonts.iter_font_files(r["path"]):
-                        total += 1
+                    files = list(core_fonts.iter_font_files(r["path"]))
+                    walk[r["path"]] = files
+                    total += len(files)
                 self.total.emit(total)
                 report = indexer.scan_fonts(
                     con, sources,
                     progress=self._progress,
-                    should_stop=lambda: self.cancelled)
+                    should_stop=lambda: self.cancelled,
+                    files_by_root=walk)
             finally:
                 con.close()
             self.done.emit(report)
