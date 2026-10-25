@@ -17,6 +17,8 @@ ColumnLayout {
     // re-emitted from the inner TextInput so callers can commit on
     // focus loss / Enter without reaching into the private `input` id
     signal editingFinished()
+    // per-keystroke (live filtering in dialogs, #33)
+    signal textEdited(string text)
 
     function forceActiveFocus() { input.forceActiveFocus() }
 
@@ -51,6 +53,7 @@ ColumnLayout {
             color: theme.tokens.text
             clip: true
             selectByMouse: true
+            onTextEdited: root.textEdited(text)
             onEditingFinished: root.editingFinished()
         }
     }

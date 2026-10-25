@@ -43,11 +43,24 @@ Dialog {
 
     property var fams: []                // all family names
     property var chosen: []              // checked families
+    property string famFilter: ""        // #33: search box over 300+ families
     property var flavors: ["woff2", "woff"]
     property bool includeOriginal: false
     property bool userEdited: false      // stop regenerating once edited
     property string dest: ""
     property string previewError: ""
+    // families matching the filter — a full 300+-chip cloud made the
+    // dialog unreadable (#33); a filter keeps it compact
+    readonly property var famsFiltered: {
+        var f = famFilter.trim().toLowerCase()
+        if (f === "")
+            return fams
+        var out = []
+        for (var i = 0; i < fams.length; i++)
+            if (fams[i].toLowerCase().indexOf(f) >= 0)
+                out.push(fams[i])
+        return out
+    }
     readonly property bool canSave: chosen.length > 0
                                     && destField.text.trim() !== ""
 
@@ -67,6 +80,7 @@ Dialog {
     // dialog always appears, and any error shows inside it)
     function openWith(selectedFamily) {
         userEdited = false
+        famFilter = ""
         // QVariantList from Python is NOT an Array in QML (typeof
         // "object", Array.isArray false) — copy it element-wise
         try {
@@ -84,6 +98,11 @@ Dialog {
         dest = library !== null && library.lastExportDir !== ""
                ? library.lastExportDir : ""
         open()
+        // #33: scroll the picker so the pre-selected family is visible
+        // first — the dialog opens focused on the current selection
+        famList.positionViewAtIndex(
+            Math.max(0, fams.indexOf(chosen.length ? chosen[0] : "")),
+            ListView.Contain)
         regenerate()
     }
     function regenerate() {
@@ -146,19 +165,47 @@ Dialog {
                        "converts the files to the selected formats.")
         }
 
-        // family selection
-        Flow {
+        // family selection (#33): a search field over the library plus a
+        // bounded list — the old unbounded chip cloud rendered every
+        // family in the library (300+) and filled the whole screen
+        FormInput {
             Layout.fillWidth: true
-            spacing: 5
-            Repeater {
-                model: cssRoot.fams
+            label: qsTr("filter families")
+            onTextEdited: function (t) {
+                cssRoot.famFilter = t
+                // keep the view honest while typing
+                cssRoot.famList.positionViewAtBeginning()
+            }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 150
+            radius: 8
+            color: theme.tokens.bg
+            border.color: theme.tokens.border
+            ListView {
+                id: famList
+                anchors.fill: parent
+                clip: true
+                model: cssRoot.famsFiltered
+                spacing: 4
+                ScrollBar.vertical: ScrollBar { }
                 delegate: Chip {
                     required property var modelData
                     required property int index
+                    width: ListView.view.width - 12
+                    x: 6
                     chipText: modelData
                     active: cssRoot.chosen.indexOf(modelData) >= 0
                     activeColor: theme.tokens.accentFont
                     onClicked: cssRoot.toggleFamily(modelData)
+                }
+                Text {
+                    anchors.centerIn: parent
+                    visible: cssRoot.famsFiltered.length === 0
+                    text: qsTr("no families match")
+                    font.family: theme.uiFont; font.pixelSize: 11
+                    color: theme.tokens.textMuted
                 }
             }
         }
