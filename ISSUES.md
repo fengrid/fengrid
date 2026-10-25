@@ -147,6 +147,47 @@ the GitHub Issues section below). Do not fix here — track in issues.
   wrap resources in an ASGI adapter rather than rewriting the data
   plane. No action for v1.0; documented.
 
+### PERF-6 · Startup runs grid page query + five rail aggregates on the
+  main thread (GitHub #28)
+- `Library.__init__` calls `_apply_filters()` and `_refresh_lists()`
+  inline; the 150 ms debounce coalesces mutations but not startup.
+  Multi-second first paint at 1M assets.
+- Fix: background lists worker with a worker-owned connection;
+  completion receivers must be bound methods (gotcha 34).
+
+### PERF-7 · fuzzy/regex candidate cap narrows coverage past 100k
+  (GitHub #29)
+- `_candidates` caps at MAX_CANDIDATES with `ORDER BY id` (deterministic
+  slice, documented in core/search.py); newer assets invisible to
+  fuzzy/regex above the cap. Backlog: FTS-token candidate union.
+
+### PERF-8 · content search covers kind='icon' rows only (GitHub #30)
+- doc/markdown/data kinds tracked by core/kinds.py are never
+  content-searched. Upgrade path: FTS5 over extracted text populated by
+  the indexer's metadata pass.
+
+### PERF-9 · Fonts-pane aggregates are full scans without kind scoping
+  (GitHub #31)
+- `bridges/fonts.py`: totalFonts COUNT, ext GROUP BY (no kind filter),
+  DISTINCT family (no kind filter) — main-thread full scans at six
+  figures. Fix: kind-prefix every query (idx_asset_kind_* exist).
+
+### Resolved in the scale batch (2026-10-25, commits bf812d7/a285181/c9bd9a7)
+- Scale indexes (idx_asset_grid kind+theme+name+id keyset, kind-prefixed
+  rail aggregates, idx_item_tag_tagid) + PRAGMA synchronous=NORMAL.
+- Grid keyset pagination + "showing X of N" chip (FENGRID_GRID_PAGE QA
+  override); debounced rail refresh (one flush per mutation batch).
+- FTS update trigger WHEN-gated (fingerprint rescans no longer churn
+  the FTS index).
+- Search: deterministic candidate slice + quick_ratio prefilter;
+  content-mode ext filter moved into SQL.
+- Icon-scan identification parallelized (bounded lookahead; see #12).
+- Watch heartbeat interval scales with tree size
+  (core_watch.scaled_interval — 1M-file trees no longer re-walked every
+  5 s).
+- Auto-backup skipped when the library/registry files are unchanged
+  since the last backup (sidecar state, core_backup.auto_backup_needed).
+
 ## Accessibility / UI quality
 
 ### A11Y-1 · SideRail is mouse-only — no keyboard navigation
