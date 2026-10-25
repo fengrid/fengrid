@@ -880,11 +880,9 @@ Item {
             height: 28
             enabled: colors !== null && colors.paletteId > 0
                      && library !== null && library.collections.length > 0
-            onHoveredChanged: if (hovered) palCollSub.popup(
-                                  palCollItem, palCollItem.width, 0)
-            onClicked: palCollSub.popup(palCollItem, palCollItem.width, 0)
             Menu {
                 id: palCollSub
+                    cascade: true
                 width: 220
                 padding: 4
                 background: Rectangle {

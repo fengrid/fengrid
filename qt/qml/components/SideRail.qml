@@ -65,6 +65,7 @@ Rectangle {
         property string label
         property string sub: ""           // secondary line (collection tags)
         property string count: ""
+        property string badge: ""         // type pill: smart / preset / remote
         property bool active: false
         property color accent: theme.tokens.accent   // per-category accent
         property bool indent: false       // sub-collection nesting
@@ -120,12 +121,33 @@ Rectangle {
             anchors.left: parent.left
             anchors.leftMargin: 14
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - countText.implicitWidth - 46
+            width: parent.width - countText.implicitWidth
+                   - badgeText.implicitWidth - 52
             text: itemRoot.label
             font.family: theme.uiFont
             font.pixelSize: 12
             color: itemRoot.active ? theme.tokens.text : theme.tokens.textMuted
             elide: Text.ElideRight
+        }
+        // type pill — smart / preset / remote indicator (combined lists)
+        Rectangle {
+            anchors.right: countText.left
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            visible: itemRoot.badge !== ""
+            width: badgeText.implicitWidth + 10
+            height: 14
+            radius: 7
+            color: theme.tokens.surface2
+            border.color: theme.tokens.border
+            Text {
+                id: badgeText
+                anchors.centerIn: parent
+                text: itemRoot.badge
+                font.family: theme.monoFont
+                font.pixelSize: 8
+                color: theme.tokens.textMuted
+            }
         }
         Text {
             id: countText
@@ -531,60 +553,122 @@ Rectangle {
                 }
             }
             Repeater {
-                model: library !== null && rail.sectOpen.collections !== false
-                       ? library.collections : []
+                model: {
+                    if (!rail.showCollections
+                            || rail.sectOpen.collections === false)
+                        return []
+                    var out = []
+                    // user collections first …
+                    var colls = library !== null
+                                ? library.collections : []
+                    for (var i = 0; i < colls.length; i++) {
+                        var c = colls[i]
+                        var show = rail.pane === 0 || c.n === 0
+                                   || (c.counts
+                                       && c.counts[rail.paneKind] > 0)
+                        var starred = rail.pane !== 0
+                                      && c.name === "Starred Assets"
+                        if (show && !starred)
+                            out.push({t: "collection", row: c})
+                    }
+                    // … then Smart Collections for this pane's kind
+                    var smarts = taxonomy !== null
+                                 ? taxonomy.smartCollections : []
+                    for (var j = 0; j < smarts.length; j++)
+                        if (smarts[j].item_kind === rail.paneKind)
+                            out.push({t: "smart", row: smarts[j]})
+                    return out
+                }
                 RailItem {
                     id: collRow
                     required property var modelData
+                    // combined list: user collections + Smart Collections
+                    // (badge "smart"); user rows keep the tree/counts rules
+                    readonly property bool isSmart:
+                        modelData.t === "smart"
+                    readonly property var row: modelData.row
                     // context-specific: a collection is listed when it holds
                     // refs of the current pane's kind — or when it's empty,
                     // so newly created collections stay reachable everywhere
                     visible: rail.showCollections
-                             && (rail.pane === 0 || collRow.modelData.n === 0
-                                 || (collRow.modelData.counts
-                                     && collRow.modelData.counts[rail.paneKind] > 0))
+                             && (collRow.isSmart
+                                 || rail.pane === 0 || collRow.row.n === 0
+                                 || (collRow.row.counts
+                                     && collRow.row.counts[rail.paneKind] > 0))
                              // the dedicated Starred row covers the seeded
                              // starred collection on the palette/snippet panes
-                             && !(rail.pane !== 0
-                                  && collRow.modelData.name
+                             && !(rail.pane !== 0 && !collRow.isSmart
+                                  && collRow.row.name
                                      === "Starred Assets")
-                    label: collRow.modelData.name
-                    sub: collRow.modelData.tags
-                    count: rail.pane === 0
-                           ? String(collRow.modelData.n)
-                           : String(rail.kindCount(collRow.modelData.counts))
-                    indent: collRow.modelData.parentId > 0
-                    active: rail.pane === 0
+                    label: collRow.row.name
+                    sub: collRow.isSmart ? "" : collRow.row.tags
+                    badge: collRow.isSmart ? "smart" : ""
+                    count: collRow.isSmart
+                           ? String(collRow.row.n)
+                           : (rail.pane === 0
+                              ? String(collRow.row.n)
+                              : String(rail.kindCount(collRow.row.counts)))
+                    indent: !collRow.isSmart
+                            && collRow.row.parentId > 0
+                    active: collRow.isSmart
+                            ? rail.pane === 0
+                              ? (library !== null && library.activeSmart
+                                 === String(collRow.row.id))
+                              : rail.pane === 1
+                                ? (fonts !== null && fonts.smartFilter
+                                   === String(collRow.row.id))
+                              : rail.pane === 2
+                                ? (colors !== null && colors.smartFilter
+                                   === String(collRow.row.id))
+                              : (code !== null && code.smartFilter
+                                 === String(collRow.row.id))
+                            : rail.pane === 0
                             ? (library !== null && library.collectionFilter
-                               === String(collRow.modelData.id))
+                               === String(collRow.row.id))
                             : rail.pane === 1
                               ? (fonts !== null && fonts.collectionFilter
-                                 === String(collRow.modelData.id))
+                                 === String(collRow.row.id))
                             : rail.pane === 2
                               ? (colors !== null && colors.collectionFilter
-                                 === String(collRow.modelData.id))
+                                 === String(collRow.row.id))
                               : (code !== null && code.collectionFilter
-                                 === String(collRow.modelData.id))
+                                 === String(collRow.row.id))
                     onPicked: {
-                        // clicking a collection filters the ACTIVE pane's
-                        // content (each bridge keeps its own filter state)
-                        var cid = String(collRow.modelData.id)
+                        // clicking filters the ACTIVE pane's content
+                        // (each bridge keeps its own filter state)
+                        var idv = String(collRow.row.id)
+                        if (collRow.isSmart) {
+                            if (rail.pane === 0 && library !== null)
+                                library.set_smart_collection(idv)
+                            else if (rail.pane === 1 && fonts !== null)
+                                fonts.set_smart(idv)
+                            else if (rail.pane === 2 && colors !== null)
+                                colors.set_smart(idv)
+                            else if (rail.pane === 3 && code !== null)
+                                code.set_smart(idv)
+                            return
+                        }
                         if (rail.pane === 0 && library !== null)
-                            library.set_collection(cid)
+                            library.set_collection(idv)
                         else if (rail.pane === 1 && fonts !== null)
-                            fonts.set_collection(cid)
+                            fonts.set_collection(idv)
                         else if (rail.pane === 2 && colors !== null)
-                            colors.set_collection(cid)
+                            colors.set_collection(idv)
                         else if (rail.pane === 3 && code !== null)
-                            code.set_collection(cid)
+                            code.set_collection(idv)
                     }
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function (mouse) {
-                            collMenu.target = collRow.modelData
-                            collMenu.popup()
+                            if (collRow.isSmart) {
+                                smartMenu.target = collRow.row
+                                smartMenu.popup()
+                            } else {
+                                collMenu.target = collRow.row
+                                collMenu.popup()
+                            }
                         }
                     }
                 }
@@ -761,67 +845,11 @@ Rectangle {
                 }
             }
 
-            // smart collections — live criteria membership; listed under the
-            // collections block on every pane that carries their kind
-            SectionHeader {
-                label: qsTr("Smart")
-                sectionKey: "smart"
-                visible: rail.showCollections }
-            Repeater {
-                model: {
-                    if (rail.sectOpen.smart === false)
-                        return []
-                    var out = []
-                    var all = taxonomy !== null ? taxonomy.smartCollections : []
-                    for (var i = 0; i < all.length; i++)
-                        if (all[i].item_kind === rail.paneKind)
-                            out.push(all[i])
-                    return out
-                }
-                RailItem {
-                    id: smartRow
-                    required property var modelData
-                    label: smartRow.modelData.name
-                    count: String(smartRow.modelData.n)
-                    accent: theme.tokens.hlInk
-                    active: rail.pane === 0
-                            ? (library !== null && library.activeSmart
-                               === String(smartRow.modelData.id))
-                            : rail.pane === 1
-                              ? (fonts !== null && fonts.smartFilter
-                                 === String(smartRow.modelData.id))
-                            : rail.pane === 2
-                              ? (colors !== null && colors.smartFilter
-                                 === String(smartRow.modelData.id))
-                              : (code !== null && code.smartFilter
-                                 === String(smartRow.modelData.id))
-                    onPicked: {
-                        var sid = String(smartRow.modelData.id)
-                        if (rail.pane === 0 && library !== null)
-                            library.set_smart_collection(sid)
-                        else if (rail.pane === 1 && fonts !== null)
-                            fonts.set_smart(sid)
-                        else if (rail.pane === 2 && colors !== null)
-                            colors.set_smart(sid)
-                        else if (rail.pane === 3 && code !== null)
-                            code.set_smart(sid)
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.RightButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: function (mouse) {
-                            smartMenu.target = smartRow.modelData
-                            smartMenu.popup()
-                        }
-                    }
-                }
-            }
-
-            // add/configure affordance for smart collections
+            // "+ new smart collection" — the add affordance for the smart
+            // rows inside the combined Collections list
             Rectangle {
                 visible: rail.showCollections
-                         && rail.sectOpen.smart !== false
+                         && rail.sectOpen.collections !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
                 Layout.rightMargin: 8
@@ -860,87 +888,84 @@ Rectangle {
                 }
             }
 
-            // ── preset libraries: curated REMOTE catalogues (fonts,
-            // icon sets, site templates) — rows carry a remote badge;
-            // clicking browses without downloading ──
-            SectionHeader {
-                label: qsTr("Presets")
-                sectionKey: "presets"
-                visible: presets !== null
-                         && presets.libraries.length > 0 }
-            Repeater {
-                model: presets !== null
-                       && rail.sectOpen.presets !== false
-                       ? presets.libraries : []
-                RailItem {
-                    id: presetRow
-                    required property var modelData
-                    label: presetRow.modelData.name
-                    count: String(presetRow.modelData.entries)
-                    accent: theme.tokens.accent
-                    sub: presetRow.modelData.downloaded > 0
-                         ? presetRow.modelData.downloaded + " downloaded"
-                         : "remote"
-                    active: false
-                    onPicked: presetsDialog.openLibrary(
-                                  presetRow.modelData.id)
-                    MouseArea {
-                        anchors.fill: parent
-                        acceptedButtons: Qt.RightButton
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: function (mouse) {
-                            rail.entityProperties(
-                                "preset", presetRow.modelData.id)
-                        }
-                    }
-                }
-            }
-
             // saved libraries (tag sets) — shown on every pane with an
             // asset kind; rows appear when the view matches assets of
             // THE ACTIVE PANE'S kind (pane separation, per-kind counts)
             SectionHeader {
                 label: qsTr("Libraries")
                 sectionKey: "libraries"
-                visible: rail.paneKind !== "" }
+                visible: rail.paneKind !== ""
+                         || (presets !== null
+                             && presets.libraries.length > 0) }
             Repeater {
-                model: taxonomy !== null
-                       && rail.sectOpen.libraries !== false
-                       ? taxonomy.libraryViews : []
+                // ONE Libraries list: user libraries (tag sets) first,
+                // then curated preset packs for the active pane's kind
+                // (badge "preset", sub shows remote/local state)
+                model: {
+                    if (rail.sectOpen.libraries === false)
+                        return []
+                    var out = []
+                    var views = taxonomy !== null
+                                ? taxonomy.libraryViews : []
+                    for (var i = 0; i < views.length; i++)
+                        if (rail.pane === 0 || (views[i].counts
+                                && views[i].counts[rail.paneKind] > 0))
+                            out.push({t: "library", row: views[i]})
+                    var packs = presets !== null ? presets.libraries : []
+                    for (var j = 0; j < packs.length; j++)
+                        if (rail.paneKind === ""
+                            || packs[j].kind === rail.paneKind)
+                            out.push({t: "preset", row: packs[j]})
+                    return out
+                }
                 RailItem {
                     id: libRow
                     required property var modelData
-                    visible: rail.paneKind !== ""
-                             && (rail.pane === 0
-                                 || (modelData.counts
-                                     && modelData.counts[rail.paneKind] > 0))
-                    label: libRow.modelData.name
-                    count: String(rail.pane === 0
-                                  ? libRow.modelData.n
-                                  : (libRow.modelData.counts
-                                     ? (libRow.modelData.counts[rail.paneKind]
-                                        || 0) : 0))
+                    readonly property bool isPreset:
+                        modelData.t === "preset"
+                    readonly property var row: modelData.row
+                    visible: libRow.isPreset || rail.paneKind !== ""
+                    label: libRow.row.name
+                    badge: libRow.isPreset ? "preset" : ""
+                    sub: libRow.isPreset
+                         ? (libRow.row.downloaded > 0
+                            ? "preset · " + libRow.row.downloaded + " local"
+                            : "preset · remote")
+                         : (libRow.row.tags || "")
+                    count: String(libRow.isPreset
+                                  ? libRow.row.entries
+                                  : (rail.pane === 0
+                                     ? libRow.row.n
+                                     : (libRow.row.counts
+                                        ? (libRow.row.counts[rail.paneKind]
+                                           || 0) : 0)))
                     accent: theme.tokens.accent
-                    active: rail.pane === 0
-                            ? (library !== null
-                               && library.activeLibraryView
-                               === String(libRow.modelData.id))
-                            : (rail.pane === 2
-                               ? colors !== null
-                                 && colors.libraryTagFilter
-                                    === String(libRow.modelData.tags || "")
-                               : code !== null
-                                 && code.libraryTagFilter
-                                    === String(libRow.modelData.tags || ""))
+                    active: libRow.isPreset
+                            ? false
+                            : (rail.pane === 0
+                               ? (library !== null
+                                  && library.activeLibraryView
+                                  === String(libRow.row.id))
+                               : (rail.pane === 2
+                                  ? colors !== null
+                                    && colors.libraryTagFilter
+                                       === String(libRow.row.tags || "")
+                                  : code !== null
+                                    && code.libraryTagFilter
+                                       === String(libRow.row.tags || "")))
                     onPicked: {
+                        if (libRow.isPreset) {
+                            presetsDialog.openLibrary(libRow.row.id)
+                            return
+                        }
                         if (rail.pane === 0 && library !== null) {
                             library.set_library_view(
-                                String(libRow.modelData.id))
+                                String(libRow.row.id))
                             return
                         }
                         // panes 2/3: the view's tag set filters the pane
-                        var tags = String(libRow.modelData.tags || "")
-                        var all = libRow.modelData.match_all === 1
+                        var tags = String(libRow.row.tags || "")
+                        var all = libRow.row.match_all === 1
                         if (rail.pane === 2 && colors !== null)
                             colors.set_library_tags(tags, all)
                         else if (rail.pane === 3 && code !== null)
@@ -951,7 +976,12 @@ Rectangle {
                         acceptedButtons: Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function (mouse) {
-                            libMenu.target = libRow.modelData
+                            if (libRow.isPreset) {
+                                rail.entityProperties(
+                                    "preset", libRow.row.id)
+                                return
+                            }
+                            libMenu.target = libRow.row
                             libMenu.popup()
                         }
                     }

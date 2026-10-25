@@ -283,11 +283,9 @@ Item {
                 enabled: library !== null
                          && library.collections.length > 0
                          && fonts !== null && fonts.selectedFamily !== ""
-                onHoveredChanged: if (hovered) famCollSub.popup(
-                                      famCollItem, famCollItem.width, 0)
-                onClicked: famCollSub.popup(famCollItem, famCollItem.width, 0)
                 Menu {
                     id: famCollSub
+                    cascade: true
                     width: 220
                     padding: 4
                     background: Rectangle {
@@ -337,11 +335,9 @@ Item {
                 enabled: taxonomy !== null
                          && taxonomy.link_targets().length > 0
                          && fonts !== null && fonts.selectedFamily !== ""
-                onHoveredChanged: if (hovered) famLinkSub.popup(
-                                      famLinkItem, famLinkItem.width, 0)
-                onClicked: famLinkSub.popup(famLinkItem, famLinkItem.width, 0)
                 Menu {
                     id: famLinkSub
+                    cascade: true
                     width: 230
                     padding: 4
                     background: Rectangle {

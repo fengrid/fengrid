@@ -873,7 +873,6 @@ Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 30
                     text: qsTr("To collection")
-                    onClicked: collMenu.popup()
                     background: Rectangle {
                         radius: 6
                         color: theme.tokens.surface2

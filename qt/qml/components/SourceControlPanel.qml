@@ -103,7 +103,6 @@ Rectangle {
             ScButton {
                 label: qsTr("Merge…")
                 enabled2: scRoot.branch !== "fengrid-main"
-                onClicked: mergeMenu.popup()
             }
             ScButton {
                 label: qsTr("Push")

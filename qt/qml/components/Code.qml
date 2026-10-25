@@ -686,6 +686,7 @@ Item {
                     enabled: library !== null && library.collections.length > 0
                     Menu {
                         id: snipCollSub
+                    cascade: true
                         Repeater {
                             model: library !== null ? library.collections : []
                             MenuItem {
@@ -702,9 +703,6 @@ Item {
                             }
                         }
                     }
-                    onHoveredChanged: if (hovered) snipCollSub.popup(
-                                          parent, parent.width, 0)
-                    onClicked: snipCollSub.popup(parent, parent.width, 0)
                 }
                 FgMenuItem {
                     text: qsTr("Delete snippet")

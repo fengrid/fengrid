@@ -29,11 +29,14 @@ Dialog {
     }
     footer: Rectangle {
         color: theme.tokens.surface
-        height: 46
+        height: 50
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 16
             anchors.rightMargin: 16
+            anchors.topMargin: 8
+            anchors.bottomMargin: 8
+            spacing: 10
             Text {
                 Layout.fillWidth: true
                 text: presets !== null
@@ -45,17 +48,53 @@ Dialog {
                 color: theme.tokens.textMuted
             }
             Button {
+                id: closeBtn
                 text: qsTr("Close")
+                font.family: theme.uiFont
+                font.pixelSize: 12
+                leftPadding: 18
+                rightPadding: 18
+                topPadding: 6
+                bottomPadding: 6
+                hoverEnabled: true
+                contentItem: Text {
+                    text: closeBtn.text
+                    font: closeBtn.font
+                    color: closeBtn.hovered ? theme.tokens.bg
+                                            : theme.tokens.text
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+                background: Rectangle {
+                    radius: 6
+                    color: closeBtn.hovered || closeBtn.pressed
+                           ? theme.tokens.accent : theme.tokens.surface2
+                    border.color: closeBtn.hovered
+                                  ? theme.tokens.accent
+                                  : theme.tokens.border
+                }
                 onClicked: presetsRoot.close()
             }
         }
     }
 
-    function openLibrary(libId) {
-        currentLib = libId >= 0 ? libId
-                                : (presets !== null
-                                   && presets.libraries.length > 0
-                                   ? presets.libraries[0].id : -1)
+    function openLibrary(libId, paneKind) {
+        if (libId >= 0) {
+            currentLib = libId
+        } else {
+            // no explicit pack: open the library matching the ACTIVE
+            // pane's asset kind (Fonts pane → Open Fonts, etc.)
+            var packs = presets !== null ? presets.libraries : []
+            var want = paneKind === "font" ? "font"
+                       : paneKind === "icon" ? "icon"
+                       : paneKind === "template" ? "template" : ""
+            currentLib = -1
+            for (var i = 0; i < packs.length; i++)
+                if (want !== "" && packs[i].kind === want)
+                    currentLib = packs[i].id
+            if (currentLib < 0 && packs.length > 0)
+                currentLib = packs[0].id
+        }
         filterText = ""
         refresh()
         open()

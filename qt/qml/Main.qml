@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtQuick.Effects
 import "components"
 
 ApplicationWindow {
@@ -33,6 +34,13 @@ ApplicationWindow {
     // for Projects and saved Libraries (opened from their context menus)
     property string entityKind: ""
     property int entityId: -1
+    // blur the main UI behind open modal windows (Preset Libraries,
+    // entity inspector, Settings) — read by the blur-behind host
+    readonly property bool blurUi: presetsDialog !== null
+                                   && presetsDialog.visible
+                                   || (entityInspector !== null
+                                       && entityInspector.visible)
+                                   || root.settingsOpen
     function openEntityInspector(kind, id) {
         entityKind = String(kind)
         entityId = parseInt(id)
@@ -439,9 +447,26 @@ ApplicationWindow {
         }
     }
 
+    // ── blur-behind host: the whole main UI blurs while a modal window
+    // (Preset Libraries, entity inspector, Settings) is open ──
+    Item {
+        id: blurHost
+        anchors.fill: parent
+
     RowLayout {
+        id: mainContent
         anchors.fill: parent
         spacing: 0
+
+        // A11Y/UX: while a modal window is open the whole UI renders
+        // through a blur layer (see root.blurUi) — content stays live
+        // but softly out of focus behind the dialog
+        layer.enabled: root.blurUi
+        layer.effect: MultiEffect {
+            blurEnabled: true
+            blur: 0.5
+            blurMax: 28
+        }
 
         SideRail {
             id: sideRail
@@ -509,6 +534,7 @@ ApplicationWindow {
             visible: root.pane >= 1 && root.pane <= 2 && itemId >= 0
         }
     }
+    }   // blurHost
 
     // full-window accent flash on pane switch — a translucent wash of the
     // incoming pane's category color, fading fast
@@ -1137,7 +1163,10 @@ ApplicationWindow {
             return
         }
         if (name === "presets") {
-            presetsDialog.openLibrary(-1)
+            presetsDialog.openLibrary(
+                -1, root.pane === 0 ? "icon"
+                    : root.pane === 1 ? "font"
+                    : root.pane === 4 ? "template" : "")
             return
         }
         if (name === "fonts-css") {

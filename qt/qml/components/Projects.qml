@@ -309,13 +309,9 @@ Item {
                         height: 28
                         enabled: library !== null
                                  && library.collections.length > 0
-                        onHoveredChanged: if (hovered) attachCollSub.popup(
-                                              attachCollItem,
-                                              attachCollItem.width, 0)
-                        onClicked: attachCollSub.popup(
-                                       attachCollItem, attachCollItem.width, 0)
                         Menu {
                             id: attachCollSub
+                            cascade: true
                             width: 200
                             padding: 4
                             background: Rectangle {

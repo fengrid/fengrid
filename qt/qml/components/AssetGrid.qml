@@ -27,7 +27,6 @@ Item {
     }
     Connections {
         target: library
-        function onModelReset() { gridRoot.selectedIds = [] }
         function onListsChanged() { gridRoot.selectedIds = [] }
     }
 
@@ -259,19 +258,12 @@ Item {
                 }
             }
             // LINK TO — typed links to collections / libraries / projects
-            // (targets pulled live when the menu opens)
+            // (targets pulled live when the submenu opens; cascade handles
+            // open/close — hover-popup was the broken-submenu bug, #21)
             FgMenuItem {
                 id: linkItem
-                property var targets: []
                 text: qsTr("Link to…")
                 height: 30
-                onHoveredChanged: {
-                    if (!hovered || taxonomy === null)
-                        return
-                    targets = taxonomy.link_targets()
-                    linkSub.open(linkItem, linkItem.width, 0)
-                }
-                onClicked: linkSub.popup(linkItem, linkItem.width, 0)
                 contentItem: Text {
                     text: linkItem.text
                     font.family: theme.uiFont
@@ -287,6 +279,10 @@ Item {
                 }
                 Menu {
                     id: linkSub
+                        cascade: true
+                    onAboutToShow: targets = taxonomy !== null
+                                   ? taxonomy.link_targets() : []
+                    property var targets: []
                     width: 230
                     padding: 4
                     background: Rectangle {
@@ -343,7 +339,6 @@ Item {
                     idFields = out
                     genIdSub.open(genIdItem, genIdItem.width, 0)
                 }
-                onClicked: genIdSub.popup(genIdItem, genIdItem.width, 0)
                 contentItem: Text {
                     text: genIdItem.text
                     font.family: theme.uiFont
@@ -430,13 +425,10 @@ Item {
                                                 : "transparent"
                     radius: 5
                 }
-                onHoveredChanged: if (hovered) collSubmenu.popup(
-                                      collMenuItem, collMenuItem.width, 0)
-                onClicked: collSubmenu.popup(
-                               collMenuItem, collMenuItem.width, 0)
 
                 Menu {
                     id: collSubmenu
+                        cascade: true
                     width: 190
                     padding: 4
                     background: Rectangle {
@@ -510,12 +502,9 @@ Item {
                 height: 28
                 enabled: library !== null
                          && library.collections.length > 0
-                onHoveredChanged: if (hovered) bulkCollSub.popup(
-                                      bulkCollItem, bulkCollItem.width, 0)
-                onClicked: bulkCollSub.popup(bulkCollItem,
-                                             bulkCollItem.width, 0)
                 Menu {
                     id: bulkCollSub
+                        cascade: true
                     width: 200
                     padding: 4
                     background: Rectangle {
