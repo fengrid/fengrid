@@ -75,8 +75,9 @@ def test_scale_indexes_recreated_on_legacy_connect(tmp_path):
 
 # -------------------------------------------------------------- search
 def test_search_candidates_deterministic_order(tmp_path, monkeypatch):
-    """The candidate cap must pick the OLDEST rows by id deterministically
-    (plan-independent), never an arbitrary slice."""
+    """The candidate cap must pick the NEWEST rows by id deterministically
+    (plan-independent), never an arbitrary slice — #29: oldest-first made
+    every freshly scanned asset invisible to fuzzy/regex above the cap."""
     monkeypatch.setattr(core_search, "MAX_CANDIDATES", 5)
     con = db.connect(tmp_path / "lib.db")
     try:
@@ -89,7 +90,25 @@ def test_search_candidates_deterministic_order(tmp_path, monkeypatch):
                 (f"/x/{i:02d}.png", f"zzz{i:02d}"))
         con.commit()
         cands = core_search._candidates(con)
-        assert [c[0] for c in cands] == [1, 2, 3, 4, 5]
+        # newest five: ids 6..10 are the searchable candidate set
+        assert [c[0] for c in cands] == [10, 9, 8, 7, 6]
+        # a term matching ONLY the oldest rows is still found via the
+        # uncapped FTS path (handled by the library bridge, not here)
+        from fengrid.bridges.library import Library, _ROLE_NAMES
+        from PySide6.QtCore import QCoreApplication, Qt
+        from PySide6.QtTest import QTest
+        app = QCoreApplication.instance() or QCoreApplication([])
+        lib = Library(con, str(tmp_path / "lib.db"), no_scan=True)
+        try:
+            lib.search = "zzz01"           # Property setter drives FTS
+            QTest.qWait(50)                # debounced filter application
+            name_role = Qt.ItemDataRole.UserRole + 1 + \
+                _ROLE_NAMES.index("name")
+            names = [lib._model.index(r).data(name_role)
+                     for r in range(lib._model.rowCount())]
+            assert any(n and "zzz01" in n for n in names), names
+        finally:
+            lib._on_about_to_quit()
     finally:
         con.close()
 

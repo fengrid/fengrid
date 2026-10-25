@@ -49,16 +49,18 @@ class SearchError(ValueError):
 def _candidates(con: sqlite3.Connection) -> list[tuple[int, str, str]]:
     """(asset_id, name, path) for scoring — one query, bounded.
 
-    Deterministic ORDER BY id: at six-figure+ counts the cap silently
-    narrows the candidate set, and an unordered LIMIT would pick an
-    arbitrary (plan-dependent) slice — now it is always the oldest
-    rows by id, a stable, explainable subset. 1M-name tables exceed
-    the cap; the fuzzy/regex modes remain bounded-CPU by design and
-    the narrowing is documented, not hidden (a fuller fix — FTS-token
-    candidate union — is tracked in the perf backlog).
+    Deterministic ORDER BY id. At six-figure+ counts the cap silently
+    narrows the candidate set; #29's concern was that OLDEST-first made
+    every newly-scanned asset invisible to fuzzy/regex above the cap.
+    The slice is now NEWEST-first (ORDER BY id DESC): the rows a user
+    just imported are always searchable, and the documented subset is
+    still stable and explainable. Older rows remain fully reachable
+    through the smart/FTS mode, which is index-backed and uncapped.
+    A fuller fix — unioning FTS token matches into the candidate set —
+    remains the follow-up for the perf backlog.
     """
     rows = con.execute(
-        "SELECT id, name, path FROM asset ORDER BY id LIMIT ?",
+        "SELECT id, name, path FROM asset ORDER BY id DESC LIMIT ?",
         (MAX_CANDIDATES,),
     ).fetchall()
     return [(r["id"], r["name"], r["path"]) for r in rows]
