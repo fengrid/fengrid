@@ -633,13 +633,28 @@ ApplicationWindow {
             anchors.rightMargin: 12
             spacing: 6
             Text {
-                text: library !== null
-                      ? (library.scanning
-                         ? qsTr("indexing… %1").arg(library.scanCount)
-                         : qsTr("%1 assets%2").arg(library.totalAssets)
-                           .arg(library.lastScan !== ""
-                                ? qsTr(" · indexed ") + library.lastScan : ""))
-                      : ""
+                // pane-scoped count (#23): the label always names the
+                // ACTIVE pane's metric so it can't be misread against
+                // the rail badge of a different scope
+                text: {
+                    if (root.pane === 0 && library !== null)
+                        return library.scanning
+                               ? qsTr("indexing… %1").arg(library.scanCount)
+                               : qsTr("%1 assets%2").arg(library.totalAssets)
+                                 .arg(library.lastScan !== ""
+                                      ? qsTr(" · indexed ")
+                                        + library.lastScan : "")
+                    if (root.pane === 1 && fonts !== null)
+                        return qsTr("%1 font files · %2 families").arg(
+                            fonts.totalFonts).arg(fonts.families.length)
+                    if (root.pane === 2 && colors !== null)
+                        return qsTr("%1 palettes").arg(colors.palettes.length)
+                    if (root.pane === 3 && code !== null)
+                        return qsTr("%1 snippets").arg(code.snippetCount)
+                    if (root.pane === 4 && projects !== null)
+                        return qsTr("%1 projects").arg(projects.projects.length)
+                    return ""
+                }
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: theme.tokens.textMuted

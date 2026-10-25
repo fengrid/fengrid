@@ -149,6 +149,23 @@ def make_handler(api: Api, token: str | None):
                 return self.rfile.read(length)
             return b""
 
+        def _send_spec(self) -> None:
+            """The bundled openapi.yaml, served from the package dir."""
+            spec = Path(__file__).resolve().parent / "openapi.yaml"
+            try:
+                body = spec.read_bytes()
+            except OSError:
+                self._send(404, error_body(404, "not_found",
+                                           "openapi.yaml not bundled"))
+                return
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             "text/yaml; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self._cors()
+            self.end_headers()
+            self.wfile.write(body)
+
         # dispatch for every verb
         def _dispatch(self, method: str) -> None:
             path = self.path.split("?", 1)[0]
@@ -163,6 +180,11 @@ def make_handler(api: Api, token: str | None):
                     self.send_response(204)
                     self._cors()
                     self.end_headers()
+                    return
+                # #26: serve the bundled OpenAPI spec BEFORE auth — it
+                # documents the public contract and carries no secrets
+                if method == "GET" and path.endswith("/openapi.yaml"):
+                    self._send_spec()
                     return
                 check_auth(self.headers, token)
                 status, payload = self._route(method, path, params)

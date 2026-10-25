@@ -730,9 +730,14 @@ Item {
                     SwTool {
                         icon_name: swCard.modelData.locked ? "lock" : "unlock"
                         // locked state is tinted amber so it reads even at
-                        // a glance; the icon swap alone is too subtle
+                        // a glance — but only when amber contrasts with the
+                        // swatch (#25: amber on Wheat was ~1.1:1); the tint
+                        // falls back to the swatch's best ink. The other
+                        // tool glyphs use best ink too (hardcoded white was
+                        // invisible on pale swatches)
                         tint: swCard.modelData.locked
-                              ? theme.tokens.litPane : "#FFFFFF"
+                              ? swCard.modelData.lock_ink
+                              : swCard.modelData.ink
                         ToolTip.visible: hovered
                         ToolTip.delay: 350
                         ToolTip.text: swCard.modelData.locked
@@ -743,6 +748,7 @@ Item {
                     }
                     SwTool {
                         icon_name: "x"
+                        tint: swCard.modelData.ink
                         ToolTip.visible: hovered
                         ToolTip.delay: 350
                         ToolTip.text: qsTr("Remove this swatch from the palette")

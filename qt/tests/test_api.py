@@ -345,3 +345,51 @@ def test_backup_job_roundtrip(api_env, tmp_path):
     st, body = _req(b, "GET", "/api/v1/backups")
     assert any(i["name"].endswith(".tar.gz")
                for i in body["data"]["items"])
+
+
+def test_openapi_spec_served_without_auth(api_env):
+    """#26: the bundled spec is public (pre-auth) and well-formed."""
+    import urllib.request
+    b = api_env["base"]
+    req = urllib.request.Request(b + "/api/v1/openapi.yaml")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            st = resp.status
+            raw = resp.read()
+    except urllib.error.HTTPError as e:      # noqa: BLE001
+        st = e.code
+    assert st == 200
+    text = raw.decode("utf-8")
+    assert text.lstrip().startswith("openapi:")
+    assert "paths:" in text
+
+
+def test_lock_ink_falls_back_on_pale_swatches():
+    """#25: amber lock tint only when it reads; pale swatches fall back
+    to the swatch's best ink."""
+    from fengrid.core import colors as core_colors
+    rgb = core_colors.hex2rgb("#EEE1C4")     # Wheat — amber is invisible
+    assert core_colors.contrast(rgb, (245, 194, 92)) < 3.0
+    con = _tmp_con()
+    from fengrid.bridges.colors import Colors
+    bridge = Colors(con)
+    pid = con.execute("INSERT INTO palette(name) VALUES ('t')").lastrowid
+    con.execute("INSERT INTO palette_color(palette_id, position, hex)"
+                " VALUES (?, 0, '#EEE1C4')", (pid,))
+    con.execute("INSERT INTO palette_color(palette_id, position, hex)"
+                " VALUES (?, 1, '#371E52')", (pid,))
+    con.commit()
+    bridge.open_palette(pid)
+    rows = bridge.swatches
+    pale = [r for r in rows if r["hex"] == "#EEE1C4"][0]
+    dark = [r for r in rows if r["hex"] == "#371E52"][0]
+    assert pale["lock_ink"] == pale["ink"]   # amber rejected → best ink
+    assert dark["lock_ink"] == "#F5C25C"     # amber reads on dark violet
+
+
+def _tmp_con():
+    from fengrid.core import db as core_db
+    import tempfile
+    import os
+    path = os.path.join(tempfile.mkdtemp(), "t.db")
+    return core_db.connect(path)

@@ -534,7 +534,10 @@ Item {
             // ---- studio screen rail + screen area
             ColumnLayout {
                 SplitView.preferredWidth: 360
-                SplitView.minimumWidth: 360
+                // #24: minimums must SUM below the available width at the
+                // default window (1280 - rail - sidebar ≈ 819px) or the
+                // SplitView overflows past the window edge
+                SplitView.minimumWidth: 300
                 SplitView.maximumWidth: 420
                 spacing: 0
 
@@ -1004,7 +1007,7 @@ Item {
             // ---- live preview + bottom dock + status bar
             Rectangle {
                 SplitView.fillWidth: true
-                SplitView.minimumWidth: 320
+                SplitView.minimumWidth: 240
                 color: theme.tokens.surface
                 ColumnLayout {
                     anchors.fill: parent
@@ -1431,7 +1434,7 @@ Item {
             // selected preview element with quick parameter edits
             Rectangle {
                 SplitView.preferredWidth: 250
-                SplitView.minimumWidth: 200
+                SplitView.minimumWidth: 180
                 color: theme.tokens.surface
                 ColumnLayout {
                     anchors.fill: parent
@@ -1462,7 +1465,9 @@ Item {
                                && projectsRoot.selInfo.tag
                                ? theme.tokens.accentProject
                                : theme.tokens.textMuted
-                        wrapMode: Text.WrapAnywhere
+                        // #24 follow-up: WrapAnywhere sliced "preview"
+                        // mid-word — prefer word boundaries
+                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     }
                     Text {
                         Layout.fillWidth: true

@@ -103,6 +103,11 @@ class Colors(QObject):
             h, sat, li = core_colors.rgb2hsl(*rgb)
             cw = core_colors.contrast(rgb, (255, 255, 255))
             cb = core_colors.contrast(rgb, (16, 20, 24))
+            # #25: the lock glyph is tinted amber on locked swatches —
+            # amber on a pale swatch (Wheat ~1.1:1) is invisible, so the
+            # lock tint falls back to the swatch's best ink when amber
+            # cannot read
+            amber = core_colors.contrast(rgb, (245, 194, 92))
             out.append({
                 "hex": s["hex"], "locked": s["locked"],
                 "cw": round(cw, 1), "cb": round(cb, 1),
@@ -110,6 +115,8 @@ class Colors(QObject):
                 "wcagB": core_colors.wcag_label(cb),
                 "name": core_colors.color_name(s["hex"]),
                 "ink": core_colors.best_ink(rgb),
+                "lock_ink": "#F5C25C" if amber >= 3.0
+                else core_colors.best_ink(rgb),
                 # editor sliders read these; set_hsl converts back
                 "h": round(h), "s": round(sat), "l": round(li),
             })
