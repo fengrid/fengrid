@@ -78,11 +78,6 @@ ApplicationWindow {
     property string statusTip:
         statusTips[statusTipIdx % statusTips.length]
     property bool paletteOpen: false
-    // launch-scan session: true only when __main__ scheduled the initial
-    // scans — ends the moment they go quiet so manual rescans never
-    // reshow the splash
-    property bool splashSession:
-        typeof initialScans !== "undefined" && initialScans
 
     function updateOverlayGate() {
         Shell.overlayOpen = root.settingsOpen || root.setupOpen
@@ -924,28 +919,12 @@ ApplicationWindow {
         }
     }
 
-    // ── launch splash: visible while the initial scans run (z below
-    // the first-run modal at 60 — setup already shows live counts in
-    // its footer) ──
+    // ── launch splash: self-gating (see SplashOverlay) — opens while a
+    // scan runs on a still-empty DB, closes when the scans go quiet ──
     SplashOverlay {
         id: splashOverlay
         parent: Overlay.overlay
         z: 58
-        session: root.splashSession
-    }
-    Connections {
-        target: library
-        function onScanFinished() {
-            if (!fonts.scanning)
-                root.splashSession = false
-        }
-    }
-    Connections {
-        target: fonts
-        function onScanFinished() {
-            if (!library.scanning)
-                root.splashSession = false
-        }
     }
 
     // QA: --qa-select <icon> selects the asset (inspector visible in
