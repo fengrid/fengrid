@@ -39,6 +39,12 @@ SCHEME_BYTES = SCHEME.encode()
 
 
 def webengine_available() -> bool:
+    # FENGRID_NO_WEBENGINE=1: user-level bisect lever — a preview-less
+    # shell is fully functional, so a crash suspect can be excluded
+    # without rebuilding (used while chasing the software-renderer
+    # segfaults, #27/#32)
+    if os.environ.get("FENGRID_NO_WEBENGINE", "") == "1":
+        return False
     try:
         from PySide6 import QtWebEngineCore  # noqa: F401 — links the module
     except ImportError:

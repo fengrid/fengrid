@@ -117,6 +117,14 @@ def main(argv=None) -> int:
     if needs_software_fallback():
         os.environ["QT_QUICK_BACKEND"] = "software"
         os.environ["QT_XCB_GL_INTEGRATION"] = "none"
+        # Chromium's GPU process is a known native-crash source on
+        # GLX-less displays (QtWebEngineCore links at import, BEFORE
+        # this point is too late — this runs first, so the flag lands).
+        # Not proven to be the #32 segfault, but it removes the most
+        # likely native GL consumer left after the blur guard.
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+            os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+            + " --disable-gpu").strip()
         print("warning: no usable hardware GL on this display —"
               " using the software renderer", file=sys.stderr)
     # Exposed to QML: shader-based scene-graph effects (MultiEffect blur
