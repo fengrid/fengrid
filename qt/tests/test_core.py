@@ -1098,7 +1098,37 @@ def test_content_search_snippets_and_files(lib, tmp_path):
                        "<div class='company-logo'>x</div>", "", "", "")
     hits = srch.search_assets(lib, "company-logo", "content")
     kinds = {h["kind"] for h in hits}
-    assert "snippet" in kinds and "asset" in kinds
+    # file hits carry the row's real kind (icon here) — #30 made content
+    # search kind-honest across all tracked kinds
+    assert "snippet" in kinds and "icon" in kinds
+
+
+def test_content_search_covers_all_kinds(tmp_path):
+    """#30: content search must cover doc/markdown/data assets too —
+    it used to restrict to kind='icon' and silently hid every other
+    kind's text files."""
+    con = db.connect(tmp_path / "lib.db")
+    try:
+        con.execute("INSERT INTO source(kind, path, label) VALUES"
+                    " ('system', '/x', 'x')")
+        md = tmp_path / "handbook.md"
+        md.write_text("# Handbook\nq4-retro notes live here",
+                      encoding="utf-8")
+        csvf = tmp_path / "budget.csv"
+        csvf.write_text("item,amount\nq4-retro,1200\n", encoding="utf-8")
+        for path, name, kind in ((md, "handbook", "markdown"),
+                                 (csvf, "budget", "data")):
+            con.execute(
+                "INSERT INTO asset(source_id, kind, path, name, ext)"
+                " VALUES (1, ?, ?, ?, ?)",
+                (kind, str(path), name, path.suffix.lstrip(".")))
+        con.commit()
+        hits = srch.search_assets(con, "q4-retro", mode="content")
+        assert [h["name"] for h in hits] == ["handbook", "budget"]
+        kinds = {h["kind"] for h in hits}
+        assert {"markdown", "data"} <= kinds
+    finally:
+        con.close()
 
 
 def test_snippet_content_search_flag(lib):

@@ -36,7 +36,10 @@ MAX_RESULTS = 500
 MAX_FILE_BYTES = 256 * 1024
 MAX_SCANS = 2_000
 TEXT_EXTS = {".svg", ".xml", ".html", ".htm", ".css", ".js", ".json",
-             ".md", ".txt", ".toml", ".yaml", ".yml", ".ini"}
+             ".md", ".txt", ".toml", ".yaml", ".yml", ".ini",
+             # text-extractable members of the other tracked kinds (#30)
+             ".csv", ".tsv", ".sql", ".ndjson", ".jsonl", ".cfg", ".conf",
+             ".markdown", ".mkd", ".mdx", ".mdown", ".tex"}
 
 
 class SearchError(ValueError):
@@ -137,15 +140,16 @@ def _content(con, term: str, limit: int) -> list[dict]:
             return hits
 
     # 2) text-like asset files — bounded I/O. The ext filter is in SQL
-    # (a kind+ext index-only scan) rather than a Python-side walk over
-    # every icon row: at six-figure counts iterating 1M rows just to
-    # discard non-text extensions dwarfed the actual file reads.
+    # (idx_asset_ext) across ALL kinds (#30): doc/markdown/data assets
+    # carry text files too — content search used to cover kind='icon'
+    # rows only, silently hiding every other kind's text. MAX_SCANS
+    # still bounds the read count.
     text_exts = tuple(sorted({e.lstrip(".") for e in TEXT_EXTS}))
     marks = ",".join("?" * len(text_exts))
     scans = 0
     for r in con.execute(
-            "SELECT id, name, path, ext FROM asset"
-            f" WHERE kind = 'icon' AND ext IN ({marks})"
+            "SELECT id, kind, name, path, ext FROM asset"
+            f" WHERE ext IN ({marks})"
             " ORDER BY id", text_exts):
         scans += 1
         if scans > MAX_SCANS:
@@ -158,7 +162,7 @@ def _content(con, term: str, limit: int) -> list[dict]:
         except OSError:
             continue
         if needle in text:
-            hits.append({"kind": "asset", "id": r["id"], "name": r["name"],
+            hits.append({"kind": r["kind"], "id": r["id"], "name": r["name"],
                          "path": r["path"], "score": 1.0})
             if len(hits) >= limit:
                 break
