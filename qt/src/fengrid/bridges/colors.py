@@ -47,6 +47,10 @@ class Colors(QObject):
         # optional collection filter for the side rail (palette kind)
         self._collection: int | None = None
         self._starred_only = False
+        # saved-library tag filter (rail Libraries row on this pane):
+        # comma tag list + match_all, filtered in Python over row["tags"]
+        self._lib_tags: list[str] = []
+        self._lib_match_all = True
         # active smart collection (sidebar) — criteria filtered in Python
         self._smart_id = 0
         # optional undo bridge (projects.bind_source_control pattern):
@@ -178,6 +182,26 @@ class Colors(QObject):
     @Property(bool, notify=starredOnlyChanged)
     def starredOnly(self) -> bool:
         return self._starred_only
+
+    # ── saved-library tag filter (rail Libraries row, palette pane) ──
+    libTagsChanged = Signal()
+
+    @Property(str, notify=libTagsChanged)
+    def libraryTagFilter(self) -> str:
+        return ",".join(self._lib_tags)
+
+    @Slot(str, bool)
+    def set_library_tags(self, tags_csv: str, match_all: bool = True) -> None:
+        """Toggle the library-view tag filter on this pane (second call
+        with the same list clears it)."""
+        wanted = [t.strip() for t in str(tags_csv or "").split(",")
+                  if t.strip()]
+        if wanted and wanted == self._lib_tags:
+            wanted = []
+        self._lib_tags = wanted
+        self._lib_match_all = bool(match_all)
+        self.libTagsChanged.emit()
+        self._refresh_palettes()
 
     @Slot(bool)
     def set_starred_only(self, on: bool) -> None:
@@ -357,7 +381,19 @@ class Colors(QObject):
         if self._smart_id:
             self._palettes = [p for p in self._palettes
                               if _matches_smart(self._con, self._smart_id, p)]
+        if self._lib_tags:
+            self._palettes = [p for p in self._palettes
+                              if _tags_match(p.get("tags"), self._lib_tags,
+                                             self._lib_match_all)]
         self.palettesChanged.emit()
+
+
+def _tags_match(row_tags, wanted: list[str], match_all: bool) -> bool:
+    """Comma-tag-string row vs library-view tag list (all/any)."""
+    have = {t.strip().lower() for t in str(row_tags or "").split(",")
+            if t.strip()}
+    hits = [t.lower() in have for t in wanted]
+    return all(hits) if match_all else any(hits)
 
 
 def _matches_smart(con, smart_id: int, row: dict) -> bool:

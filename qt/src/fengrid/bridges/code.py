@@ -43,6 +43,9 @@ class Code(QObject):
         # optional collection filter for the side rail (snippet kind)
         self._collection: int | None = None
         self._starred_only = False
+        # saved-library tag filter (rail Libraries row on this pane)
+        self._lib_tags: list[str] = []
+        self._lib_match_all = True
         # active smart collection (sidebar) — criteria filtered in Python
         self._smart_id = 0
         self._current_id: int | None = None
@@ -175,6 +178,26 @@ class Code(QObject):
         if on:
             self._collection = None
         self.filtersChanged.emit()
+        self._refresh()
+
+    # ── saved-library tag filter (rail Libraries row, snippet pane) ──
+    libTagsChanged = Signal()
+
+    @Property(str, notify=libTagsChanged)
+    def libraryTagFilter(self) -> str:
+        return ",".join(self._lib_tags)
+
+    @Slot(str, bool)
+    def set_library_tags(self, tags_csv: str, match_all: bool = True) -> None:
+        """Toggle the library-view tag filter on this pane (second call
+        with the same list clears it)."""
+        wanted = [t.strip() for t in str(tags_csv or "").split(",")
+                  if t.strip()]
+        if wanted and wanted == self._lib_tags:
+            wanted = []
+        self._lib_tags = wanted
+        self._lib_match_all = bool(match_all)
+        self.libTagsChanged.emit()
         self._refresh()
 
     @Slot()
@@ -377,6 +400,11 @@ class Code(QObject):
             from .colors import _matches_smart
             self._snippets = [s for s in self._snippets
                               if _matches_smart(self._con, self._smart_id, s)]
+        if self._lib_tags:
+            from .colors import _tags_match
+            self._snippets = [s for s in self._snippets
+                              if _tags_match(s.get("tags"), self._lib_tags,
+                                             self._lib_match_all)]
         self._tags = [{"name": n, "count": c}
                       for n, c in core_snippets.tag_cloud(self._con)]
         self.snippetsChanged.emit()

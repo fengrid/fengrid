@@ -29,6 +29,17 @@ ApplicationWindow {
     // pane switcher); --pane N (QA) overrides via the initialPane context
     property int pane: typeof initialPane !== "undefined" ? initialPane : 0
 
+    // entity inspector overlay — Documentation / License / Sources tabs
+    // for Projects and saved Libraries (opened from their context menus)
+    property string entityKind: ""
+    property int entityId: -1
+    function openEntityInspector(kind, id) {
+        entityKind = String(kind)
+        entityId = parseInt(id)
+        entityInspector.visible = true
+        entityProps.activeTab = entityProps.defaultTab()
+    }
+
     // ── overlays: settings (content area) + first-run setup (modal) ──
     property bool settingsOpen: false
     // computed in __main__ (flag unset && not a screenshot run); flipped
@@ -438,6 +449,8 @@ ApplicationWindow {
             Layout.fillHeight: true
             pane: root.pane
             onPanePicked: idx => root.pane = idx
+            onEntityProperties: (kind, id) =>
+                root.openEntityInspector(kind, id)
         }
         Rectangle {
             width: 1
@@ -457,7 +470,11 @@ ApplicationWindow {
             Fonts { id: fontsPane }
             Colors {}
             Code {}
-            Projects {}
+            Projects {
+                id: projectsPane
+                onEntityProperties: (kind, id) =>
+                    root.openEntityInspector(kind, id)
+            }
         }
 
         Rectangle {
@@ -519,6 +536,54 @@ ApplicationWindow {
             to: 0
             duration: 300
             easing.type: Easing.OutCubic
+        }
+    }
+
+    // ── entity inspector overlay: Documentation / License / Sources for
+    // Projects and saved Libraries, opened from their context menus ──
+    Rectangle {
+        id: entityInspector
+        visible: false
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        width: 340
+        z: 120
+        color: theme.tokens.surface
+        border.color: theme.tokens.border
+        clip: true
+
+        PropertiesPanel {
+            id: entityProps
+            anchors.fill: parent
+            anchors.margins: 1
+            itemKind: root.entityKind
+            itemId: root.entityId
+        }
+        // close affordance above the panel (the PropertiesPanel has no
+        // chrome of its own — it was designed as a dock)
+        Rectangle {
+            anchors.top: parent.top
+            anchors.right: parent.right
+            width: 26
+            height: 26
+            radius: 13
+            color: closeMa.containsMouse ? theme.tokens.surface2
+                                         : "transparent"
+            z: 2
+            Text {
+                anchors.centerIn: parent
+                text: "✕"
+                font.pixelSize: 12
+                color: theme.tokens.textMuted
+            }
+            MouseArea {
+                id: closeMa
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onClicked: entityInspector.visible = false
+            }
         }
     }
 
@@ -1058,6 +1123,34 @@ ApplicationWindow {
         if (name === "fonts-css") {
             root.pane = 1
             fontsPane.openExportCss()
+            return
+        }
+        if (name === "entity") {
+            // first project (or library) in the DB → its inspector
+            root.pane = 4
+            var rows = projects !== null ? projects.projects : []
+            if (rows.length > 0) {
+                root.openEntityInspector("project", rows[0].id)
+                entityProps.activeTab = 2
+            }
+            return
+        }
+        if (name === "entity-license") {
+            root.pane = 4
+            var rowsL = projects !== null ? projects.projects : []
+            if (rowsL.length > 0) {
+                root.openEntityInspector("project", rowsL[0].id)
+                entityProps.activeTab = 3
+            }
+            return
+        }
+        if (name === "entity-sources") {
+            root.pane = 4
+            var rowsS = projects !== null ? projects.projects : []
+            if (rowsS.length > 0) {
+                root.openEntityInspector("project", rowsS[0].id)
+                entityProps.activeTab = 4
+            }
             return
         }
         if (name === "menu") {

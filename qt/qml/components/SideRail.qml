@@ -12,6 +12,8 @@ Rectangle {
     // per pane); Main owns the state
     property int pane: 0
     signal panePicked(int idx)
+    // a library row asked for its inspector (Main hosts the overlay)
+    signal entityProperties(string kind, int id)
 
     // CONTEXT-SPECIFIC RAIL — the rail's contents follow the active pane:
     // icon-only sections (themes / contexts / types / tags / add-folder)
@@ -786,12 +788,13 @@ Rectangle {
                 }
             }
 
-            // saved libraries (tag sets) — Icons pane: they resolve to asset
-            // views; clicking one activates the multi-tag filter
+            // saved libraries (tag sets) — shown on every pane with an
+            // asset kind; rows appear when the view matches assets of
+            // THE ACTIVE PANE'S kind (pane separation, per-kind counts)
             SectionHeader {
                 label: qsTr("Libraries")
                 sectionKey: "libraries"
-                visible: rail.showIconSections }
+                visible: rail.paneKind !== "" }
             Repeater {
                 model: taxonomy !== null
                        && rail.sectOpen.libraries !== false
@@ -799,15 +802,42 @@ Rectangle {
                 RailItem {
                     id: libRow
                     required property var modelData
-                    visible: rail.showIconSections
+                    visible: rail.paneKind !== ""
+                             && (rail.pane === 0
+                                 || (modelData.counts
+                                     && modelData.counts[rail.paneKind] > 0))
                     label: libRow.modelData.name
-                    count: String(libRow.modelData.n)
+                    count: String(rail.pane === 0
+                                  ? libRow.modelData.n
+                                  : (libRow.modelData.counts
+                                     ? (libRow.modelData.counts[rail.paneKind]
+                                        || 0) : 0))
                     accent: theme.tokens.accent
-                    active: library !== null
-                            && library.activeLibraryView
-                               === String(libRow.modelData.id)
-                    onPicked: library !== null && library.set_library_view(
-                        String(libRow.modelData.id))
+                    active: rail.pane === 0
+                            ? (library !== null
+                               && library.activeLibraryView
+                               === String(libRow.modelData.id))
+                            : (rail.pane === 2
+                               ? colors !== null
+                                 && colors.libraryTagFilter
+                                    === String(libRow.modelData.tags || "")
+                               : code !== null
+                                 && code.libraryTagFilter
+                                    === String(libRow.modelData.tags || ""))
+                    onPicked: {
+                        if (rail.pane === 0 && library !== null) {
+                            library.set_library_view(
+                                String(libRow.modelData.id))
+                            return
+                        }
+                        // panes 2/3: the view's tag set filters the pane
+                        var tags = String(libRow.modelData.tags || "")
+                        var all = libRow.modelData.match_all === 1
+                        if (rail.pane === 2 && colors !== null)
+                            colors.set_library_tags(tags, all)
+                        else if (rail.pane === 3 && code !== null)
+                            code.set_library_tags(tags, all)
+                    }
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.RightButton
@@ -822,7 +852,7 @@ Rectangle {
             // "+ new library" row — the add/configure affordance for the
             // section (creates and later edits via right-click)
             Rectangle {
-                visible: rail.showIconSections
+                visible: rail.paneKind !== ""
                          && rail.sectOpen.libraries !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: 8
@@ -864,19 +894,50 @@ Rectangle {
             SectionHeader {
                 label: qsTr("Tags")
                 sectionKey: "tags"
-                visible: rail.showIconSections }
+                visible: rail.paneKind !== "" }
             Repeater {
                 model: library !== null && rail.sectOpen.tags !== false
                        ? library.tags : []
                 RailItem {
                     id: tagRow
-                    visible: rail.showIconSections
+                    // per-pane tagonomy: a tag shows when entities of the
+                    // ACTIVE pane's kind carry it (counts per kind)
+                    visible: rail.paneKind !== ""
+                             && (rail.pane === 0
+                                 || (tagRow.modelData.counts
+                                     && tagRow.modelData.counts[rail.paneKind]
+                                     > 0))
                     required property var modelData
                     label: "#" + modelData.name
-                    count: String(modelData.n)
-                    active: library !== null && library.tagFilter === modelData.name
-                    onPicked: library.set_tag(
-                        library.tagFilter === modelData.name ? "" : modelData.name)
+                    count: String(rail.pane === 0
+                                  ? modelData.n
+                                  : (modelData.counts
+                                     ? (modelData.counts[rail.paneKind] || 0)
+                                     : 0))
+                    active: rail.pane === 0
+                            ? (library !== null
+                               && library.tagFilter === modelData.name)
+                            : (rail.pane === 2
+                               ? colors !== null
+                                 && colors.libraryTagFilter === modelData.name
+                               : code !== null
+                                 && code.libraryTagFilter === modelData.name)
+                    onPicked: {
+                        if (rail.pane === 0 && library !== null) {
+                            library.set_tag(
+                                library.tagFilter === modelData.name
+                                ? "" : modelData.name)
+                            return
+                        }
+                        if (rail.pane === 2 && colors !== null)
+                            colors.set_library_tags(
+                                colors.libraryTagFilter === modelData.name
+                                ? "" : modelData.name, false)
+                        else if (rail.pane === 3 && code !== null)
+                            code.set_library_tags(
+                                code.libraryTagFilter === modelData.name
+                                ? "" : modelData.name, false)
+                    }
                     MouseArea {
                         anchors.fill: parent
                         acceptedButtons: Qt.RightButton
@@ -889,7 +950,7 @@ Rectangle {
                 }
             }
             Text {
-                visible: rail.showIconSections
+                visible: rail.pane === 0
                          && rail.sectOpen.tags !== false
                 Layout.fillWidth: true
                 Layout.leftMargin: 14
@@ -923,6 +984,13 @@ Rectangle {
                         libDialog.stashAll = libMenu.target.match_all === 1
                         libDialog.open()
                     }
+                }
+                FgMenuItem {
+                    text: qsTr("Properties")
+                    height: 28
+                    enabled: libMenu.target !== null
+                    onTriggered: rail.entityProperties(
+                        "library", libMenu.target.id)
                 }
                 FgMenuItem {
                     text: qsTr("Delete library")

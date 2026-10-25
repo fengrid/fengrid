@@ -920,11 +920,18 @@ class Library(QObject):
             "SELECT ext, COUNT(*) FROM asset"
             " WHERE kind = 'icon' AND ext IS NOT NULL"
             " GROUP BY ext ORDER BY ext")]
-        tags = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT t.name,"
-            " (SELECT COUNT(*) FROM item_tag it"
-            "  WHERE it.tag_id = t.id AND it.item_kind = 'icon') AS n"
-            " FROM tag t GROUP BY t.id ORDER BY t.name")]
+        tags = []
+        kind_counts: dict[str, dict] = {}
+        for r in con.execute(
+                "SELECT t.name, it.item_kind, COUNT(*) AS n"
+                " FROM tag t JOIN item_tag it ON it.tag_id = t.id"
+                " GROUP BY t.id, it.item_kind ORDER BY t.name"):
+            kind_counts.setdefault(r["name"], {})[r["item_kind"]] = r["n"]
+        # name order preserved from the GROUP BY; n stays the ICON count
+        # (the icon rail's long-standing display), counts adds per-kind
+        for name in kind_counts:
+            tags.append({"name": name, "n": kind_counts[name].get("icon", 0),
+                         "counts": kind_counts[name]})
         # collections v2: tree order + per-kind counts from collection_ref
         counts: dict[int, dict] = {}
         for r in con.execute(

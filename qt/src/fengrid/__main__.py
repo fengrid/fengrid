@@ -278,7 +278,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("dataio", dataio_bridge)
     # non-empty when startup fell back (missing active database)
     ctx.setContextProperty("startupNotice", startup_notice)
-    taxonomy_bridge = Taxonomy(con)
+    taxonomy_bridge = Taxonomy(con, data_dir)
     ctx.setContextProperty("taxonomy", taxonomy_bridge)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the

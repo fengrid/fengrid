@@ -464,3 +464,54 @@ def links_for(con: sqlite3.Connection, kind: str, item_id: int,
                         "role": r["role"],
                         "label": _label_for(con, r["from_kind"], r["from_id"])})
     return out
+
+
+# ---------------------------------------------------------------- tags as
+# cross-type taxonomy — entities of one kind surfaced through the tags of
+# another (the Properties panel's "Related by tag" section)
+_RELATED_KINDS = ("icon", "font", "snippet", "palette", "project", "library")
+
+_RELATED_NAME_SQL = {
+    "icon": "SELECT name FROM asset WHERE id = ?",
+    "font": "SELECT name FROM asset WHERE id = ?",
+    "snippet": "SELECT title FROM snippet WHERE id = ?",
+    "palette": "SELECT name FROM palette WHERE id = ?",
+    "project": "SELECT name FROM projects WHERE id = ?",
+    "library": "SELECT name FROM library_view WHERE id = ?",
+}
+
+
+def related_by_tags(con: sqlite3.Connection, kind: str,
+                    item_id: int) -> list[dict]:
+    """Entities of OTHER kinds sharing at least one tag with (kind,
+    item_id), each with the list of shared tag names. Tags are the
+    taxonomic link fabric between asset types."""
+    own = [r["name"] for r in con.execute(
+        "SELECT t.name FROM tag t JOIN item_tag it"
+        " ON it.tag_id = t.id WHERE it.item_kind = ? AND it.item_id = ?"
+        " ORDER BY t.name", (kind, item_id))]
+    if not own:
+        return []
+    marks = ",".join("?" * len(own))
+    out = []
+    for other in _RELATED_KINDS:
+        if other == kind:
+            continue
+        ids = [r["item_id"] for r in con.execute(
+            "SELECT DISTINCT it.item_id FROM item_tag it"
+            " JOIN tag t ON t.id = it.tag_id"
+            f" WHERE it.item_kind = '{other}' AND t.name IN ({marks})",
+            own)]
+        for oid in ids:
+            row = con.execute(_RELATED_NAME_SQL[other], (oid,)).fetchone()
+            name = row[0] if row else ""
+            if not name:
+                continue
+            shared = [t for t in own if con.execute(
+                "SELECT 1 FROM item_tag it JOIN tag t ON t.id = it.tag_id"
+                " WHERE it.item_kind = ? AND it.item_id = ? AND t.name = ?",
+                (other, oid, t)).fetchone()]
+            out.append({"kind": other, "id": oid, "name": name,
+                        "shared": shared})
+    out.sort(key=lambda r: (-len(r["shared"]), r["kind"], r["name"].lower()))
+    return out

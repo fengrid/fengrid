@@ -12,6 +12,9 @@ import "."
 Item {
     id: projectsRoot
 
+    // a project row asked for its inspector (Main hosts the overlay)
+    signal entityProperties(string kind, int id)
+
     // local editable mirror of the current project's settings; written
     // through on every edit via projects.set_setting()
     property var st: ({})
@@ -280,6 +283,14 @@ Item {
                         height: 28
                         onTriggered: projects !== null && projects.open(
                             projList.currentItem ? projList.currentItem.row.id : -1)
+                    }
+                    FgMenuItem {
+                        text: qsTr("Properties")
+                        height: 28
+                        onTriggered: projectsRoot.entityProperties(
+                            "project",
+                            projList.currentItem
+                            ? projList.currentItem.row.id : -1)
                     }
                     FgMenuItem {
                         text: qsTr("Export…")

@@ -20,6 +20,16 @@ Rectangle {
     property int itemId: -1
     property var props: null
     property int activeTab: 0
+    // Projects and saved Libraries carry their own repo tree — the
+    // Docs / License / Sources tabs exist only for them
+    readonly property bool isEntity: itemKind === "project"
+                                     || itemKind === "library"
+    property var related: []          // cross-kind tag neighbours
+    property var srcSum: null         // Sources tab snapshot
+    function refreshSources() {
+        srcSum = (taxonomy !== null && isEntity && itemId >= 0)
+                 ? taxonomy.git_summary(itemKind, itemId) : null
+    }
     // fonts default to Details (the specimen is the money view — this
     // preserves the old click-opens-details behavior); others to Info
     function defaultTab() { return itemKind === "font" ? 1 : 0 }
@@ -35,10 +45,14 @@ Rectangle {
         activeTab = defaultTab()
     }
     visible: itemId >= 0
+    Component.onCompleted: reload()
 
     function reload() {
         props = (taxonomy !== null && itemId >= 0)
                 ? taxonomy.item_properties(itemKind, itemId) : null
+        related = (taxonomy !== null && itemId >= 0)
+                  ? taxonomy.related_by_tags(itemKind, itemId) : []
+        refreshSources()
     }
 
     // 100..900 CSS weights → Qt font weights
@@ -56,6 +70,7 @@ Rectangle {
         target: taxonomy
         function onFieldsChanged() { panel.reload() }
         function onLinksChanged() { panel.reload() }
+        function onGitUpdated() { panel.refreshSources() }
     }
 
     component SectionHeader: Text {
@@ -76,7 +91,9 @@ Rectangle {
         hoverEnabled: true
         HoverHandler { cursorShape: Qt.PointingHandCursor }
         onClicked: panel.activeTab = tabIdx
-        implicitWidth: ptabLabel.implicitWidth + 24
+        // tighter padding so five tabs (entity kinds) fit a 300px dock
+        implicitWidth: ptabLabel.implicitWidth
+                       + (panel.isEntity ? 12 : 24)
         implicitHeight: 26
 
         background: Rectangle {
@@ -131,6 +148,18 @@ Rectangle {
             spacing: 2
             PanelTab { label: qsTr("Info"); tabIdx: 0 }
             PanelTab { label: qsTr("Details"); tabIdx: 1 }
+            PanelTab {
+                label: qsTr("Docs"); tabIdx: 2
+                visible: panel.isEntity
+            }
+            PanelTab {
+                label: qsTr("License"); tabIdx: 3
+                visible: panel.isEntity
+            }
+            PanelTab {
+                label: qsTr("Sources"); tabIdx: 4
+                visible: panel.isEntity
+            }
             Item { Layout.fillWidth: true }
         }
         Rectangle {
@@ -454,6 +483,54 @@ Rectangle {
                         wrapMode: Text.Wrap
                     }
 
+                    // -------------------------------- RELATED BY TAG
+                    // taxonomic links across asset types: entities of
+                    // OTHER kinds carrying at least one of this item's
+                    // tags (tags are the cross-kind link fabric)
+                    SectionHeader {
+                        text: qsTr("Related by tag")
+                        visible: panel.related.length > 0
+                    }
+                    Repeater {
+                        model: panel.related
+                        delegate: RowLayout {
+                            required property var modelData
+                            width: panel.width - 24
+                            spacing: 6
+                            Rectangle {
+                                width: Math.min(kindLbl.implicitWidth + 16, 64)
+                                height: 18
+                                radius: 4
+                                color: theme.tokens.surface2
+                                Text {
+                                    id: kindLbl
+                                    anchors.centerIn: parent
+                                    text: modelData.kind
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 9
+                                    font.capitalization: Font.AllUppercase
+                                    color: theme.tokens.accent
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.name
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: modelData.shared.join(" ")
+                                font.family: theme.monoFont
+                                font.pixelSize: 9
+                                color: theme.tokens.textMuted
+                                elide: Text.ElideRight
+                                Layout.maximumWidth: 110
+                            }
+                        }
+                    }
+
                     Item { Layout.fillHeight: true
                            Layout.minimumHeight: 12 }
                 }
@@ -468,6 +545,385 @@ Rectangle {
                                    ? paletteDetailPage
                                    : panel.itemKind === "icon"
                                      ? iconDetailPage : snippetDetailPage
+            }
+
+            // ================================================ DOCS PAGE
+            // (project / library kinds only) — renders the entity's
+            // README.md straight out of its repository tree
+            Flickable {
+                contentHeight: docsCol.implicitHeight + 24
+                clip: true
+                ScrollBar.vertical: ScrollBar { }
+
+                ColumnLayout {
+                    id: docsCol
+                    width: panel.width - 24
+                    x: 12
+                    spacing: 8
+
+                    Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !panel.props
+                                 || !panel.props.meta.readme
+                                 || !panel.props.meta.readme.exists
+                        text: qsTr("No README.md in this repository yet."
+                                   + " Add one to the repository folder and"
+                                   + " it will show up here — it is the"
+                                   + " Documentation tab's source.")
+                        font.family: theme.uiFont
+                        font.pixelSize: 11
+                        color: theme.tokens.textMuted
+                        wrapMode: Text.Wrap
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: panel.props && panel.props.meta.readme
+                                 && panel.props.meta.readme.path !== ""
+                        text: panel.props && panel.props.meta.readme
+                              ? panel.props.meta.readme.path : ""
+                        font.family: theme.monoFont
+                        font.pixelSize: 9
+                        color: theme.tokens.textMuted
+                        elide: Text.ElideMiddle
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: panel.props && panel.props.meta.readme
+                                 && panel.props.meta.readme.exists
+                        text: panel.props && panel.props.meta.readme
+                              ? panel.props.meta.readme.text : ""
+                        font.family: theme.monoFont
+                        font.pixelSize: 11
+                        color: theme.tokens.text
+                        wrapMode: Text.WrapAnywhere
+                        textFormat: Text.PlainText
+                    }
+                    Item { Layout.fillHeight: true
+                           Layout.minimumHeight: 12 }
+                }
+            }
+
+            // ============================================== LICENSE PAGE
+            Flickable {
+                contentHeight: licCol.implicitHeight + 24
+                clip: true
+                ScrollBar.vertical: ScrollBar { }
+
+                ColumnLayout {
+                    id: licCol
+                    width: panel.width - 24
+                    x: 12
+                    spacing: 8
+
+                    Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !panel.props
+                                 || !panel.props.meta.license
+                                 || !panel.props.meta.license.exists
+                        text: qsTr("No LICENSE file in this repository."
+                                   + " Drop a LICENSE.md into the repository"
+                                   + " folder — standard open-source licenses"
+                                   + " are recognized and summarized here.")
+                        font.family: theme.uiFont
+                        font.pixelSize: 11
+                        color: theme.tokens.textMuted
+                        wrapMode: Text.Wrap
+                    }
+
+                    // recognized standard license → summarized terms
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        visible: panel.props && panel.props.meta.license
+                                 && panel.props.meta.license.exists
+                                 && panel.props.meta.license.standard
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: panel.props && panel.props.meta.license
+                                  && panel.props.meta.license.standard
+                                  ? panel.props.meta.license.standard.name : ""
+                            font.family: theme.headingFont
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                            color: theme.tokens.text
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: panel.props && panel.props.meta.license
+                                  && panel.props.meta.license.standard
+                                  ? panel.props.meta.license.standard.spdx
+                                    + "  ·  " + "full text: "
+                                    + panel.props.meta.license.standard.url
+                                  : ""
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.accent
+                        }
+                        Repeater {
+                            model: panel.props && panel.props.meta.license
+                                   && panel.props.meta.license.standard
+                                   ? panel.props.meta.license.standard.permissions : []
+                            Text {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                text: "✓ " + modelData
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                            }
+                        }
+                        Repeater {
+                            model: panel.props && panel.props.meta.license
+                                   && panel.props.meta.license.standard
+                                   ? panel.props.meta.license.standard.conditions : []
+                            Text {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                text: "• " + modelData
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                            }
+                        }
+                        Repeater {
+                            model: panel.props && panel.props.meta.license
+                                   && panel.props.meta.license.standard
+                                   ? panel.props.meta.license.standard.limitations : []
+                            Text {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                text: "✕ " + modelData
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.textMuted
+                            }
+                        }
+                    }
+
+                    // the actual file: path, open, and a raw-text preview
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: panel.props && panel.props.meta.license
+                                 && panel.props.meta.license.exists
+                        spacing: 8
+                        Text {
+                            Layout.fillWidth: true
+                            text: panel.props && panel.props.meta.license
+                                  ? panel.props.meta.license.path : ""
+                            font.family: theme.monoFont
+                            font.pixelSize: 9
+                            color: theme.tokens.textMuted
+                            elide: Text.ElideMiddle
+                        }
+                        Button {
+                            text: qsTr("Open file")
+                            onClicked: {
+                                if (panel.props && panel.props.meta.license
+                                        && panel.props.meta.license.path)
+                                    Qt.openUrlExternally(
+                                        "file://" + panel.props.meta.license.path)
+                            }
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: panel.props && panel.props.meta.license
+                                 && panel.props.meta.license.exists
+                                 && !panel.props.meta.license.standard
+                        text: qsTr("Non-standard license — read the full"
+                                   + " text before redistributing.")
+                        font.family: theme.uiFont
+                        font.pixelSize: 11
+                        color: theme.tokens.text
+                        wrapMode: Text.Wrap
+                    }
+                    Item { Layout.fillHeight: true
+                           Layout.minimumHeight: 12 }
+                }
+            }
+
+            // ============================================= SOURCES PAGE
+            Flickable {
+                contentHeight: srcCol.implicitHeight + 24
+                clip: true
+                ScrollBar.vertical: ScrollBar { }
+
+                ColumnLayout {
+                    id: srcCol
+                    width: panel.width - 24
+                    x: 12
+                    spacing: 8
+
+                    Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !panel.srcSum || !panel.srcSum.exists
+                        text: qsTr("No git repository for this item yet —"
+                                   + " initialize one to track changes,"
+                                   + " commit snapshots and sync with a"
+                                   + " remote.")
+                        font.family: theme.uiFont
+                        font.pixelSize: 11
+                        color: theme.tokens.textMuted
+                        wrapMode: Text.Wrap
+                    }
+                    Button {
+                        visible: panel.srcSum && !panel.srcSum.exists
+                        text: qsTr("Initialize repository")
+                        onClicked: taxonomy.git_init(panel.itemKind,
+                                                     panel.itemId)
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        visible: panel.srcSum && panel.srcSum.exists
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: ((panel.srcSum && panel.srcSum.branch
+                                    ? "#" + panel.srcSum.branch
+                                    : "no branch"))
+                                  + (panel.srcSum && panel.srcSum.clean
+                                     ? "  ·  clean" : "  ·  changes pending")
+                            font.family: theme.monoFont
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+                            color: theme.tokens.text
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: panel.srcSum && panel.srcSum.remote !== ""
+                            text: (panel.srcSum ? panel.srcSum.remote : "")
+                                  || ""
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.textMuted
+                            elide: Text.ElideMiddle
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: ((panel.srcSum && panel.srcSum.staged)
+                                   ? panel.srcSum.staged.length : 0)
+                                  + " staged · "
+                                  + ((panel.srcSum && panel.srcSum.unstaged)
+                                     ? panel.srcSum.unstaged.length : 0)
+                                  + " unstaged · "
+                                  + ((panel.srcSum && panel.srcSum.untracked)
+                                     ? panel.srcSum.untracked.length : 0)
+                                  + " untracked"
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.textMuted
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: panel.srcSum
+                                     && !!panel.srcSum.last_commit
+                            text: panel.srcSum && panel.srcSum.last_commit
+                                  ? panel.srcSum.last_commit.sha.slice(0, 10)
+                                    + "  " + panel.srcSum.last_commit.subject
+                                  : ""
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.text
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: (panel.srcSum ? panel.srcSum.path : "") || ""
+                            font.family: theme.monoFont
+                            font.pixelSize: 9
+                            color: theme.tokens.textMuted
+                            elide: Text.ElideMiddle
+                        }
+                    }
+
+                    TextField {
+                        id: srcMsg
+                        Layout.fillWidth: true
+                        visible: panel.srcSum && panel.srcSum.exists
+                        placeholderText: qsTr("commit message…")
+                        font.family: theme.uiFont
+                        font.pixelSize: 11
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        visible: panel.srcSum && panel.srcSum.exists
+                        spacing: 6
+                        Button {
+                            text: qsTr("Commit")
+                            enabled: srcMsg.text.trim() !== ""
+                            onClicked: {
+                                taxonomy.git_commit(panel.itemKind,
+                                                    panel.itemId,
+                                                    srcMsg.text)
+                                srcMsg.text = ""
+                            }
+                        }
+                        Button {
+                            text: qsTr("Push")
+                            onClicked: taxonomy.git_push(panel.itemKind,
+                                                         panel.itemId)
+                        }
+                        Button {
+                            text: qsTr("Pull")
+                            onClicked: taxonomy.git_pull(panel.itemKind,
+                                                         panel.itemId)
+                        }
+                        Button {
+                            text: qsTr("Save & Push")
+                            enabled: srcMsg.text.trim() !== ""
+                            onClicked: {
+                                taxonomy.git_commit_push(panel.itemKind,
+                                                         panel.itemId,
+                                                         srcMsg.text, true)
+                                srcMsg.text = ""
+                            }
+                        }
+                        Button {
+                            id: discardBtn
+                            property bool armed: false
+                            text: qsTr("Discard changes")
+                            enabled: panel.srcSum && panel.srcSum.exists
+                                     && !panel.srcSum.clean
+                            onClicked: {
+                                if (!armed) {
+                                    armed = true
+                                    discardTimer.restart()
+                                    return
+                                }
+                                armed = false
+                                taxonomy.git_discard(panel.itemKind,
+                                                     panel.itemId)
+                            }
+                            Timer {
+                                id: discardTimer
+                                interval: 3000
+                                onTriggered: discardBtn.armed = false
+                            }
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: panel.srcSum && panel.srcSum.exists
+                        text: qsTr("Command line: git -C “"
+                                   + (panel.srcSum ? panel.srcSum.path : "")
+                                   + "” status | log | diff")
+                        font.family: theme.monoFont
+                        font.pixelSize: 9
+                        color: theme.tokens.textMuted
+                        wrapMode: Text.WrapAnywhere
+                    }
+                    Item { Layout.fillHeight: true
+                           Layout.minimumHeight: 12 }
+                }
             }
         }
     }

@@ -238,6 +238,12 @@ class Taxonomy(QObject):
     def is_starred(self, kind: str, item_id: int) -> bool:
         return core_db.is_starred(self._con, item_id, kind)
 
+    @Slot(str, int, result="QVariantList")
+    def related_by_tags(self, kind: str, item_id: int) -> list:
+        """Entities of OTHER kinds sharing ≥1 tag with this item — the
+        inspector's cross-type taxonomy section."""
+        return core_tax.related_by_tags(self._con, kind, int(item_id))
+
     @Slot(str, int, str, result=bool)
     def set_slug(self, kind: str, item_id: int, slug: str) -> bool:
         """Set an object's [[ slug ]] link name (globally unique)."""
@@ -538,8 +544,11 @@ class Taxonomy(QObject):
             # panel.props.meta.<key>.<field>, which throws on a partial
             # payload ("Value is undefined…", frozen-build terminal
             # flood). Shape the null case like a real payload.
+            meta = {}
+            if kind in ("project", "library"):
+                meta = self._entity_meta(kind, item_id)
             return {"kind": kind, "id": item_id, "tags": [], "fields": [],
-                    "links": [], "meta": {}, "starred": False}
+                    "links": [], "meta": meta, "starred": False}
         tags = core_db.tags_for(self._con, item_id, kind)
         fields = core_tax.asset_field_values(self._con, item_id, kind)
         links = core_tax.links_for(self._con, kind, item_id, "both")
