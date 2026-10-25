@@ -29,12 +29,38 @@ from . import kinds as core_kinds
 from . import scanner
 
 try:
-    # hardened parser when available (entity-expansion hardening); the files
-    # parsed here are user-indexed local SVGs, so the stdlib fallback is
-    # acceptable but not preferred
+    # hardened parser when available (entity-expansion hardening)
     from defusedxml import ElementTree as SafeET
+    _HAVE_DEFUSEDXML = True
 except ImportError:
     import xml.etree.ElementTree as SafeET  # type: ignore[no-redef]
+    _HAVE_DEFUSEDXML = False
+
+# SEC-4: without defusedxml the stdlib parser is vulnerable to entity
+# expansion ("billion laughs") — a 4 MB SVG can expand to gigabytes of
+# RAM. Fail secure: when the hardened parser is missing, SVGs carrying
+# a DOCTYPE/entity declaration are not parsed at all (dimensions come
+# back null; the row still indexes).
+_SAFE_SVG_MAX_BYTES = 4 * 1024 * 1024
+
+
+def _svg_parse_safe(path: str):
+    """Parse an SVG only when the parser guarantees entity safety."""
+    if os.path.getsize(path) > _SAFE_SVG_MAX_BYTES:
+        return None
+    if not _HAVE_DEFUSEDXML:
+        try:
+            with open(path, "rb") as fh:
+                head = fh.read(4096).decode("utf-8", errors="ignore")
+        except OSError:
+            return None
+        low = head.lower()
+        if "<!doctype" in low or "<!entity" in low:
+            return None
+    try:
+        return SafeET.parse(path).getroot()
+    except Exception:                          # noqa: BLE001
+        return None
 
 try:
     from PIL import Image
@@ -68,26 +94,27 @@ def identify(path: str) -> dict[str, Any]:
         # dims from the SVG root (width/height attrs, then viewBox)
         try:
             if info["bytes"] <= _MAX_SVG_PARSE_BYTES:
-                root = SafeET.parse(path).getroot()
-                viewbox = root.get("viewBox", "")
-                w = h = None
-                for attr in ("width", "height"):
-                    raw = (root.get(attr) or "").strip()
-                    try:
-                        val = float(raw.rstrip("px"))
-                        if attr == "width":
-                            w = val
-                        else:
-                            h = val
-                    except (ValueError, TypeError):
-                        pass
-                if (w is None or h is None) and len(viewbox.split()) == 4:
-                    vb = viewbox.split()
-                    w, h = float(vb[2]), float(vb[3])
-                if w is not None:
-                    info["width"] = int(w)
-                if h is not None:
-                    info["height"] = int(h)
+                root = _svg_parse_safe(path)
+                if root is not None:
+                    viewbox = root.get("viewBox", "")
+                    w = h = None
+                    for attr in ("width", "height"):
+                        raw = (root.get(attr) or "").strip()
+                        try:
+                            val = float(raw.rstrip("px"))
+                            if attr == "width":
+                                w = val
+                            else:
+                                h = val
+                        except (ValueError, TypeError):
+                            pass
+                    if (w is None or h is None) and len(viewbox.split()) == 4:
+                        vb = viewbox.split()
+                        w, h = float(vb[2]), float(vb[3])
+                    if w is not None:
+                        info["width"] = int(w)
+                    if h is not None:
+                        info["height"] = int(h)
         except Exception:
             pass
         return info
@@ -103,6 +130,12 @@ def identify(path: str) -> dict[str, Any]:
             info["colorspace"] = im.mode
             if im.mode in ("1", "L", "LA"):
                 info["mono"] = 1
+            # SEC-3: a tiny file can claim a 100000x100000 header;
+            # convert("RGB") would allocate ~30 GB BEFORE any cap
+            # applied. Check the declared dimensions first and skip
+            # colour counting entirely for absurd rasters.
+            elif (im.width or 0) * (im.height or 0) > 256 * 1024 * 1024:
+                info["mono"] = 0          # cannot verify: assume colour
             else:
                 small = im.convert("RGB")
                 if small.width * small.height > 4096 * 4096:

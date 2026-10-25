@@ -245,10 +245,19 @@ class Code(QObject):
     @Slot(str, str, str, result=str)
     def fiddle_doc(self, html: str, css: str, js: str) -> str:
         """The Run ▸ preview document with asset references expanded in
-        all three fiddle panes."""
+        all three fiddle panes. Expanded asset paths (legal filesystem
+        characters) are context-escaped so they can never break out of
+        the <style>/<script> elements (SEC-1): `</script` and
+        `</style` in the expanded payload would close the element and
+        inject arbitrary markup into the preview document."""
         exp_html, _u1 = core_assetrefs.expand(self._con, html or "")
         exp_css, _u2 = core_assetrefs.expand(self._con, css or "")
         exp_js, _u3 = core_assetrefs.expand(self._con, js or "")
+        # "\/" is identical to "/" inside JS/CSS string literals, so
+        # legitimate content is unaffected; breakout sequences are
+        # neutralized
+        exp_js = exp_js.replace("</script", "<\\/script")
+        exp_css = exp_css.replace("</style", "<\\/style")
         return ("<!DOCTYPE html><html><head><style>" + exp_css
                 + "</style></head><body>" + exp_html
                 + "<script>" + exp_js + "</" + "script></body></html>")

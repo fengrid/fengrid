@@ -449,17 +449,30 @@ def delete_snippet(con, sid) -> None:
 # the frozen bundle.
 # --------------------------------------------------------------------------
 def _md_inline(text: str) -> str:
-    """Inline markdown: code, bold, italic, strike, links, images."""
-    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    """Inline markdown: code, bold, italic, strike, links, images.
+    URLs and display text are HTML-escaped before attribute/frame
+    interpolation — a crafted URL (e.g. `http://x"><script>`) must
+    never break out of src/href (SEC-2)."""
+    esc = (lambda s: s.replace("&", "&amp;").replace('"', "&quot;")
+           .replace("<", "&lt;").replace(">", "&gt;"))
+    text = re.sub(r"`([^`]+)`", lambda m: "<code>" + esc(m.group(1))
+                  + "</code>", text)
     text = re.sub(r"!\[([^\]]*)\]\(([^)\s]+)\)",
-                  r'<img src="\2" alt="\1">', text)
+                  lambda m: '<img src="' + esc(m.group(2))
+                  + '" alt="' + esc(m.group(1)) + '">', text)
     text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)",
-                  r'<a href="\2">\1</a>', text)
-    text = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", text)
-    text = re.sub(r"__([^_]+)__", r"<strong>\1</strong>", text)
-    text = re.sub(r"(?<!\*)\*([^*\s][^*]*)\*(?!\*)", r"<em>\1</em>", text)
-    text = re.sub(r"_([^_\s][^_]*)_(?!\w)", r"<em>\1</em>", text)
-    text = re.sub(r"~~([^~]+)~~", r"<del>\1</del>", text)
+                  lambda m: '<a href="' + esc(m.group(2)) + '">'
+                  + esc(m.group(1)) + "</a>", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", lambda m: "<strong>"
+                  + esc(m.group(1)) + "</strong>", text)
+    text = re.sub(r"__([^_]+)__", lambda m: "<strong>"
+                  + esc(m.group(1)) + "</strong>", text)
+    text = re.sub(r"(?<!\*)\*([^*\s][^*]*)\*(?!\*)", lambda m: "<em>"
+                  + esc(m.group(1)) + "</em>", text)
+    text = re.sub(r"_([^_\s][^_]*)_(?!\w)", lambda m: "<em>"
+                  + esc(m.group(1)) + "</em>", text)
+    text = re.sub(r"~~([^~]+)~~", lambda m: "<del>"
+                  + esc(m.group(1)) + "</del>", text)
     return text
 
 

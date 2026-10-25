@@ -7,6 +7,7 @@ a JSON dict per project, and exports go through core.projects.export_project.
 
 from __future__ import annotations
 
+import html as _html_mod
 import json
 import os
 import shutil
@@ -341,7 +342,13 @@ class Projects(QObject):
         html = core_projects.build_site_html(self._con, self._current, g,
                                              inline_css=True)
         for a, (arcname, abspath) in g["icons"] + g["fonts"]:
-            html = html.replace(arcname, "fengrid-asset://" + abspath)
+            # SEC-2: the path lands inside HTML attribute values in the
+            # preview document — escape it so a crafted path cannot
+            # break out of the attribute (the DOM decodes entities
+            # before resolving the URL, so the scheme handler still
+            # receives the raw path)
+            html = html.replace(arcname, "fengrid-asset://"
+                                + _html_mod.escape(abspath, quote=True))
         # [[ asset ]] references (slug / GUID / path forms) expand to
         # fengrid-asset:// urls the sandboxed preview can serve
         expanded, _unresolved = core_assetrefs.expand(self._con, html)
