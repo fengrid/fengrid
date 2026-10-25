@@ -8,6 +8,28 @@ Item {
     property int iconPx: 32
     property alias currentIndex: grid.currentIndex
     property alias count: grid.count
+    // multi-select: checkbox click, Ctrl-click toggle, Shift-click range;
+    // empty checkboxes show ONLY on hover of a preview — once any box is
+    // checked, every checkbox stays visible (bulk-selection affordance)
+    property var selectedIds: []
+    readonly property bool anySelected: selectedIds.length > 0
+    function toggleSelect(id) {
+        var next = []
+        for (var i = 0; i < selectedIds.length; i++)
+            if (selectedIds[i] !== id)
+                next.push(selectedIds[i])
+        if (next.length === selectedIds.length)
+            next.push(id)
+        selectedIds = next
+    }
+    function isSelected(id) {
+        return selectedIds.indexOf(id) >= 0
+    }
+    Connections {
+        target: library
+        function onModelReset() { gridRoot.selectedIds = [] }
+        function onListsChanged() { gridRoot.selectedIds = [] }
+    }
 
     GridView {
         id: grid
@@ -39,6 +61,38 @@ Item {
                               : (cardMa.containsMouse ? theme.tokens.accent
                                                       : theme.tokens.border)
                 border.width: grid.currentIndex === index ? 2 : 1
+
+                // selection checkbox — empty boxes hover-only; once ANY
+                // box is checked every checkbox is visible everywhere
+                Rectangle {
+                    id: selBox
+                    width: 16
+                    height: 16
+                    radius: 4
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.margins: 5
+                    visible: cardMa.containsMouse || gridRoot.anySelected
+                    color: gridRoot.isSelected(model.id)
+                           ? theme.tokens.accent : theme.tokens.surface
+                    border.color: gridRoot.isSelected(model.id)
+                                  ? theme.tokens.accent
+                                  : theme.tokens.textMuted
+                    border.width: 1
+                    z: 3
+                    IconImage {
+                        anchors.centerIn: parent
+                        name: "check"
+                        px: 10
+                        tint: theme.tokens.bg
+                        visible: gridRoot.isSelected(model.id)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: gridRoot.toggleSelect(model.id)
+                    }
+                }
 
                 Image {
                     id: thumb
@@ -102,8 +156,34 @@ Item {
                         // right-click opens the menu for the CURRENT
                         // selection without moving it
                         if (mouse.button === Qt.LeftButton) {
-                            grid.currentIndex = index
+                            if (mouse.modifiers & (Qt.ControlModifier
+                                                   | Qt.ShiftModifier)) {
+                                var start = grid.currentIndex >= 0
+                                            ? grid.currentIndex : index
+                                if (mouse.modifiers & Qt.ShiftModifier) {
+                                    // range from the anchor item
+                                    var lo = Math.min(start, index)
+                                    var hi = Math.max(start, index)
+                                    var ids = []
+                                    for (var r = lo; r <= hi; r++) {
+                                        var rid = library.row_id(r)
+                                        if (rid >= 0 && !gridRoot
+                                            .isSelected(rid))
+                                            ids.push(rid)
+                                    }
+                                    gridRoot.selectedIds =
+                                            gridRoot.selectedIds.concat(ids)
+                                } else {
+                                    gridRoot.toggleSelect(model.id)
+                                }
+                                grid.currentIndex = index
+                            } else {
+                                gridRoot.selectedIds = []
+                                grid.currentIndex = index
+                            }
                             grid.forceActiveFocus()
+                        } else if (gridRoot.anySelected) {
+                            bulkMenu.popup()
                         } else {
                             cardMenu.popup()
                         }
@@ -391,6 +471,95 @@ Item {
                     }
                 }
             }
+
+        // bulk actions over the multi-selection (right-click while ≥1
+        // checkbox is checked)
+        Menu {
+            id: bulkMenu
+            width: 220
+            padding: 4
+            background: Rectangle {
+                radius: 8
+                color: theme.tokens.surface
+                border.color: theme.tokens.border
+            }
+            FgMenuItem {
+                text: qsTr("Star all selected (%1)").arg(
+                          gridRoot.selectedIds.length)
+                height: 28
+                onTriggered: {
+                    for (var i = 0; i < gridRoot.selectedIds.length; i++)
+                        library.set_starred_item(gridRoot.selectedIds[i],
+                                                 true)
+                    gridRoot.selectedIds = []
+                }
+            }
+            FgMenuItem {
+                text: qsTr("Unstar all selected")
+                height: 28
+                onTriggered: {
+                    for (var i = 0; i < gridRoot.selectedIds.length; i++)
+                        library.set_starred_item(gridRoot.selectedIds[i],
+                                                 false)
+                    gridRoot.selectedIds = []
+                }
+            }
+            FgMenuItem {
+                id: bulkCollItem
+                text: qsTr("Add all to collection…")
+                height: 28
+                enabled: library !== null
+                         && library.collections.length > 0
+                onHoveredChanged: if (hovered) bulkCollSub.popup(
+                                      bulkCollItem, bulkCollItem.width, 0)
+                onClicked: bulkCollSub.popup(bulkCollItem,
+                                             bulkCollItem.width, 0)
+                Menu {
+                    id: bulkCollSub
+                    width: 200
+                    padding: 4
+                    background: Rectangle {
+                        radius: 8; color: theme.tokens.surface
+                        border.color: theme.tokens.border
+                    }
+                    Repeater {
+                        model: library !== null ? library.collections : []
+                        FgMenuItem {
+                            id: bulkCollTarget
+                            required property var modelData
+                            height: 28
+                            onTriggered: {
+                                for (var i = 0; i < gridRoot.selectedIds
+                                         .length; i++)
+                                    library.add_item_to_collection(
+                                        bulkCollTarget.modelData.id, "icon",
+                                        gridRoot.selectedIds[i], "")
+                                gridRoot.selectedIds = []
+                            }
+                            contentItem: Text {
+                                text: bulkCollTarget.modelData.name
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 10
+                            }
+                            background: Rectangle {
+                                color: bulkCollTarget.hovered
+                                       ? theme.tokens.surface2 : "transparent"
+                                radius: 5
+                            }
+                        }
+                    }
+                }
+            }
+            FgMenuItem {
+                text: qsTr("Clear selection")
+                height: 28
+                onTriggered: gridRoot.selectedIds = []
+            }
+        }
         }
 
         // empty / first-run / no-match states

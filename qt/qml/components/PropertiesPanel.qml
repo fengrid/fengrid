@@ -38,6 +38,19 @@ Rectangle {
     property real previewPx: 30
     property bool darkBg: true
     property string sample: "The quick brown fox jumps over the lazy dog"
+    // auto preview text: one curated passage per size bucket (haiku /
+    // poems / speeches from resources/preview_text.json), swapped at
+    // THREE breakpoints only; disabled the moment the user types
+    property bool sampleCustom: false
+    property string autoSample: fonts !== null
+                                ? fonts.preview_text(previewPx) : ""
+    onAutoSampleChanged: if (!sampleCustom) sample = autoSample
+    function resetSample() {
+        sampleCustom = false
+        if (fonts !== null)
+            fonts.set_sample_custom(false)
+        sample = autoSample
+    }
 
     onItemIdChanged: reload()
     onItemKindChanged: {
@@ -45,7 +58,11 @@ Rectangle {
         activeTab = defaultTab()
     }
     visible: itemId >= 0
-    Component.onCompleted: reload()
+    Component.onCompleted: {
+        reload()
+        if (!sampleCustom && autoSample !== "")
+            sample = autoSample
+    }
 
     function reload() {
         props = (taxonomy !== null && itemId >= 0)
@@ -423,13 +440,46 @@ Rectangle {
                         Layout.fillWidth: true
                         visible: !panel.props
                                  || panel.props.fields.length === 0
-                        text: qsTr("No custom fields defined yet —"
-                                   + " create them from the icon"
-                                   + " inspector")
+                        text: qsTr("No custom fields defined yet")
                         font.family: theme.uiFont
                         font.pixelSize: 10
                         color: theme.tokens.textMuted
                         wrapMode: Text.Wrap
+                    }
+                    // create fields from ANY pane's inspector
+                    AbstractButton {
+                        id: newFieldBtn
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 26
+                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        background: Rectangle {
+                            radius: 6
+                            color: newFieldMa.containsMouse
+                                   ? theme.tokens.surface2 : "transparent"
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Row {
+                            spacing: 6
+                            IconImage {
+                                name: "plus"; px: 12
+                                tint: theme.tokens.textMuted
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                text: qsTr("New field…")
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                        MouseArea {
+                            id: newFieldMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: panelFieldDialog.open()
+                        }
                     }
 
                     // ------------------------------------------------- LINKS
@@ -1002,7 +1052,12 @@ Rectangle {
                     id: sampleField
                     Layout.fillWidth: true
                     text: panel.sample
-                    onTextEdited: panel.sample = text
+                    onTextEdited: {
+                        panel.sampleCustom = true
+                        if (fonts !== null)
+                            fonts.set_sample_custom(true)
+                        panel.sample = text
+                    }
                     placeholderText: qsTr("type your own sample…")
                     font.family: theme.monoFont; font.pixelSize: 11
                     color: theme.tokens.text
@@ -1011,6 +1066,27 @@ Rectangle {
                         border.color: sampleField.activeFocus
                                       ? theme.tokens.accent
                                       : theme.tokens.border
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: panel.sampleCustom
+                    spacing: 6
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("custom preview text — curated "
+                                   + "passages disabled")
+                        font.family: theme.monoFont
+                        font.pixelSize: 9
+                        color: theme.tokens.textMuted
+                        elide: Text.ElideRight
+                    }
+                    Button {
+                        text: qsTr("Reset")
+                        onClicked: {
+                            panel.resetSample()
+                            sampleField.text = panel.sample
+                        }
                     }
                 }
 
@@ -1357,5 +1433,111 @@ Rectangle {
                 Item { Layout.fillHeight: true; Layout.minimumHeight: 12 }
             }
         }
+    }
+
+    // ── new custom field — available from ANY pane's inspector ──
+    Dialog {
+        id: panelFieldDialog
+        objectName: "panelFieldDialog"
+        width: 300
+        padding: 16
+        modal: true
+        dim: true
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        background: Rectangle {
+            radius: 12; color: theme.tokens.surface
+            border.color: theme.tokens.border
+        }
+        contentItem: ColumnLayout {
+            spacing: 10
+            Text {
+                text: qsTr("New field")
+                font.family: theme.headingFont; font.pixelSize: 15
+                font.letterSpacing: 1.4
+                font.capitalization: Font.AllUppercase
+                color: theme.tokens.text
+                Layout.bottomMargin: 2
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: 30
+                radius: 6
+                color: theme.tokens.surface2
+                border.color: pfName.activeFocus ? theme.tokens.accent
+                                                 : theme.tokens.border
+                TextInput {
+                    id: pfName
+                    anchors.fill: parent
+                    anchors.leftMargin: 9; anchors.rightMargin: 9
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: theme.monoFont; font.pixelSize: 12
+                    color: theme.tokens.text
+                    clip: true
+                    selectByMouse: true
+                }
+            }
+            ComboBox {
+                id: pfType
+                Layout.fillWidth: true
+                implicitHeight: 30
+                model: ["text", "number", "bool", "date", "select", "id"]
+                background: Rectangle {
+                    radius: 6; color: theme.tokens.surface2
+                    border.color: theme.tokens.border
+                }
+                contentItem: Text {
+                    text: pfType.displayText
+                    font.family: theme.monoFont; font.pixelSize: 12
+                    color: theme.tokens.text
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 9
+                }
+            }
+            Rectangle {
+                visible: pfType.currentIndex === 4
+                Layout.fillWidth: true
+                implicitHeight: 30
+                radius: 6
+                color: theme.tokens.surface2
+                border.color: pfChoices.activeFocus ? theme.tokens.accent
+                                                    : theme.tokens.border
+                TextInput {
+                    id: pfChoices
+                    anchors.fill: parent
+                    anchors.leftMargin: 9; anchors.rightMargin: 9
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: theme.monoFont; font.pixelSize: 12
+                    color: theme.tokens.text
+                    clip: true
+                    selectByMouse: true
+                }
+            }
+            Text {
+                visible: pfType.currentIndex === 4
+                text: qsTr("choices (comma-separated)")
+                font.family: theme.monoFont; font.pixelSize: 9
+                color: theme.tokens.textMuted
+            }
+        }
+        footer: FgDialogFooter {
+            acceptLabel: qsTr("Create")
+            acceptEnabled: pfName.text.trim() !== ""
+            onCancelClicked: panelFieldDialog.reject()
+            onAcceptClicked: {
+                var opts = {}
+                if (pfType.currentIndex === 4)
+                    opts.choices = pfChoices.text.split(",").map(
+                        function (s) { return s.trim() }).filter(
+                        function (s) { return s !== "" })
+                taxonomy.create_field(pfName.text.trim(),
+                                      pfType.currentText,
+                                      JSON.stringify(opts))
+                pfName.text = ""
+                pfChoices.text = ""
+                panelFieldDialog.accept()
+            }
+        }
+        onClosed: panel.reload()
     }
 }

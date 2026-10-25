@@ -451,6 +451,7 @@ ApplicationWindow {
             onPanePicked: idx => root.pane = idx
             onEntityProperties: (kind, id) =>
                 root.openEntityInspector(kind, id)
+            onImportRequested: root.openSettings("import")
         }
         Rectangle {
             width: 1
@@ -526,7 +527,12 @@ ApplicationWindow {
         }
         Connections {
             target: root
-            function onPaneChanged() { paneFlash.flash() }
+            function onPaneChanged() {
+                paneFlash.flash()
+                // curated specimen text rotates once per pane open
+                if (root.pane === 1 && fonts !== null)
+                    fonts.reshuffle_preview_text()
+            }
         }
         NumberAnimation {
             id: paneFlashAnim

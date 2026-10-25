@@ -1,8 +1,9 @@
 pragma Singleton
 import QtQuick
 
-// Hand-drawn 24px / 2px-stroke Feather-style icons (MIT-licensed shapes),
-// tinted at use time — no emoji anywhere in the UI (studio rule).
+// Hand-drawn 24px grid Feather-style icons (MIT-licensed shapes) drawn
+// with a 1.6px hairline stroke — the subtle, technical weight used across
+// Fengrid's own UI (no emoji anywhere; studio rule).
 QtObject {
     readonly property var _paths: ({
         "search": "<circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/>",
@@ -43,9 +44,12 @@ QtObject {
 
     function url(name, color, fill) {
         var body = _paths[name] || "";
+        // 1.6px hairline stroke on the 24px grid — the technical,
+        // understated weight; sourceSize is 2x in IconImage so every
+        // glyph renders at the same optical size on any display
         var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'" +
                   " viewBox='0 0 24 24' fill='" + (fill || "none") + "' stroke='" + color + "'" +
-                  " stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>" +
+                  " stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'>" +
                   body + "</svg>";
         return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
     }

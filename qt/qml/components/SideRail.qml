@@ -14,6 +14,8 @@ Rectangle {
     signal panePicked(int idx)
     // a library row asked for its inspector (Main hosts the overlay)
     signal entityProperties(string kind, int id)
+    // the sticky Import Assets button — Main opens the import interface
+    signal importRequested()
 
     // CONTEXT-SPECIFIC RAIL — the rail's contents follow the active pane:
     // icon-only sections (themes / contexts / types / tags / add-folder)
@@ -29,6 +31,7 @@ Rectangle {
     })
 
     property string paneKind: pane === 0 ? "icon"
+                              : pane === 1 ? "font"
                               : pane === 2 ? "palette"
                               : pane === 3 ? "snippet" : ""
     property bool showIconSections: pane === 0
@@ -44,9 +47,9 @@ Rectangle {
     // COLLAPSIBLE SECTIONS — every list section in the rail carries a
     // chevron header that toggles its rows; state lives for the session
     property var sectOpen: ({
-        "families": true, "ftypes": true, "themes": true, "contexts": true,
-        "exts": true, "collections": true, "smart": true,
-        "libraries": true, "tags": true, "presets": true
+        "families": false, "ftypes": false, "themes": false, "contexts": false,
+        "exts": false, "collections": false, "smart": false,
+        "libraries": false, "tags": false, "presets": false
     })
     function toggleSection(key) {
         var next = Object.assign({}, sectOpen)
@@ -271,7 +274,7 @@ Rectangle {
         anchors.top: tabBar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: importBar.top
         contentHeight: railCol.implicitHeight + 20
         clip: true
         ScrollBar.vertical: ScrollBar { }
@@ -445,6 +448,8 @@ Rectangle {
                 onPicked: {
                     if (rail.pane === 0 && library !== null)
                         library.set_collection("")
+                    else if (rail.pane === 1 && fonts !== null)
+                        fonts.set_collection("")
                     else if (rail.pane === 2 && colors !== null)
                         colors.set_collection("")
                     else if (rail.pane === 3 && code !== null)
@@ -495,6 +500,9 @@ Rectangle {
                     active: rail.pane === 0
                             ? (library !== null && library.collectionFilter
                                === String(collRow.modelData.id))
+                            : rail.pane === 1
+                              ? (fonts !== null && fonts.collectionFilter
+                                 === String(collRow.modelData.id))
                             : rail.pane === 2
                               ? (colors !== null && colors.collectionFilter
                                  === String(collRow.modelData.id))
@@ -506,6 +514,8 @@ Rectangle {
                         var cid = String(collRow.modelData.id)
                         if (rail.pane === 0 && library !== null)
                             library.set_collection(cid)
+                        else if (rail.pane === 1 && fonts !== null)
+                            fonts.set_collection(cid)
                         else if (rail.pane === 2 && colors !== null)
                             colors.set_collection(cid)
                         else if (rail.pane === 3 && code !== null)
@@ -720,6 +730,9 @@ Rectangle {
                     active: rail.pane === 0
                             ? (library !== null && library.activeSmart
                                === String(smartRow.modelData.id))
+                            : rail.pane === 1
+                              ? (fonts !== null && fonts.smartFilter
+                                 === String(smartRow.modelData.id))
                             : rail.pane === 2
                               ? (colors !== null && colors.smartFilter
                                  === String(smartRow.modelData.id))
@@ -729,6 +742,8 @@ Rectangle {
                         var sid = String(smartRow.modelData.id)
                         if (rail.pane === 0 && library !== null)
                             library.set_smart_collection(sid)
+                        else if (rail.pane === 1 && fonts !== null)
+                            fonts.set_smart(sid)
                         else if (rail.pane === 2 && colors !== null)
                             colors.set_smart(sid)
                         else if (rail.pane === 3 && code !== null)
@@ -1211,43 +1226,60 @@ Rectangle {
             }
 
             Item { Layout.fillHeight: true; Layout.minimumHeight: 8 }
+        }
+    }
 
-            // add-folder source (native FolderDialog — no server involved)
-            Rectangle {
-                visible: rail.showIconSections
-                Layout.fillWidth: true
-                Layout.leftMargin: 8
-                Layout.rightMargin: 8
-                Layout.bottomMargin: 10
-                height: 26
-                radius: 6
-                color: addMa.containsMouse ? theme.tokens.surface2 : "transparent"
-                Behavior on color { ColorAnimation { duration: 90 } }
-                border.color: theme.tokens.border
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    spacing: 6
-                    IconImage { name: "folder-plus"; px: 13; tint: theme.tokens.textMuted }
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Add folder…")
-                        font.family: theme.uiFont
-                        font.pixelSize: 12
-                        color: theme.tokens.textMuted
-                    }
+    // sticky import affordance — pinned below the scrollable rail, NOT
+    // inside it; launches the full import interface (replaces the old
+    // per-list "Add folder…" rows)
+    Rectangle {
+        id: importBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: 40
+        color: theme.tokens.surface
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 1
+            color: theme.tokens.border
+        }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 6
+            radius: 6
+            color: importMa.containsMouse ? theme.tokens.accent
+                                          : theme.tokens.surface2
+            border.color: importMa.containsMouse ? theme.tokens.accent
+                                                 : theme.tokens.border
+            Row {
+                anchors.centerIn: parent
+                spacing: 7
+                IconImage {
+                    name: "download"
+                    px: 13
+                    tint: importMa.containsMouse ? theme.tokens.bg
+                                                 : theme.tokens.text
+                    anchors.verticalCenter: parent.verticalCenter
                 }
-                MouseArea {
-                    id: addMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: folderDialog.open()
+                Text {
+                    text: qsTr("Import Assets")
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    color: importMa.containsMouse ? theme.tokens.bg
+                                                  : theme.tokens.text
+                    anchors.verticalCenter: parent.verticalCenter
                 }
-                FolderDialog {
-                    id: folderDialog
-                    onAccepted: library.add_folder(Icons.toLocalPath(selectedFolder))
-                }
+            }
+            MouseArea {
+                id: importMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: rail.importRequested()
             }
         }
     }

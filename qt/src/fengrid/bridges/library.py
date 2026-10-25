@@ -563,6 +563,14 @@ class Library(QObject):
         return core_db.is_starred(self._con, row["id"], kind="icon")
 
     @Slot(int, bool)
+    def set_starred_item(self, item_id: int, starred: bool) -> None:
+        """Star/unstar an icon asset BY ID (multi-select bulk actions)."""
+        core_db.set_starred(self._con, int(item_id), bool(starred),
+                            kind="icon")
+        self._refresh_lists()
+        self.tagsRevision.emit()
+        self._apply_filters()
+
     def set_starred(self, index: int, starred: bool) -> None:
         row = self._model.row(index)
         if not row:
@@ -704,6 +712,12 @@ class Library(QObject):
         self._refresh_lists()
         self.message.emit("Added to collection" if ok
                           else "Could not add to collection")
+
+    @Slot(int, result=int)
+    def row_id(self, i: int) -> int:
+        """Asset id at a model row (multi-select range fills)."""
+        r = self._model.row(int(i))
+        return int(r["id"]) if r else -1
 
     @Slot(str, int, result=bool)
     def is_item_starred(self, kind: str, item_id: int) -> bool:

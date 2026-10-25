@@ -124,6 +124,9 @@ class Fonts(QObject):
         self._family_filter = ""     # rail: exact family
         self._type_filter = ""       # rail: file extension (ttf/otf/…)
         self._families: list = []
+        # rail Collections row (fonts pane): None = no filter, else id
+        self._collection: int | None = None
+        self._smart_id = 0
         self._types: list = []
         self._selected = ""
         self._scanning = False
@@ -229,6 +232,71 @@ class Fonts(QObject):
         """Plain family-name strings (CSS export dialog checkboxes)."""
         return [f["family"] for f in core_fonts.families(self._con)]
 
+    # ── rail Collections row: filter families by collection membership ──
+    collectionChanged = Signal()
+
+    @Property(str, notify=collectionChanged)
+    def collectionFilter(self) -> str:
+        return "" if self._collection is None else str(self._collection)
+
+    @Slot(str)
+    def set_collection(self, coll: str) -> None:
+        """Toggle the collection filter (fonts pane). Same id twice
+        clears it."""
+        s = (coll or "").strip()
+        cid = int(s) if s.isdigit() else None
+        if cid is None or cid == self._collection:
+            self._collection = None
+        else:
+            self._collection = cid
+        self.collectionChanged.emit()
+        self._refresh()
+
+    @Slot(str)
+    def set_smart(self, sc_id: str) -> None:
+        """Toggle the smart-collection filter (fonts pane): families
+        whose assets satisfy the criteria (name/tag match)."""
+        sid = int(sc_id) if str(sc_id).strip().isdigit() else 0
+        if sid and sid == self._smart_id:
+            sid = 0
+        self._smart_id = sid
+        self._refresh()
+
+    @Property(str, notify=collectionChanged)
+    def smartFilter(self) -> str:
+        return "" if not self._smart_id else str(self._smart_id)
+
+    # -------------------------------------------------- specimen text
+    sampleCustomChanged = Signal()
+
+    @Property(bool, notify=sampleCustomChanged)
+    def sampleCustom(self) -> bool:
+        return bool(getattr(self, "_sample_custom", False))
+
+    @Slot(bool)
+    def set_sample_custom(self, on: bool) -> None:
+        """User typed custom specimen text → curated passages disabled."""
+        on = bool(on)
+        if on != getattr(self, "_sample_custom", False):
+            self._sample_custom = on
+            self.sampleCustomChanged.emit()
+
+    @Slot()
+    def reshuffle_preview_text(self) -> None:
+        """Pick one random passage PER size bucket — called when the
+        Fonts pane opens so the specimen text rotates each session."""
+        from ..core import preview_text as core_preview
+        self._samples = core_preview.reshuffle()
+
+    @Slot(int, result=str)
+    def preview_text(self, px: int) -> str:
+        """Default specimen text for the preview size bucket; disabled
+        whenever the user has typed custom text (QML decides)."""
+        if not getattr(self, "_samples", None):
+            self.reshuffle_preview_text()
+        from ..core import preview_text as core_preview
+        return self._samples.get(core_preview.bucket_for(int(px)), "")
+
     @Slot(str, result="QVariantList")
     def family_row_ids(self, family: str) -> list:
         """Every asset row id of the family (starring hits them all)."""
@@ -254,6 +322,26 @@ class Fonts(QObject):
         ids = self.family_row_ids(family)
         return any(core_db.is_starred(self._con, int(a), kind="font")
                    for a in ids)
+
+    def _family_matches_smart(self, family: str) -> bool:
+        """Smart-criteria check for a font family: ANY asset of the
+        family satisfying the criteria (name/tag match) keeps it."""
+        ids = self.family_row_ids(family)
+        if not ids:
+            return False
+        from .colors import _matches_smart
+        for aid in ids:
+            tags = [t["name"] for t in self._con.execute(
+                "SELECT t.name FROM item_tag it JOIN tag t"
+                " ON t.id = it.tag_id WHERE it.item_kind = 'font'"
+                " AND it.item_id = ?", (aid,))]
+            row = self._con.execute(
+                "SELECT name FROM asset WHERE id = ?", (aid,)).fetchone()
+            if _matches_smart(self._con, self._smart_id,
+                              {"name": row["name"] if row else family,
+                               "tags": ",".join(tags)}):
+                return True
+        return False
 
     @Slot(str, result="QVariantList")
     def family_files(self, family: str) -> list:
@@ -427,8 +515,23 @@ class Fonts(QObject):
 
     def _refresh(self) -> None:
         all_fams = core_fonts.families(self._con)
+        # collection filter (rail Collections row, fonts pane): families
+        # survive when ANY of their assets is a collection member
+        coll_fams: set[str] | None = None
+        if self._collection:
+            coll_fams = {r["family"] for r in self._con.execute(
+                "SELECT DISTINCT a.family FROM collection_ref cr"
+                " JOIN asset a ON a.id = cr.item_id"
+                " WHERE cr.collection_id = ? AND cr.item_kind = 'font'"
+                " AND a.kind = 'font'", (self._collection,))}
+        fams = all_fams
+        if coll_fams is not None:
+            fams = [f for f in all_fams if f["family"] in coll_fams]
+        if self._smart_id:
+            fams = [f for f in fams if self._family_matches_smart(
+                f["family"])]
         self._families = [{"name": f["family"], "n": f["n"]}
-                          for f in all_fams]
+                          for f in fams]
         self._types = [{"name": r[0], "n": r[1]} for r in self._con.execute(
             "SELECT ext, COUNT(*) FROM asset"
             " WHERE kind = 'font' AND ext IS NOT NULL"
@@ -447,6 +550,11 @@ class Fonts(QObject):
             if self._family_filter and fam["family"] != self._family_filter:
                 continue
             if self._type_filter and fam["family"] not in type_fams:
+                continue
+            if coll_fams is not None and fam["family"] not in coll_fams:
+                continue
+            if self._smart_id and not self._family_matches_smart(
+                    fam["family"]):
                 continue
             files = core_fonts.family_files(self._con, fam["family"])
             weights = sorted({f["weight"] for f in files

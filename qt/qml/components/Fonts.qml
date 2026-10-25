@@ -166,7 +166,13 @@ Item {
                     anchors.leftMargin: 10
                     anchors.right: parent.right
                     anchors.rightMargin: 10
-                    text: qsTr("Fengrid 123")
+                    // curated default specimen: a passage whose word
+                    // shapes fit this preview size (bucket "medium" at
+                    // the fixed 26px card size); swaps at only three
+                    // breakpoints pane-wide; disabled when the user
+                    // types custom text in the inspector's sample field
+                    text: fonts !== null && !fonts.sampleCustom
+                          ? fonts.preview_text(26) : qsTr("Fengrid 123")
                     font.family: model.family
                     font.pixelSize: 26
                     elide: Text.ElideRight
