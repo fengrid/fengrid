@@ -523,10 +523,20 @@ class DataIO(QObject):
                 return
             if self._worker is not None:     # a job is mid-flight
                 return
+            dest = os.path.join(self._data_dir, "backups")
+            # skip-when-clean: snapshot the file fingerprints FIRST, then
+            # only run the (page-by-page, seconds at six-figure asset
+            # counts) backup when a database changed since the last one
+            fp = core_backup.auto_backup_fingerprint(self._db_path,
+                                                     self._registry)
+            if fp and not core_backup.auto_backup_needed(
+                    self._db_path, dest, self._registry):
+                return
             core_backup.backup(
-                self._db_path,
-                os.path.join(self._data_dir, "backups"),
+                self._db_path, dest,
                 registry_path=self._registry, label="auto")
+            core_backup.record_auto_backup_state(self._db_path, dest,
+                                                 self._registry)
         except Exception:                    # never block quitting
             pass
 
@@ -675,13 +685,18 @@ class DataIO(QObject):
             return                          # serialized: one job at a time
         try:
             rows = [dict(r) for r in self._con.execute(
-                "SELECT w.id, w.interval, w.enabled, s.last_run"
+                "SELECT w.id, w.interval, w.enabled, s.last_run, s.last_sig"
                 " FROM watch_source w LEFT JOIN watch_state s"
                 " ON s.watch_id = w.id WHERE w.enabled = 1")]
         except Exception:                    # db closed during quit
             return
         for r in rows:
-            if core_watch.due({"interval": r["interval"]},
+            # adaptive floor: huge trees get a longer interval so the
+            # signature walk's duty cycle stays sane (never shortens the
+            # user's configured interval — see core_watch.scaled_interval)
+            interval = core_watch.scaled_interval(
+                r["interval"], core_watch.sig_count(r["last_sig"]))
+            if core_watch.due({"interval": interval},
                               last_run=r["last_run"] or 0):
                 self._run_watch(int(r["id"]), force=False)
                 break

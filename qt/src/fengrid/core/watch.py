@@ -162,3 +162,27 @@ def due(row: dict, now: float | None = None,
     interval = max(15, int(row.get("interval") or 60))
     now = time.time() if now is None else now
     return (now - last_run) >= interval
+
+
+def scaled_interval(base: int, file_count: int, cap: int = 600) -> int:
+    """Adaptive floor for a watch's poll interval.
+
+    One signature() walk costs roughly file_count/20000 seconds (an
+    os.walk plus a stat per file); polling a 1M-file tree every 5 s tick
+    turned the 'cheap unchanged path' into a permanent disk/CPU hog. The
+    returned interval targets a ~10% walk duty cycle and never shortens
+    the user's configured interval — it only lengthens it (capped at
+    `cap` seconds so even huge trees are still checked periodically).
+    """
+    walk = int(file_count / 20000)          # estimated seconds per walk
+    return min(cap, max(int(base), walk * 10))
+
+
+def sig_count(sig: str | None) -> int:
+    """File count from a signature() string ('n:total:newest'); 0 unknown."""
+    if not sig or ":" not in str(sig):
+        return 0
+    try:
+        return int(str(sig).split(":", 1)[0])
+    except (ValueError, IndexError):
+        return 0

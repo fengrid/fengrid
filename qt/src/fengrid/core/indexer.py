@@ -21,6 +21,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +159,17 @@ _CHUNK = 400
 # write lock; 400 of those held the DB for multiple seconds and starved
 # main-thread settings writes (first-run saves). 100 ≈ ≤1.5s holds.
 _CHUNK_FONTS = 100
+
+# scan() identification lookahead: files identified AHEAD of the write
+# cursor by the bounded window (see scan) — deep enough to keep the
+# write loop fed, shallow enough that per-file progress stays near-real
+_IDENTIFY_WINDOW = 32
+_IDENTIFY_WORKERS = 4
+
+
+def _parallel_identify() -> bool:
+    """FENGRID_SCAN_PARALLEL=0 forces the serial path (tests, debugging)."""
+    return os.environ.get("FENGRID_SCAN_PARALLEL", "1") != "0"
 
 
 def purge_assets(con: sqlite3.Connection,
@@ -309,40 +321,85 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
         processed = 0
         for source_id, root in live:
             seen: set[str] = set()
-            for path in scanner.iter_asset_files(root):
-                seen.add(path)
-                counts["total"] += 1
-                fp = fingerprint(path)
-                prev = con.execute(
-                    "SELECT fingerprint FROM scan_state WHERE path = ?",
-                    (path,),
-                ).fetchone()
-                if prev is not None and prev[0] == fp:
-                    con.execute(
-                        "UPDATE scan_state SET last_seen = ? WHERE path = ?",
-                        (now, path),
-                    )
-                    counts["unchanged"] += 1
-                else:
-                    meta = scanner.derive_meta(path, root)
-                    kind = core_kinds.kind_for_ext(meta["ext"]) or "icon"
-                    meta["kind"] = kind
-                    info = identify(path)
+            file_iter = scanner.iter_asset_files(root)
+            # bounded-lookahead parallel identification: identification
+            # (PIL probe / SVG parse) is pure filesystem work with no DB
+            # access, so a small thread pool pipelines it ahead of the
+            # serialized writes. The scan thread alone touches the
+            # connection (sqlite objects are thread-affine).
+            pool = None
+            if _parallel_identify():
+                from concurrent.futures import ThreadPoolExecutor
+                pool = ThreadPoolExecutor(
+                    max_workers=_IDENTIFY_WORKERS)
+            window: deque = deque()
+            try:
+                def _stage(next_path: str) -> tuple:
+                    # fingerprint + derive on the scan thread (the DB
+                    # read rides this thread's own connection); the
+                    # future is None for unchanged files — the writer
+                    # must not pay identification for them
+                    seen.add(next_path)
+                    counts["total"] += 1
+                    fp_n = fingerprint(next_path)
+                    prev_n = con.execute(
+                        "SELECT fingerprint FROM scan_state"
+                        " WHERE path = ?", (next_path,),
+                    ).fetchone()
+                    if prev_n is not None and prev_n[0] == fp_n:
+                        return (next_path, fp_n, prev_n, None, None,
+                                None)
+                    meta_n = scanner.derive_meta(next_path, root)
+                    kind_n = (core_kinds.kind_for_ext(meta_n["ext"])
+                              or "icon")
+                    meta_n["kind"] = kind_n
+                    fut = (pool.submit(identify, next_path)
+                           if pool is not None else None)
+                    return (next_path, fp_n, prev_n, meta_n, kind_n,
+                            fut)
+
+                for _ in range(_IDENTIFY_WINDOW):
                     try:
-                        _upsert_asset(con, source_id, path, meta, info, now,
-                                      fp, kind=kind)
-                    except sqlite3.IntegrityError:
-                        # source removed mid-scan (FK on source_id) — skip
-                        # this file; the next scan reconciles
-                        counts["total"] -= 1
+                        window.append(_stage(next(file_iter)))
+                    except StopIteration:
+                        break
+                while window:
+                    path, fp, prev, meta, kind, fut = window.popleft()
+                    if meta is None:
+                        # staged unchanged — refresh last_seen only
+                        con.execute(
+                            "UPDATE scan_state SET last_seen = ?"
+                            " WHERE path = ?", (now, path),
+                        )
+                        counts["unchanged"] += 1
+                    else:
+                        info = (fut.result() if fut is not None
+                                else identify(path))
+                        try:
+                            _upsert_asset(con, source_id, path, meta,
+                                          info, now, fp, kind=kind)
+                        except sqlite3.IntegrityError:
+                            # source removed mid-scan (FK on
+                            # source_id) — skip this file; the next
+                            # scan reconciles
+                            counts["total"] -= 1
+                            continue
+                        counts["changed" if prev is not None
+                                else "new"] += 1
+                    processed += 1
+                    if progress:
+                        progress(counts["total"], path)
+                    if processed % _CHUNK == 0:
+                        con.commit()
+                        con.execute("BEGIN IMMEDIATE")
+                    try:
+                        nxt = next(file_iter)
+                    except StopIteration:
                         continue
-                    counts["changed" if prev is not None else "new"] += 1
-                processed += 1
-                if progress:
-                    progress(counts["total"], path)
-                if processed % _CHUNK == 0:
-                    con.commit()
-                    con.execute("BEGIN IMMEDIATE")
+                    window.append(_stage(nxt))
+            finally:
+                if pool is not None:
+                    pool.shutdown(wait=False)
 
             # prune assets + fingerprints that vanished from this source
             # (kind-scoped: a source row is single-purpose, so font rows
