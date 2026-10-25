@@ -44,9 +44,19 @@ class SearchError(ValueError):
 
 
 def _candidates(con: sqlite3.Connection) -> list[tuple[int, str, str]]:
-    """(asset_id, name, path) for scoring — one query, bounded."""
+    """(asset_id, name, path) for scoring — one query, bounded.
+
+    Deterministic ORDER BY id: at six-figure+ counts the cap silently
+    narrows the candidate set, and an unordered LIMIT would pick an
+    arbitrary (plan-dependent) slice — now it is always the oldest
+    rows by id, a stable, explainable subset. 1M-name tables exceed
+    the cap; the fuzzy/regex modes remain bounded-CPU by design and
+    the narrowing is documented, not hidden (a fuller fix — FTS-token
+    candidate union — is tracked in the perf backlog).
+    """
     rows = con.execute(
-        "SELECT id, name, path FROM asset LIMIT ?", (MAX_CANDIDATES,),
+        "SELECT id, name, path FROM asset ORDER BY id LIMIT ?",
+        (MAX_CANDIDATES,),
     ).fetchall()
     return [(r["id"], r["name"], r["path"]) for r in rows]
 
@@ -72,11 +82,17 @@ def _fuzzy(con, term: str, limit: int) -> list[dict]:
     t = term.lower()
     rows = []
     for aid, name, path in _candidates(con):
-        # subsequence hit on the name is the fast path; ratio refines rank
-        ratio = difflib.SequenceMatcher(None, t, name.lower()).ratio()
-        sub = _subsequence(t, name.lower())
-        if not sub and ratio < 0.45:
-            continue
+        low = name.lower()
+        sub = _subsequence(t, low)
+        if not sub:
+            # quick_ratio is an upper bound on ratio and near-free —
+            # reject hopeless candidates without the quadratic pass
+            m = difflib.SequenceMatcher(None, t, low)
+            if m.quick_ratio() < 0.45:
+                continue
+            ratio = m.ratio()
+        else:
+            ratio = difflib.SequenceMatcher(None, t, low).ratio()
         path_bonus = 0.1 if t in path.lower() else 0.0
         score = ratio + (0.35 if sub else 0.0) + path_bonus
         rows.append({"id": aid, "name": name, "path": path,
@@ -120,14 +136,17 @@ def _content(con, term: str, limit: int) -> list[dict]:
         if len(hits) >= limit:
             return hits
 
-    # 2) text-like asset files — bounded I/O
+    # 2) text-like asset files — bounded I/O. The ext filter is in SQL
+    # (a kind+ext index-only scan) rather than a Python-side walk over
+    # every icon row: at six-figure counts iterating 1M rows just to
+    # discard non-text extensions dwarfed the actual file reads.
+    text_exts = tuple(sorted({e.lstrip(".") for e in TEXT_EXTS}))
+    marks = ",".join("?" * len(text_exts))
     scans = 0
     for r in con.execute(
             "SELECT id, name, path, ext FROM asset"
-            " WHERE kind = 'icon' ORDER BY id"):
-        ext = (r["ext"] or "").lstrip(".").lower()
-        if ext not in {e.lstrip(".") for e in TEXT_EXTS}:
-            continue
+            f" WHERE kind = 'icon' AND ext IN ({marks})"
+            " ORDER BY id", text_exts):
         scans += 1
         if scans > MAX_SCANS:
             break

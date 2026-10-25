@@ -288,7 +288,10 @@ CREATE TRIGGER IF NOT EXISTS asset_fts_ad AFTER DELETE ON asset BEGIN
     INSERT INTO asset_fts(asset_fts, rowid, name, path, theme, context)
     VALUES ('delete', old.id, old.name, old.path, old.theme, old.context);
 END;
-CREATE TRIGGER IF NOT EXISTS asset_fts_au AFTER UPDATE ON asset BEGIN
+CREATE TRIGGER IF NOT EXISTS asset_fts_au AFTER UPDATE ON asset
+    WHEN old.name IS NOT new.name OR old.path IS NOT new.path
+      OR old.theme IS NOT new.theme OR old.context IS NOT new.context
+BEGIN
     INSERT INTO asset_fts(asset_fts, rowid, name, path, theme, context)
     VALUES ('delete', old.id, old.name, old.path, old.theme, old.context);
     INSERT INTO asset_fts(rowid, name, path, theme, context)
@@ -321,6 +324,65 @@ def _migrate(con: sqlite3.Connection) -> None:
     _migrate_guid_slug(con)
     _migrate_collections(con)
     _migrate_taxonomy_items(con)
+    _migrate_grid_indexes(con)
+    _migrate_fts_trigger_v2(con)
+
+
+def _migrate_grid_indexes(con: sqlite3.Connection) -> None:
+    """Scale indexes for six-figure+ asset counts (all columns exist in
+    the base SCHEMA / the ALTERs above — safe to CREATE IF NOT EXISTS).
+
+    - idx_asset_grid: the icons grid always filters kind and orders
+      (theme, name); the trailing id makes the order deterministic so
+      keyset pagination (bridges.library load_more) can walk the index
+      in one ordered range scan instead of sorting ~1M rows per
+      filter change.
+    - kind-prefixed pairs for the rail COUNT(*) GROUP BY aggregates
+      (theme/context/ext/family): index-only scans at any table size.
+    - idx_item_tag_tagid: _refresh_lists counts tags by tag_id, which
+      is the LAST column of item_tag's PK — unindexed before this.
+    """
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_grid"
+        " ON asset(kind, theme, name, id)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_kind_context"
+        " ON asset(kind, context)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_kind_ext ON asset(kind, ext)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_kind_family"
+        " ON asset(kind, family)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_item_tag_tagid"
+        " ON item_tag(item_kind, tag_id)")
+
+
+def _migrate_fts_trigger_v2(con: sqlite3.Connection) -> None:
+    """Recreate the FTS sync trigger with a WHEN clause so fingerprint
+    rescans that only touch mtime/size columns don't pay a full FTS
+    delete+insert per row (that churn dominated 1M-row rescan cost).
+    Gated by a setting flag so the DROP+CREATE runs once per database."""
+    try:
+        if get_setting(con, "fts_trigger_v2") == "1":
+            return
+        con.execute("DROP TRIGGER IF EXISTS asset_fts_au")
+        con.executescript("""
+CREATE TRIGGER IF NOT EXISTS asset_fts_au AFTER UPDATE ON asset
+    WHEN old.name IS NOT new.name OR old.path IS NOT new.path
+      OR old.theme IS NOT new.theme OR old.context IS NOT new.context
+BEGIN
+    INSERT INTO asset_fts(asset_fts, rowid, name, path, theme, context)
+    VALUES ('delete', old.id, old.name, old.path, old.theme, old.context);
+    INSERT INTO asset_fts(rowid, name, path, theme, context)
+    VALUES (new.id, new.name, new.path, new.theme, new.context);
+END;
+""")
+        set_setting(con, "fts_trigger_v2", "1")
+    except sqlite3.OperationalError:
+        # FTS5 unavailable in this build (no asset_fts table) — the LIKE
+        # fallback path never touches these triggers; leave as-is
+        pass
 
 
 # Every tracked object carries a generated GUID (assigned at first
@@ -717,6 +779,12 @@ def connect(path: str | Path) -> sqlite3.Connection:
     con = sqlite3.connect(str(path), timeout=30)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
+    # NORMAL under WAL: commits don't fsync on every transaction — the
+    # chunked scan commits (400 rows apiece) otherwise pay a full disk
+    # flush each, and a 1M-file import pays it 2500 times. WAL +
+    # NORMAL is the SQLite-recommended durability pairing; power loss
+    # can only lose the last transactions, never corrupt the DB.
+    con.execute("PRAGMA synchronous=NORMAL")
     con.execute("PRAGMA foreign_keys=ON")
     con.executescript(SCHEMA)
     _migrate(con)
