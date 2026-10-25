@@ -230,6 +230,32 @@ class Fonts(QObject):
         return [f["family"] for f in core_fonts.families(self._con)]
 
     @Slot(str, result="QVariantList")
+    def family_row_ids(self, family: str) -> list:
+        """Every asset row id of the family (starring hits them all)."""
+        if not family:
+            return []
+        return [r[0] for r in self._con.execute(
+            "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
+            " ORDER BY id", (family,)).fetchall()]
+
+    @Slot(str, bool)
+    def star_family(self, family: str, starred: bool) -> None:
+        """Star/unstar the WHOLE family (every indexed file of it)."""
+        ids = self.family_row_ids(family)
+        for aid in ids:
+            core_db.set_starred(self._con, int(aid), bool(starred),
+                                kind="font")
+        self.message.emit(
+            f"{('Starred' if starred else 'Unstarred')} “{family}”"
+            f" ({len(ids)} file{'s' if len(ids) != 1 else ''})")
+
+    @Slot(str, result=bool)
+    def family_starred(self, family: str) -> bool:
+        ids = self.family_row_ids(family)
+        return any(core_db.is_starred(self._con, int(a), kind="font")
+                   for a in ids)
+
+    @Slot(str, result="QVariantList")
     def family_files(self, family: str) -> list:
         return core_fonts.family_files(self._con, family) \
             if family else []
@@ -249,9 +275,26 @@ class Fonts(QObject):
     def export_css(self, family: str, dest_dir: str) -> None:
         self._export(core_fonts.export_family_css, family, dest_dir, "css")
 
-    @Slot(str, str)
-    def export_zip(self, family: str, dest_dir: str) -> None:
-        self._export(core_fonts.export_family_zip, family, dest_dir, "zip")
+    @Slot("QVariantList", str, "QVariantList", bool)
+    def export_zip_pkg(self, families, dest_dir: str, fmts,
+                       include_original: bool = False) -> None:
+        """ZIP the webfont package (fonts.css with RELATIVE URLs at the
+        root + fonts/<Name>.<flavor>) — the unified export's ZIP path."""
+        from ..core import exportplus as core_exportplus
+        dest = str(Path(dest_dir).expanduser()) if dest_dir else ""
+        if not dest:
+            self.exportFailed.emit("choose a folder first")
+            return
+        try:
+            out = core_exportplus.export_fonts_zip(
+                self._con, [str(f) for f in families], dest,
+                fmts=[str(f) for f in (fmts or [])] or None,
+                include_original=bool(include_original))
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return
+        settings.set(self._con, "last_export_dir", dest)
+        self.exportDone.emit(str(out))
 
     # ------------------------------------------------- fonts.css package
     @Slot("QVariantList", "QVariantList", result=str)

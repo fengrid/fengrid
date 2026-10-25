@@ -1060,11 +1060,6 @@ ApplicationWindow {
             fontsPane.openExportCss()
             return
         }
-        if (name === "fonts-zip") {
-            root.pane = 1
-            fontsPane.openExportZip()
-            return
-        }
         if (name === "menu") {
             mainMenu.open()
             return

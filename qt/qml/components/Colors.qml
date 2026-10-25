@@ -867,14 +867,56 @@ Item {
             }
         }
         FgMenuItem {
-            text: qsTr("Add to collection")
+            text: qsTr("Star / Unstar")
             height: 28
-            enabled: palMenu.target !== null
+            enabled: colors !== null && colors.paletteId > 0
+                     && library !== null
+            onTriggered: library.star_item(
+                "palette", colors.paletteId,
+                !library.is_item_starred("palette", colors.paletteId))
+        }
+        FgMenuItem {
+            text: qsTr("Add to collection…")
+            height: 28
+            enabled: colors !== null && colors.paletteId > 0
                      && library !== null && library.collections.length > 0
-            onTriggered: {
-                if (palMenu.target && library !== null)
-                    library.add_ref(library.collections[0].id, "palette",
-                                    palMenu.target.id, palMenu.target.name)
+            onHoveredChanged: if (hovered) palCollSub.popup(
+                                  palCollItem, palCollItem.width, 0)
+            onClicked: palCollSub.popup(palCollItem, palCollItem.width, 0)
+            Menu {
+                id: palCollSub
+                width: 220
+                padding: 4
+                background: Rectangle {
+                    radius: 8; color: theme.tokens.surface
+                    border.color: theme.tokens.border
+                }
+                Repeater {
+                    model: library !== null ? library.collections : []
+                    FgMenuItem {
+                        id: palCollTarget
+                        required property var modelData
+                        height: 28
+                        onTriggered: library !== null && colors !== null
+                                     && library.add_item_to_collection(
+                                         modelData.id, "palette",
+                                         colors.paletteId,
+                                         colors.paletteName)
+                        contentItem: Text {
+                            text: palCollTarget.modelData.name
+                            font.family: theme.uiFont; font.pixelSize: 11
+                            color: theme.tokens.text
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 10
+                        }
+                        background: Rectangle {
+                            color: palCollTarget.hovered
+                                   ? theme.tokens.surface2 : "transparent"
+                            radius: 5
+                        }
+                    }
+                }
             }
         }
         FgMenuSeparator {
@@ -884,9 +926,11 @@ Item {
         FgMenuItem {
             text: qsTr("Delete palette")
             height: 28
-            enabled: palMenu.target !== null
-            onTriggered: palMenu.target
-                         && colors.delete_palette(palMenu.target.id)
+            // acts on the OPEN palette (per the shared rule: the menu
+            // targets the current selection); each row also has its own
+            // delete button for direct deletion
+            enabled: colors !== null && colors.paletteId > 0
+            onTriggered: colors.delete_palette(colors.paletteId)
         }
     }
 

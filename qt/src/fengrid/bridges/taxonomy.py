@@ -3,17 +3,30 @@ generated IDs and links — a thin QVariantList adapter over core.taxonomy,
 following the bridges/colors.py pattern (properties + notify signals, no
 C++ models). The bridge holds no filter state itself: activating a
 library or smart collection delegates to the pane bridges (library /
-colors / code), which each keep their own filter state.
+colors / code / fonts), which each keep their own filter state.
+
+Entity inspection (Projects + saved Libraries): each carries an optional
+git repository under <data-dir>/repos/<kind>-<slug> (same layout the
+source-control bridge uses), and the Properties panel's Documentation /
+License / Sources tabs read the repo tree — README.md, LICENSE.md, and a
+git summary. Doc reads are cheap file reads; git actions run through
+core.projects_git with the same argv-only discipline.
 """
 
 from __future__ import annotations
 
 import json
+import os
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from ..core import db as core_db
+from ..core import licenses as core_licenses
+from ..core import projects_git as core_git
 from ..core import taxonomy as core_tax
+
+_READ_CAP = 64_000          # chars of README/LICENSE fed to the inspector
+_REPO_SUBDIR = "repos"
 
 
 class Taxonomy(QObject):
@@ -22,10 +35,12 @@ class Taxonomy(QObject):
     smartsChanged = Signal()
     fieldsChanged = Signal()
     linksChanged = Signal()
+    gitUpdated = Signal()       # any repo action → Sources tab re-reads
 
-    def __init__(self, con, parent=None):
+    def __init__(self, con, data_dir: str = "", parent=None):
         super().__init__(parent)
         self._con = con
+        self._data_dir = str(data_dir or "")
         self._refresh()
 
     # ---------------------------------------------------------------- state
@@ -33,6 +48,10 @@ class Taxonomy(QObject):
         self._views = []
         for v in core_tax.list_library_views(self._con):
             v["n"] = len(core_tax.library_view_assets(self._con, v["id"]))
+            # per-kind counts so the rail shows a library only on panes
+            # whose asset kind the view actually matches (icon vs font)
+            v["counts"] = core_tax.library_view_kind_counts(
+                self._con, v["id"])
             self._views.append(v)
         self._smarts = []
         for s in core_tax.list_smart_collections(self._con):
@@ -241,64 +260,251 @@ class Taxonomy(QObject):
             (int(item_id),)).fetchone()
         return (row["guid"] if row is not None else "") or ""
 
-    # ------------------------------------------------------------ item details
-    @Slot(str, int, result="QVariantMap")
-    def item_properties(self, kind: str, item_id: int) -> dict:
-        """Everything the Properties panel renders for one item: tags,
-        custom field values (with definitions), links, and kind-specific
-        detail data — for any kind."""
-        if not core_tax._item_exists(self._con, kind, item_id):
-            # MISSING item (deleted under the panel, sweep, db switch):
-            # NEVER return a truthy-but-empty {} — every QML binding does
-            # panel.props.meta.<key>.<field>, which throws on a partial
-            # payload ("Value is undefined...", frozen-build terminal
-            # flood). Shape the null case like a real payload.
-            return {"kind": kind, "id": item_id, "tags": [], "fields": [],
-                    "links": [], "meta": {}, "starred": False}
-        tags = core_db.tags_for(self._con, item_id, kind)
-        fields = core_tax.asset_field_values(self._con, item_id, kind)
-        links = core_tax.links_for(self._con, kind, item_id, "both")
-        return {"kind": kind, "id": item_id, "tags": tags,
-                "fields": fields, "links": links,
-                "meta": self._kind_meta(kind, item_id),
-                "starred": core_db.is_starred(self._con, item_id, kind)}
+    # ------------------------------------------------------ entity inspection
+    # Projects and saved Libraries each map to one git repo under
+    # <data-dir>/repos/<slugify(kind:name)> — the SAME path the
+    # source-control bridge uses, so both surfaces see the same history.
+    def _entity_name(self, kind: str, item_id: int) -> str:
+        if kind == "project":
+            row = self._con.execute(
+                "SELECT name FROM projects WHERE id = ?",
+                (int(item_id),)).fetchone()
+        elif kind == "library":
+            row = self._con.execute(
+                "SELECT name FROM library_view WHERE id = ?",
+                (int(item_id),)).fetchone()
+        else:
+            return ""
+        return (row["name"] if row is not None else "") or ""
 
-    def _kind_meta(self, kind: str, item_id: int) -> dict:
-        """Kind-specific detail payload for the inspector's Details tab."""
-        from ..core import colors as core_colors
-        from ..core import snippets as core_snippets
-        if kind == "font":
-            rows = self._con.execute(
-                "SELECT family FROM asset WHERE id = ?", (item_id,)).fetchone()
-            family = rows["family"] if rows else ""
-            files = self._con.execute(
-                "SELECT COUNT(*) FROM asset WHERE kind = 'font' AND family = ?",
-                (family,)).fetchone()[0]
-            return {"family": family, "files": files}
-        if kind == "palette":
-            row = self._con.execute(
-                "SELECT name FROM palette WHERE id = ?", (item_id,)).fetchone()
-            return {"name": row["name"] if row else "",
-                    "colors": core_colors.palette_colors(self._con, item_id)}
-        if kind == "snippet":
-            row = self._con.execute(
-                "SELECT title, description, language, created, updated"
-                " FROM snippet WHERE id = ?", (item_id,)).fetchone()
-            if row is None:
-                return {"title": "", "description": "", "language": "",
-                        "created": "", "updated": ""}
-            return {"title": row["title"],
-                    "description": row["description"],
-                    "language": row["language"],
-                    "created": row["created"], "updated": row["updated"]}
-        if kind == "icon":
-            row = self._con.execute(
-                "SELECT name, path FROM asset WHERE id = ?",
-                (item_id,)).fetchone()
-            if row is None:
-                return {"name": "", "path": ""}
-            return {"name": row["name"], "path": row["path"]}
-        return {}
+    def _repo_dir(self, kind: str, label: str) -> str:
+        """Repo path for an entity — empty string without a data dir."""
+        if not self._data_dir or not label:
+            return ""
+        return os.path.join(self._data_dir, _REPO_SUBDIR,
+                            core_git.slugify(f"{kind}:{label}"))
+
+    def _entity_repo(self, kind: str, item_id: int) -> core_git.Repo | None:
+        label = self._entity_name(kind, item_id)
+        repo_dir = self._repo_dir(kind, label)
+        if not repo_dir:
+            return None
+        return core_git.Repo(repo_dir)
+
+    def _read_doc_file(self, repo_dir: str,
+                       names: tuple[str, ...]) -> dict:
+        """{path, exists, text, truncated} for the first matching file."""
+        out = {"path": "", "exists": False, "text": "", "truncated": False}
+        if not repo_dir:
+            return out
+        for name in names:
+            p = os.path.join(repo_dir, name)
+            if not os.path.isfile(p):
+                continue
+            out.update({"path": p, "exists": True})
+            try:
+                with open(p, "r", encoding="utf-8", errors="replace") as fh:
+                    text = fh.read(_READ_CAP + 1)
+            except OSError:
+                continue
+            if len(text) > _READ_CAP:
+                out["text"] = text[:_READ_CAP]
+                out["truncated"] = True
+            else:
+                out["text"] = text
+            break
+        return out
+
+    def _entity_meta(self, kind: str, item_id: int) -> dict:
+        """Documentation / License / Sources payloads for Projects and
+        saved Libraries. Reads (never writes) the entity's repo tree."""
+        label = self._entity_name(kind, item_id)
+        repo_dir = self._repo_dir(kind, label)
+        meta = {
+            "name": label,
+            "repo": {"dir": repo_dir, "exists": False},
+            "readme": {"path": "", "exists": False, "text": "",
+                       "truncated": False},
+            "license": {"path": "", "exists": False, "standard": None},
+        }
+        if not repo_dir:
+            return meta
+        meta["repo"]["exists"] = os.path.isdir(
+            os.path.join(repo_dir, ".git"))
+        readme = self._read_doc_file(
+            repo_dir, ("README.md", "README.markdown", "README"))
+        meta["readme"] = readme
+        lic = self._read_doc_file(
+            repo_dir, ("LICENSE.md", "LICENSE.txt", "LICENSE", "COPYING",
+                       "COPYING.txt", "LICENCE.md"))
+        meta["license"] = {
+            "path": lic["path"], "exists": lic["exists"],
+            "standard": None if not lic["exists"]
+            else core_licenses.recognize(lic["text"]),
+        }
+        return meta
+
+    # ------------------------------------------------------------- git slots
+    def _git_repo(self, kind: str, item_id: int) -> core_git.Repo | None:
+        """The entity's repo, or None after emitting a message when
+        git is unusable / the repo isn't initialized yet."""
+        repo = self._entity_repo(kind, item_id)
+        if repo is None:
+            self.message.emit("No repository for this item yet —"
+                              " initialize it from the Sources tab")
+            return None
+        if not repo.exists():
+            self.message.emit("Repository not initialized —"
+                              " use Initialize first")
+            return None
+        return repo
+
+    @Slot(str, int, result="QVariantMap")
+    def git_summary(self, kind: str, item_id: int) -> dict:
+        """Repo snapshot for the Sources tab (branch, remote, status
+        counts, last commit). Read-only — never initializes."""
+        repo = self._entity_repo(kind, item_id)
+        label = self._entity_name(kind, item_id)
+        out = {"kind": kind, "id": int(item_id), "name": label}
+        if repo is None or not repo.path:
+            out["exists"] = False
+            return out
+        out["path"] = str(repo.path)
+        if not repo.exists():
+            out["exists"] = False
+            return out
+        out["exists"] = True
+        try:
+            st = repo.status()
+        except core_git.GitError as e:
+            # fresh init has no commits — branch read fails; report the
+            # repo as alive but unborn
+            out["branch"] = ""
+            out["staged"] = []
+            out["unstaged"] = []
+            out["untracked"] = []
+            out["clean"] = False
+            out["note"] = str(e)
+            return out
+        out.update({
+            "branch": st.get("branch", ""),
+            "staged": st.get("staged", []),
+            "unstaged": st.get("unstaged", []),
+            "untracked": st.get("untracked", []),
+            "clean": st.get("clean", False),
+        })
+        remotes = repo.remotes()
+        out["remote"] = next(iter(remotes.values()), "") if remotes else ""
+        try:
+            history = repo.log(1)
+        except core_git.GitError:
+            history = []
+        if history:
+            entry = history[0]
+            out["last_commit"] = {
+                "sha": entry.get("sha", ""),
+                "subject": entry.get("message", ""),
+                "when": entry.get("ts", ""),
+            }
+        return out
+
+    @Slot(str, int)
+    def git_init(self, kind: str, item_id: int) -> None:
+        repo = self._entity_repo(kind, item_id)
+        if repo is None:
+            self.message.emit("Cannot locate a repo folder for this item")
+            return
+        if repo.exists():
+            self.message.emit("Repository already initialized")
+            return
+        try:
+            repo.init()
+        except core_git.GitError as e:
+            self.message.emit(f"git init failed: {e}")
+            return
+        self.message.emit("Repository initialized")
+        self.gitUpdated.emit()
+
+    @Slot(str, int, str)
+    def git_commit(self, kind: str, item_id: int, message: str) -> None:
+        repo = self._git_repo(kind, item_id)
+        if repo is None:
+            return
+        try:
+            sha = repo.commit_all((message or "").strip())
+        except core_git.GitError as e:
+            self.message.emit(f"git commit failed: {e}")
+            return
+        self.message.emit("Nothing to commit"
+                          if sha is None else f"Committed {sha[:10]}")
+        self.gitUpdated.emit()
+
+    @Slot(str, int)
+    def git_push(self, kind: str, item_id: int) -> None:
+        repo = self._git_repo(kind, item_id)
+        if repo is None:
+            return
+        remotes = repo.remotes()
+        remote = next(iter(remotes), "origin")
+        try:
+            repo.push(remote)
+        except core_git.GitError as e:
+            self.message.emit(f"git push failed: {e}")
+            return
+        self.message.emit(f"Pushed to {remote}")
+        self.gitUpdated.emit()
+
+    @Slot(str, int)
+    def git_pull(self, kind: str, item_id: int) -> None:
+        repo = self._git_repo(kind, item_id)
+        if repo is None:
+            return
+        remotes = repo.remotes()
+        remote = next(iter(remotes), "origin")
+        try:
+            repo.pull(remote)
+        except core_git.GitError as e:
+            self.message.emit(f"git pull failed: {e}")
+            return
+        self.message.emit(f"Pulled from {remote}")
+        self.gitUpdated.emit()
+
+    @Slot(str, int, str, bool)
+    def git_commit_push(self, kind: str, item_id: int, message: str,
+                        push: bool) -> None:
+        """Save & Push — the Sources tab's one-click sync."""
+        repo = self._git_repo(kind, item_id)
+        if repo is None:
+            return
+        try:
+            sha = repo.commit_all((message or "").strip())
+            if sha is None:
+                self.message.emit("Nothing to commit")
+            else:
+                self.message.emit(f"Committed {sha[:10]}")
+            if push:
+                remotes = repo.remotes()
+                remote = next(iter(remotes), "origin")
+                repo.push(remote)
+                self.message.emit(f"Pushed to {remote}")
+        except core_git.GitError as e:
+            self.message.emit(f"git failed: {e}")
+            return
+        self.gitUpdated.emit()
+
+    @Slot(str, int)
+    def git_discard(self, kind: str, item_id: int) -> None:
+        """Hard rollback of the working tree — QML confirms first."""
+        repo = self._git_repo(kind, item_id)
+        if repo is None:
+            return
+        try:
+            repo.discard_all()
+        except core_git.GitError as e:
+            self.message.emit(f"git discard failed: {e}")
+            return
+        self.message.emit("Working tree reset to HEAD")
+        self.gitUpdated.emit()
 
     # ---------------------------------------------------------- link targets
     @Slot(result="QVariantList")
@@ -319,6 +525,71 @@ class Taxonomy(QObject):
                 "SELECT id, name FROM projects ORDER BY updated DESC LIMIT 30"):
             out.append({"kind": "project", "id": r["id"], "label": r["name"]})
         return out
+
+    # ------------------------------------------------------------ item details
+    @Slot(str, int, result="QVariantMap")
+    def item_properties(self, kind: str, item_id: int) -> dict:
+        """Everything the Properties panel renders for one item: tags,
+        custom field values (with definitions), links, and kind-specific
+        detail data — for any kind."""
+        if not core_tax._item_exists(self._con, kind, item_id):
+            # MISSING item (deleted under the panel, sweep, db switch):
+            # NEVER return a truthy-but-empty {} — every QML binding does
+            # panel.props.meta.<key>.<field>, which throws on a partial
+            # payload ("Value is undefined…", frozen-build terminal
+            # flood). Shape the null case like a real payload.
+            return {"kind": kind, "id": item_id, "tags": [], "fields": [],
+                    "links": [], "meta": {}, "starred": False}
+        tags = core_db.tags_for(self._con, item_id, kind)
+        fields = core_tax.asset_field_values(self._con, item_id, kind)
+        links = core_tax.links_for(self._con, kind, item_id, "both")
+        return {"kind": kind, "id": item_id, "tags": tags,
+                "fields": fields,
+                "links": links,
+                "meta": self._kind_meta(kind, item_id),
+                "starred": core_db.is_starred(self._con, item_id, kind)}
+
+    def _kind_meta(self, kind: str, item_id: int) -> dict:
+        """Kind-specific detail payload for the inspector's pages."""
+        from ..core import colors as core_colors
+        from ..core import snippets as core_snippets
+        if kind == "font":
+            rows = self._con.execute(
+                "SELECT family FROM asset WHERE id = ?", (item_id,)).fetchone()
+            family = rows["family"] if rows else ""
+            files = self._con.execute(
+                "SELECT COUNT(*) FROM asset WHERE kind = 'font'"
+                " AND family = ?", (family,)).fetchone()[0]
+            return {"family": family, "files": files}
+        if kind == "palette":
+            row = self._con.execute(
+                "SELECT name FROM palette WHERE id = ?",
+                (item_id,)).fetchone()
+            return {"name": row["name"] if row else "",
+                    "colors": core_colors.palette_colors(self._con, item_id)}
+        if kind == "snippet":
+            row = self._con.execute(
+                "SELECT title, description, language, created, updated"
+                " FROM snippet WHERE id = ?", (item_id,)).fetchone()
+            if row is None:
+                return {"title": "", "description": "", "language": "",
+                        "created": "", "updated": ""}
+            return {"title": row["title"],
+                    "description": row["description"],
+                    "language": row["language"],
+                    "created": row["created"], "updated": row["updated"]}
+        if kind == "icon":
+            row = self._con.execute(
+                "SELECT name, path FROM asset WHERE id = ?",
+                (item_id,)).fetchone()
+            if row is None:
+                return {"name": "", "path": ""}
+            return {"name": row["name"], "path": row["path"]}
+        if kind in ("project", "library"):
+            # Documentation / License / Sources tabs read the entity's
+            # repo tree under <data-dir>/repos/<kind>-<slug>
+            return self._entity_meta(kind, item_id)
+        return {}
 
     # ----------------------------------------------------------- internals
     def refresh_all(self) -> None:

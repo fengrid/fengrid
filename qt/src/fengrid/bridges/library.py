@@ -685,6 +685,30 @@ class Library(QObject):
         else:
             self.message.emit("Could not add to collection")
 
+    # ------------------------------------------------- generic (per-kind)
+    @Slot(str, int, bool)
+    def star_item(self, kind: str, item_id: int, starred: bool) -> None:
+        """Star/unstar ANY tracked kind by row id — the shared context
+        menu entry (fonts, palettes, snippets, icons…)."""
+        core_db.set_starred(self._con, int(item_id), bool(starred),
+                            kind=kind)
+        self._refresh_lists()
+        self.tagsRevision.emit()
+        self.message.emit("Starred" if starred else "Unstarred")
+
+    @Slot(int, str, int, str)
+    def add_item_to_collection(self, coll_id: int, kind: str,
+                               item_id: int, name: str = "") -> None:
+        ok = core_db.add_collection_ref(self._con, int(coll_id), kind,
+                                        int(item_id), name)
+        self._refresh_lists()
+        self.message.emit("Added to collection" if ok
+                          else "Could not add to collection")
+
+    @Slot(str, int, result=bool)
+    def is_item_starred(self, kind: str, item_id: int) -> bool:
+        return core_db.is_starred(self._con, int(item_id), kind=kind)
+
     @Slot(str)
     @Slot(str, str)
     def add_folder(self, path: str, kind: str = "folder") -> None:

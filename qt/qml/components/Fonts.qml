@@ -107,9 +107,10 @@ Item {
             }
             ExportButton {
                 label: qsTr(".zip")
-                onClicked: zipExport.openWith(
-                    [{ id: "zip", label: qsTr("ZIP (fonts + CSS + README)") }],
-                    library !== null ? library.lastExportDir : "")
+                onClicked: cssDialog.openWith(fonts.selectedFamily)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Same dialog — use «Save as ZIP…» " +
+                                   "inside; formats are selectable there")
             }
             IconButton {
                 icon_name: "refresh"
@@ -224,27 +225,168 @@ Item {
             }
         }
 
-        // family context menu: details, exports, collection
+        // family context menu: pane-specific exports + the COMMON
+        // asset entries (edit / star / taxonomy / properties). All
+        // actions target the CURRENT selection (right-click never
+        // moves it) — see FontsCssDialog for the export flows.
         Menu {
             id: famMenu
-            width: 190
+            width: 210
             padding: 4
             background: Rectangle {
                 radius: 8; color: theme.tokens.surface
                 border.color: theme.tokens.border
             }
+            onAboutToShow: starItem.starred =
+                           fonts !== null && fonts.selectedFamily !== ""
+                           && fonts.family_starred(fonts.selectedFamily)
+
+            // ── pane-specific ──
             FgMenuItem {
-                text: qsTr("Export CSS…")
+                text: qsTr("Export CSS + webfonts…")
                 height: 28
-                onTriggered:
-                    cssDialog.openWith(fonts.selectedFamily)
+                onTriggered: cssDialog.openWith(fonts.selectedFamily)
             }
+            FgMenuSeparator {
+                topPadding: 3; bottomPadding: 3
+                contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
+            }
+            // ── common: edit ──
             FgMenuItem {
-                text: qsTr("Export ZIP…")
+                text: qsTr("Copy name")
                 height: 28
-                onTriggered: zipExport.openWith(
-                    [{ id: "zip", label: qsTr("ZIP (fonts + CSS + README)") }],
-                    library !== null ? library.lastExportDir : "")
+                onTriggered: library !== null && fonts !== null
+                             && fonts.selectedFamily !== ""
+                             && library.copy_text(fonts.selectedFamily)
+            }
+            // ── common: star ──
+            FgMenuItem {
+                id: starItem
+                property bool starred: false
+                text: starred ? qsTr("Unstar family") : qsTr("Star family")
+                height: 28
+                enabled: fonts !== null && fonts.selectedFamily !== ""
+                onTriggered: fonts.star_family(fonts.selectedFamily,
+                                               !starred)
+            }
+            // ── common: taxonomy — collections (submenu) ──
+            FgMenuItem {
+                id: famCollItem
+                text: qsTr("Add to collection…")
+                height: 28
+                enabled: library !== null
+                         && library.collections.length > 0
+                         && fonts !== null && fonts.selectedFamily !== ""
+                onHoveredChanged: if (hovered) famCollSub.popup(
+                                      famCollItem, famCollItem.width, 0)
+                onClicked: famCollSub.popup(famCollItem, famCollItem.width, 0)
+                Menu {
+                    id: famCollSub
+                    width: 220
+                    padding: 4
+                    background: Rectangle {
+                        radius: 8; color: theme.tokens.surface
+                        border.color: theme.tokens.border
+                    }
+                    Repeater {
+                        model: library !== null ? library.collections : []
+                        FgMenuItem {
+                            id: famCollTarget
+                            required property var modelData
+                            height: 28
+                            onTriggered: {
+                                if (fonts === null
+                                        || fonts.selectedFamily === "")
+                                    return
+                                library.add_item_to_collection(
+                                    famCollTarget.modelData.id, "font",
+                                    fonts.family_primary_id(
+                                        fonts.selectedFamily),
+                                    fonts.selectedFamily)
+                            }
+                            contentItem: Text {
+                                text: famCollTarget.modelData.name
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 10
+                            }
+                            background: Rectangle {
+                                color: famCollTarget.hovered
+                                       ? theme.tokens.surface2
+                                       : "transparent"
+                                radius: 5
+                            }
+                        }
+                    }
+                }
+            }
+            // ── common: taxonomy — links (submenu) ──
+            FgMenuItem {
+                id: famLinkItem
+                text: qsTr("Link to…")
+                height: 28
+                enabled: taxonomy !== null
+                         && taxonomy.link_targets().length > 0
+                         && fonts !== null && fonts.selectedFamily !== ""
+                onHoveredChanged: if (hovered) famLinkSub.popup(
+                                      famLinkItem, famLinkItem.width, 0)
+                onClicked: famLinkSub.popup(famLinkItem, famLinkItem.width, 0)
+                Menu {
+                    id: famLinkSub
+                    width: 230
+                    padding: 4
+                    background: Rectangle {
+                        radius: 8; color: theme.tokens.surface
+                        border.color: theme.tokens.border
+                    }
+                    Repeater {
+                        model: taxonomy !== null
+                               ? taxonomy.link_targets() : []
+                        FgMenuItem {
+                            id: famLinkTarget
+                            required property var modelData
+                            height: 28
+                            onTriggered: {
+                                if (fonts === null
+                                        || fonts.selectedFamily === "")
+                                    return
+                                taxonomy.add_link(
+                                    "font",
+                                    fonts.family_primary_id(
+                                        fonts.selectedFamily),
+                                    famLinkTarget.modelData.kind,
+                                    famLinkTarget.modelData.id, "")
+                            }
+                            contentItem: Text {
+                                text: famLinkTarget.modelData.label
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.text
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                leftPadding: 10
+                            }
+                            background: Rectangle {
+                                color: famLinkTarget.hovered
+                                       ? theme.tokens.surface2
+                                       : "transparent"
+                                radius: 5
+                            }
+                        }
+                    }
+                }
+            }
+            // ── common: properties ──
+            FgMenuItem {
+                text: qsTr("Properties")
+                height: 28
+                enabled: fonts !== null && fonts.selectedFamily !== ""
+                onTriggered: fonts.select(fonts.selectedFamily)
+                // selecting re-targets the property inspector (left-
+                // click behaviour, explicitly chosen here)
             }
         }
 
@@ -289,21 +431,7 @@ Item {
 
     // export dialogs (unified interface) + result feedback
     function openExportCss() { cssDialog.openWith(fonts.selectedFamily) }
-    function openExportZip() {
-        zipExport.openWith(
-            [{ id: "zip", label: qsTr("ZIP (fonts + CSS + README)") }],
-            library !== null ? library.lastExportDir : "")
-    }
     FontsCssDialog { id: cssDialog }
-    ExportDialog {
-        id: zipExport
-        headline: qsTr("Export font family")
-        onDoExport: function (formats, dest) {
-            if (fonts === null || fonts.selectedFamily === "")
-                return
-            fonts.export_zip(fonts.selectedFamily, dest)
-        }
-    }
     Toast { id: exportToast }
     Connections {
         target: fonts

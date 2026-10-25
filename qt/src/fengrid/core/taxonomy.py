@@ -261,6 +261,36 @@ def delete_field(con: sqlite3.Connection, field_id: int) -> None:
     con.commit()  # values cascade
 
 
+def library_view_kind_counts(con: sqlite3.Connection, view_id: int) -> dict[str, int]:
+    """Per-asset-kind row counts for a saved library view. The rail's
+    pane-scoped lists need icon vs font counts so a library only shows
+    on panes where it has displayable assets. Empty view → {}."""
+    row = con.execute("SELECT tags, match_all FROM library_view WHERE id = ?",
+                      (view_id,)).fetchone()
+    if row is None:
+        return {}
+    tags = [t.strip() for t in (row["tags"] or "").split(",") if t.strip()]
+    if not tags:
+        return {}
+    marks = ",".join("?" * len(tags))
+    if row["match_all"]:
+        sql = ("SELECT a.kind, COUNT(DISTINCT a.id) AS n FROM asset a"
+               " JOIN item_tag it ON it.item_id = a.id"
+               " AND it.item_kind = a.kind"
+               " JOIN tag t ON t.id = it.tag_id WHERE t.name IN (%s)"
+               " GROUP BY a.id, a.kind HAVING COUNT(DISTINCT t.name) = ?"
+               % marks)
+        params = [*tags, len(tags)]
+    else:
+        sql = ("SELECT a.kind, COUNT(DISTINCT a.id) AS n FROM asset a"
+               " JOIN item_tag it ON it.item_id = a.id"
+               " AND it.item_kind = a.kind"
+               " JOIN tag t ON t.id = it.tag_id WHERE t.name IN (%s)"
+               " GROUP BY a.kind" % marks)
+        params = list(tags)
+    return {r["kind"]: r["n"] for r in con.execute(sql, params)}
+
+
 def _item_exists(con: sqlite3.Connection, kind: str, item_id: int) -> bool:
     """True when a (kind, id) pair names a real row — every asset-table
     kind lives in `asset`; snippets and palettes in their own tables."""
@@ -273,6 +303,14 @@ def _item_exists(con: sqlite3.Connection, kind: str, item_id: int) -> bool:
                            (item_id,)).fetchone() is not None
     if kind == "palette":
         return con.execute("SELECT 1 FROM palette WHERE id = ?",
+                           (item_id,)).fetchone() is not None
+    # first-class entities that carry their own inspector (Documentation /
+    # License / Sources tabs): one git repo per Project or saved Library
+    if kind == "project":
+        return con.execute("SELECT 1 FROM projects WHERE id = ?",
+                           (item_id,)).fetchone() is not None
+    if kind == "library":
+        return con.execute("SELECT 1 FROM library_view WHERE id = ?",
                            (item_id,)).fetchone() is not None
     return False
 

@@ -42,8 +42,8 @@ def test_css_preview_relative_paths(con):
     out = ep.css_preview(con, ["Tuffy"], ["woff2", "woff"])
     css = out["css"]
     assert '@font-face' in css
-    assert 'url("fonts/Tuffy/tuffy_bold_italic.woff2")' in css
-    assert 'url("fonts/Tuffy/tuffy_bold_italic.woff")' in css
+    assert 'url("fonts/tuffy_bold_italic.woff2")' in css
+    assert 'url("fonts/tuffy_bold_italic.woff")' in css
     assert "font-weight: 700" in css
     assert "font-style: italic" in css
     # nothing is written by the preview
@@ -62,11 +62,11 @@ def test_css_package_writes_css_and_fonts(con, tmp_path):
                                 ["Tuffy"], ["woff2", "woff"])
     assert out.name == "fonts.css"
     css = (tmp_path / "fonts.css").read_text(encoding="utf-8")
-    assert 'url("fonts/Tuffy/tuffy_bold_italic.woff2")' in css
+    assert 'url("fonts/tuffy_bold_italic.woff2")' in css
     # the referenced files exist AT the referenced relative paths, and
     # are real woff2/woff (fontTools flavors: 'wOF2' / 'wOFF' magic)
-    woff2 = tmp_path / "fonts/Tuffy/tuffy_bold_italic.woff2"
-    woff = tmp_path / "fonts/Tuffy/tuffy_bold_italic.woff"
+    woff2 = tmp_path / "fonts/tuffy_bold_italic.woff2"
+    woff = tmp_path / "fonts/tuffy_bold_italic.woff"
     assert woff2.read_bytes()[:4] == b"wOF2"
     assert woff.read_bytes()[:4] == b"wOFF"
 
@@ -87,3 +87,27 @@ def test_css_package_no_families_raises(con, tmp_path):
 def test_package_leaves_no_stage_dir(con, tmp_path):
     ep.export_css_package(con, tmp_path, "", ["Tuffy"], ["woff2"])
     assert not (tmp_path / ".fonts-stage").exists()
+
+
+def test_fonts_zip_layout(con, tmp_path):
+    """The spec layout: fonts.css at the root, fonts/<NAME>.<flavor>."""
+    out = ep.export_fonts_zip(con, ["Tuffy"], tmp_path,
+                              fmts=["woff2", "woff"],
+                              include_original=True)
+    import zipfile
+    with zipfile.ZipFile(out) as zf:
+        names = zf.namelist()
+    assert "fonts.css" in names
+    assert "fonts/tuffy_bold_italic.woff2" in names
+    assert "fonts/tuffy_bold_italic.woff" in names
+    assert "fonts/tuffy_bold_italic.ttf" in names      # include_original
+    css = out.read_bytes() if False else zipfile.ZipFile(out).read("fonts.css")
+    assert b'url("fonts/tuffy_bold_italic.woff2")' in css
+    assert b"file://" not in css                        # no absolute paths
+
+
+def test_fonts_zip_user_css_verbatim(con, tmp_path):
+    out = ep.export_fonts_zip(con, ["Tuffy"], tmp_path,
+                              fmts=["woff2"], css_text="/* mine */")
+    import zipfile
+    assert zipfile.ZipFile(out).read("fonts.css") == b"/* mine */"

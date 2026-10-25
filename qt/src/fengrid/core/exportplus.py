@@ -532,10 +532,10 @@ def css_preview(con, families: list[str],
             if f in ("woff2", "woff", "ttf", "otf")] or ["woff2"]
     plan: list[dict] = []
     rules: list[str] = []
+    used: set[str] = set()
     for family in families:
         files = core_fonts.family_files(con, family)
         fam_dir = _family_dir(family)
-        used: set[str] = set()
         for meta in files:
             src = Path(meta["path"])
             if not src.is_file():
@@ -543,7 +543,11 @@ def css_preview(con, families: list[str],
             base = re.sub(r"[^A-Za-z0-9._-]+", "_", src.stem).strip("_") \
                 or "font"
             for flavor in fmts:
-                rel = f"fonts/{fam_dir}/{base}.{flavor}"
+                # flat per the spec: fonts/<FILE>.<flavor>; a family-dir
+                # prefix only when a name would collide across families
+                rel = f"fonts/{base}.{flavor}"
+                if rel in used:
+                    rel = f"fonts/{fam_dir}/{base}.{flavor}"
                 n = 2
                 while rel in used:
                     rel = f"fonts/{fam_dir}/{base}-{n}.{flavor}"
@@ -590,3 +594,69 @@ def export_css_package(con, dest_dir: str | Path, css_text: str,
                    else preview["css"], encoding="utf-8")
     os.replace(tmp, css_out)
     return css_out
+
+
+def export_fonts_zip(con, families: list[str], dest_dir: str | Path, *,
+                     fmts: list[str] | None = None,
+                     include_original: bool = False,
+                     css_text: str = "") -> Path:
+    """ZIP the webfont package: fonts.css at the root (RELATIVE URLs) +
+    fonts/<Name>.<flavor> for every selected family's files.
+
+    Layout (per spec):
+        /fonts.css
+        /fonts/[SELECTED_FONT_NAME].woff|.woff2[.ttf|.otf]
+
+    flavors: any of woff2/woff/ttf/otf (woff2+woff by default). With
+    include_original the source ttf/otf files are added too, so a
+    'convert' choice never *loses* the originals unless asked.
+    css_text: when non-empty, stored VERBATIM (the user-edited dialog
+    text); otherwise the freshly generated CSS is used."""
+    from . import fonts as core_fonts
+
+    fmts = [f for f in (fmts or ["woff2", "woff"])
+            if f in ("woff2", "woff", "ttf", "otf")] or ["woff2"]
+    preview = css_preview(con, families, fmts)
+    plan = preview["plan"]
+    if not plan:
+        raise ExportError("no font files found for the selected families")
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    stem = _family_dir("+".join(families)).strip("_")[:60] or "fonts"
+    out = dest_dir / f"{stem}-webfonts.zip"
+    stage = dest_dir / ".fonts-zip-stage"
+    stage.mkdir(parents=True, exist_ok=True)
+    try:
+        originals: list[tuple[Path, str]] = []
+        seen: set[str] = set()
+        for item in plan:
+            src = Path(item["src"])
+            conv = convert_font(src, stage, item["flavor"])
+            arcname = item["rel"]                # fonts/<Family>/<file>
+            if arcname in seen:                  # same file, two families
+                base = Path(arcname)
+                arcname = str(base.with_name(
+                    base.stem + "-2" + base.suffix))
+            seen.add(arcname)
+            originals.append((conv, arcname))
+        tmp = out.with_suffix(".zip.tmp")
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("fonts.css",
+                        (css_text or "").strip() or preview["css"])
+            for conv, arcname in originals:
+                zf.write(conv, arcname)
+            if include_original:
+                done: set[str] = set()
+                for item in plan:
+                    src = Path(item["src"])
+                    if src.suffix.lower() in (".ttf", ".otf") and \
+                            src.name not in done:
+                        zf.write(src, f"fonts/{src.name}")
+                        done.add(src.name)
+        os.replace(tmp, out)
+    finally:
+        if stage.is_dir():
+            for left in stage.iterdir():
+                left.unlink(missing_ok=True)
+            stage.rmdir()
+    return out

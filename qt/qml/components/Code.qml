@@ -654,6 +654,20 @@ Item {
                         snipList.currentItem ? snipList.currentItem.row.id : -1)
                 }
                 FgMenuItem {
+                    text: library !== null
+                          && code !== null && code.currentId > 0
+                          && library.is_item_starred("snippet", code.currentId)
+                          ? qsTr("Unstar") : qsTr("Star")
+                    height: 28
+                    enabled: code !== null && code.currentId > 0
+                             && library !== null
+                    onTriggered: library !== null && code !== null
+                                 && library.star_item(
+                                     "snippet", code.currentId,
+                                     !library.is_item_starred(
+                                         "snippet", code.currentId))
+                }
+                FgMenuItem {
                     text: qsTr("Copy title")
                     height: 28
                     onTriggered: {

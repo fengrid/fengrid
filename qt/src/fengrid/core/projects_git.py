@@ -333,6 +333,16 @@ class Repo:
             pass
         self._run("remote", "add", name, url)
 
+    def pull(self, remote: str = "origin",
+             branch: str | None = None) -> str:
+        """Fast-forward pull; GitError on conflicts / no upstream."""
+        if not self.exists():
+            raise GitError("not a repository", 128)
+        args = ["pull", "--ff-only", remote]
+        if branch:
+            args.append(branch)
+        return self._run(*args, timeout=PUSH_TIMEOUT)
+
     def push(self, remote: str = "origin", branch: str | None = None,
              set_upstream: bool = True) -> dict:
         args = ["push"]
