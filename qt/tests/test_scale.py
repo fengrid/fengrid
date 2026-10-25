@@ -6,7 +6,6 @@ bounded-lookahead parallel scan identification.
 Core tests are Qt-free; the bridge tests follow test_command_bar.py's
 fixture pattern.
 """
-import json
 import os
 import sqlite3
 import sys
@@ -15,7 +14,8 @@ import pytest
 from PIL import Image
 
 from fengrid.core import backup as core_backup
-from fengrid.core import db, indexer, search as core_search
+from fengrid.core import db, indexer
+from fengrid.core import search as core_search
 from fengrid.core import watch as core_watch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -279,8 +279,9 @@ def test_lists_refresh_coalesces_mutations(tmp_path):
     """N mutations schedule ONE debounced refresh — a 1000-item bulk
     star must not run the five rail aggregates 1000 times."""
     _qapp()
-    from fengrid.bridges.library import Library
     from PySide6.QtTest import QTest
+
+    from fengrid.bridges.library import Library
 
     con = db.connect(tmp_path / "t.db")
     try:

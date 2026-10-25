@@ -334,12 +334,15 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                     max_workers=_IDENTIFY_WORKERS)
             window: deque = deque()
             try:
-                def _stage(next_path: str) -> tuple:
+                def _stage(seen_set: set, src_root: str,
+                           next_path: str, ident_pool) -> tuple:
                     # fingerprint + derive on the scan thread (the DB
                     # read rides this thread's own connection); the
                     # future is None for unchanged files — the writer
-                    # must not pay identification for them
-                    seen.add(next_path)
+                    # must not pay identification for them. Loop
+                    # variables are explicit parameters, not free
+                    # bindings (ruff B023).
+                    seen_set.add(next_path)
                     counts["total"] += 1
                     fp_n = fingerprint(next_path)
                     prev_n = con.execute(
@@ -349,18 +352,19 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                     if prev_n is not None and prev_n[0] == fp_n:
                         return (next_path, fp_n, prev_n, None, None,
                                 None)
-                    meta_n = scanner.derive_meta(next_path, root)
+                    meta_n = scanner.derive_meta(next_path, src_root)
                     kind_n = (core_kinds.kind_for_ext(meta_n["ext"])
                               or "icon")
                     meta_n["kind"] = kind_n
-                    fut = (pool.submit(identify, next_path)
-                           if pool is not None else None)
+                    fut = (ident_pool.submit(identify, next_path)
+                           if ident_pool is not None else None)
                     return (next_path, fp_n, prev_n, meta_n, kind_n,
                             fut)
 
                 for _ in range(_IDENTIFY_WINDOW):
                     try:
-                        window.append(_stage(next(file_iter)))
+                        window.append(_stage(seen, root,
+                                             next(file_iter), pool))
                     except StopIteration:
                         break
                 while window:
@@ -396,7 +400,7 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
                         nxt = next(file_iter)
                     except StopIteration:
                         continue
-                    window.append(_stage(nxt))
+                    window.append(_stage(seen, root, nxt, pool))
             finally:
                 if pool is not None:
                     pool.shutdown(wait=False)
