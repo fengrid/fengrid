@@ -175,6 +175,29 @@ def test_apply_regex_rejects_nested_quantifiers():
     assert apply_regex("photo_0001", r"_(\d{4})$", r"-v\1") == "photo-v0001"
 
 
+def test_apply_regex_probe_kills_detector_evasion():
+    """SEC-7 depth: `x+x+y` has NO groups (the textual detector can't
+    see it) yet backtracks exponentially — the regex module's C-level
+    timeout must abort it."""
+    import time
+    from fengrid.core import patterns as P
+    if P._regex_mod is None:
+        import pytest
+        pytest.skip("regex module not installed — detector-only mode")
+    stem = "x" * 2000             # uncapped this takes many seconds
+    pat = "x+x+y"
+    t0 = time.perf_counter()
+    out = P.apply_regex(stem, pat, "x")
+    elapsed = time.perf_counter() - t0
+    assert out == stem             # runaway pattern → stem unchanged
+    assert elapsed < 1.0, elapsed  # aborted by the C timeout budget
+    # invalid patterns also fall back to the stem (regex.error path)
+    assert P.apply_regex("f.png", "[unclosed", "y") == "f.png"
+    # ordinary patterns still work through the guarded path
+    assert P.apply_regex("photo_0002", r"_(\d{4})$", r"-v\1") == \
+        "photo-v0002"
+
+
 # ------------------------------------------------------ SEC-8 (#10)
 def test_scheme_path_must_be_under_registered_roots(con, tmp_path):
     import os as _os

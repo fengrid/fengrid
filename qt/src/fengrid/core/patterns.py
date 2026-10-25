@@ -1,5 +1,4 @@
 """Automated renaming engine for imports (and export batch ops).
-
 Pure functions — no Qt, no DB — so every rule is unit-testable.
 
 Composition order (documented + tested):
@@ -25,21 +24,61 @@ _MULTI_DOT = re.compile(r"\.{2,}")
 _NESTED_QUANT = re.compile(
     r"\([^()]*[+*}]\s*[^()]*\)\s*[+*{]")  # (…+…)  +  → nested quantifier
 
+# SEC-7 second layer: the textual detector above is necessarily
+# incomplete — patterns like `(a|a)*b` (overlapping alternation, no
+# nested quantifier) backtrack exponentially while looking harmless.
+# Enforcement uses the `regex` module whose C-level `timeout=` REALLY
+# aborts a runaway match. The stdlib `re` engine cannot be preempted:
+# a whole sub() call is a single C invocation that holds the GIL until
+# it finishes, so a watchdog thread would only time out after the
+# damage is done — that path is NOT attempted.
+try:                                              # pragma: no cover - env
+    import regex as _regex_mod
+except ImportError:                               # optional at runtime
+    _regex_mod = None
+
+_PATTERN_PROBE_S = 0.25
+
+
+def _sub_direct(find: str, repl: str, stem: str) -> str:
+    return re.sub(find, repl, stem)
+
+
+def _sub_guarded(find: str, repl: str, stem: str) -> str | None:
+    """Run one substitution under the time budget.
+
+    Returns the result string, or None when the pattern exceeded the
+    budget (or is invalid — callers treat None as "keep the stem").
+    Requires the `regex` module; without it only the textual detector
+    guards (callers fall back to `re`, which is what pre-SEC-7 did).
+    """
+    if _regex_mod is None:
+        try:
+            return _sub_direct(find, repl, stem)
+        except re.error:
+            return None
+    try:
+        # regex raises builtin TimeoutError on expiry and regex.error
+        # on invalid patterns — either way the stem survives unchanged
+        return _regex_mod.sub(find, repl, stem,
+                              timeout=_PATTERN_PROBE_S)
+    except Exception:                             # noqa: BLE001
+        return None
+
 
 def apply_regex(stem: str, find: str, repl: str) -> str:
     """User find/replace. An invalid pattern must not kill a 10k-file
     import — fall back to the unchanged stem. SEC-7: a pathological
-    pattern (nested quantifiers like `(a+)+`) can backtrack
-    catastrophically on every filename, burning CPU for the whole
-    import; such patterns are rejected up front."""
+    pattern (nested quantifiers like `(a+)+`, or detector-evading
+    overlap like `(a|a)*b`) can backtrack catastrophically on every
+    filename; such patterns are rejected up front, and every execution
+    runs under the regex module's hard C-level timeout."""
     if not find:
         return stem
     if len(find) > 512 or _NESTED_QUANT.search(find):
         return stem
-    try:
-        return re.sub(find, repl if repl is not None else "", stem)
-    except re.error:
-        return stem
+    result = _sub_guarded(find, repl if repl is not None else "", stem)
+    return stem if result is None else result
 
 
 def _pad(n: int, width: int) -> str:

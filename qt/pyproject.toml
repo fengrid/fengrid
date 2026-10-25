@@ -14,6 +14,9 @@ dependencies = [
     "PySide6>=6.8,<6.10",
     "pillow>=10.4",
     "defusedxml>=0.7",
+    # SEC-7 (#9): C-level `timeout=` aborts catastrophic user regexes —
+    # stdlib re cannot be preempted (a whole match is one GIL-held C call)
+    "regex>=2024.4",
 ]
 
 [project.scripts]
