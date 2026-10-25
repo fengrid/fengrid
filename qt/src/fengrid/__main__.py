@@ -260,6 +260,11 @@ def main(argv=None) -> int:
     # colors are pulled from the theme bridge (tokensChanged-driven)
     snip_highlighter = EditorHighlighter(theme)
     ctx.setContextProperty("snipHl", snip_highlighter)
+    # a second highlighter instance for ad-hoc editors (fonts.css export
+    # dialog) — attaching snipHl elsewhere would steal it from the
+    # snippet editor, since EditorHighlighter owns one document at a time
+    css_highlighter = EditorHighlighter(theme)
+    ctx.setContextProperty("cssHl", css_highlighter)
     ctx.setContextProperty("projects", projects_bridge)
     ctx.setContextProperty("studio", studio_bridge)
     ctx.setContextProperty("sc", sc_bridge)

@@ -357,6 +357,65 @@ Item {
 
     Toast { id: toast }
 
+    // unified export: standalone page for the open snippet, or package
+    // kinds for the whole filtered list; html always exports CURRENT
+    ExportDialog {
+        id: codeExport
+        headline: qsTr("Export snippets")
+        options: [
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    text: qsTr("scope")
+                    font.family: theme.monoFont; font.pixelSize: 10
+                    color: theme.tokens.textMuted
+                    Layout.preferredWidth: 40
+                }
+                ComboBox {
+                    id: scopeBox
+                    model: [qsTr("current snippet"), qsTr("all listed snippets")]
+                    currentIndex: 0
+                    background: Rectangle {
+                        radius: 4; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: scopeBox.displayText
+                        font.family: theme.uiFont; font.pixelSize: 10
+                        color: theme.tokens.text
+                        verticalAlignment: Text.AlignVCenter; leftPadding: 6
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: qsTr("HTML page always exports the open snippet")
+                    font.family: theme.uiFont; font.pixelSize: 9
+                    color: theme.tokens.textMuted
+                }
+            }
+        ]
+        onDoExport: function (formats, dest) {
+            if (code === null)
+                return
+            var all = scopeBox.currentIndex === 1
+            for (var i = 0; i < formats.length; i++) {
+                var f = formats[i]
+                if (f === "html")
+                    code.export_current(dest, "html")
+                else if (all)
+                    code.export_all(dest, f)
+                else
+                    code.export_current(dest, f)
+            }
+        }
+    }
+    Connections {
+        target: code
+        function onExportDone(path) { toast.show(qsTr("Exported: %1").arg(path)) }
+        function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
+    }
+
     // ------------------------------------------------------------- sidebar
     Rectangle {
         id: sidebar
@@ -557,8 +616,12 @@ Item {
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function (mouse) {
-                            code !== null && code.open_snippet(snipItem.modelData.id)
-                            if (mouse.button === Qt.RightButton)
+                            // left-click selects; right-click opens the
+                            // menu for the CURRENT snippet, unchanged
+                            if (mouse.button === Qt.LeftButton)
+                                code !== null
+                                    && code.open_snippet(snipItem.modelData.id)
+                            else
                                 snipMenu.popup()
                         }
                     }
@@ -913,6 +976,37 @@ Item {
                             text: runBtn.text
                             color: runBtn.enabled ? theme.tokens.bg
                                                   : theme.tokens.textMuted
+                            font.family: theme.uiFont
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 10; rightPadding: 10
+                        }
+                    }
+                    Button {
+                        id: exportBtn2
+                        text: qsTr("Export…")
+                        Layout.preferredHeight: 26
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Standalone HTML, or a bundle " +
+                                           "for VS Code / massCode / " +
+                                           "fengrid — pick formats, " +
+                                           "destination and scope")
+                        onClicked: codeExport.openWith(
+                            [{ id: "html", label: qsTr("HTML page") },
+                             { id: "bundle", label: qsTr("fengrid bundle") },
+                             { id: "vscode", label: "VS Code" },
+                             { id: "masscode", label: "massCode" },
+                             { id: "files", label: qsTr("Plain files") }],
+                            library !== null ? library.lastExportDir : "")
+                        background: Rectangle {
+                            radius: 6
+                            color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: exportBtn2.text
+                            color: theme.tokens.text
                             font.family: theme.uiFont
                             font.pixelSize: 11
                             horizontalAlignment: Text.AlignHCenter

@@ -7,6 +7,7 @@ pane drove these over /api/snippets REST endpoints; same data, no server.
 """
 
 from __future__ import annotations
+from pathlib import Path
 
 import json
 
@@ -27,6 +28,8 @@ class Code(QObject):
     filtersChanged = Signal()
     importDone = Signal(int)
     importFailed = Signal(str)
+    exportDone = Signal(str)
+    exportFailed = Signal(str)
     keymapChanged = Signal()
 
     KEYMAPS = ("vscode", "emacs", "vim", "readline")
@@ -311,6 +314,59 @@ class Code(QObject):
         self.message.emit(f"Imported {len(items)} snippet"
                           f"{'s' if len(items) != 1 else ''}")
 
+    # -------------------------------------------------------------- exports
+    @Slot(str, str)
+    def export_current(self, dest_dir: str, kind: str = "html") -> None:
+        """Export the CURRENT snippet: 'html' = standalone page with the
+        editors' HTML/CSS/JS inlined; any core kind (bundle / vscode /
+        masscode / files) packages it the same way the library does."""
+        from ..core import exportplus as core_exportplus
+        dest = str(Path(dest_dir).expanduser()) if dest_dir else ""
+        if not dest:
+            self.exportFailed.emit("choose a folder first")
+            return
+        cur = self._current
+        if not cur:
+            self.exportFailed.emit("no snippet open")
+            return
+        try:
+            if kind == "html":
+                name = (_slug_of(cur.get("title")) or "snippet") + ".html"
+                out = Path(dest) / name
+                out.write_text(_standalone_html(cur), encoding="utf-8")
+            else:
+                res = core_exportplus.export_snippets(
+                    [_snippet_row(self._con, int(cur["id"]))],
+                    dest, kind=kind)
+                out = res["outputs"][0] if res["outputs"] else dest
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return
+        settings.set(self._con, "last_export_dir", dest)
+        self.exportDone.emit(str(out))
+
+    @Slot(str, str)
+    def export_all(self, dest_dir: str, kind: str = "bundle") -> None:
+        """Export EVERY listed snippet in the given package kind."""
+        from ..core import exportplus as core_exportplus
+        dest = str(Path(dest_dir).expanduser()) if dest_dir else ""
+        if not dest:
+            self.exportFailed.emit("choose a folder first")
+            return
+        try:
+            rows = [_snippet_row(self._con, int(s["id"]))
+                    for s in self._snippets]
+            if not rows:
+                self.exportFailed.emit("no snippets to export")
+                return
+            res = core_exportplus.export_snippets(rows, dest, kind=kind)
+            out = res["outputs"][0] if res["outputs"] else dest
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return
+        settings.set(self._con, "last_export_dir", dest)
+        self.exportDone.emit(str(out))
+
     # -------------------------------------------------------------- internals
     def _refresh(self) -> None:
         rows = core_snippets.list_snippets(
@@ -325,3 +381,26 @@ class Code(QObject):
                       for n, c in core_snippets.tag_cloud(self._con)]
         self.snippetsChanged.emit()
         self.tagsChanged.emit()
+
+
+def _slug_of(title: str) -> str:
+    import re as _re
+    return _re.sub(r"[^A-Za-z0-9._-]+", "-", (title or "").strip()).strip("-")
+
+
+def _snippet_row(con, snippet_id: int) -> dict:
+    row = con.execute(
+        "SELECT id, title, language, description, tags, html,"
+        " css, js FROM snippet WHERE id = ?", (snippet_id,)
+    ).fetchone()
+    return dict(row) if row else {}
+
+
+def _standalone_html(cur: dict) -> str:
+    css = cur.get("css") or ""
+    js = cur.get("js") or ""
+    body = cur.get("html") or ""
+    return ("<!doctype html><html><head><meta charset='utf-8'>"
+            f"<title>{cur.get('title') or 'snippet'}</title>"
+            f"<style>{css}</style></head><body>"
+            f"{body}<script>{js}</" + "script></body></html>")

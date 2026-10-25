@@ -254,9 +254,13 @@ Item {
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         onClicked: function (mouse) {
-                            projects !== null
-                                && projects.open(projItem.modelData.id)
-                            if (mouse.button === Qt.RightButton)
+                            // left-click opens (inspector follows);
+                            // right-click opens the menu for the CURRENT
+                            // project without switching
+                            if (mouse.button === Qt.LeftButton)
+                                projects !== null
+                                    && projects.open(projItem.modelData.id)
+                            else
                                 projMenu.popup()
                         }
                     }

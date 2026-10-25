@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import "."
 
 Item {
@@ -97,10 +98,15 @@ Item {
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function (mouse) {
-                        grid.currentIndex = index
-                        grid.forceActiveFocus()
-                        if (mouse.button === Qt.RightButton)
+                        // left-click selects (inspector follows);
+                        // right-click opens the menu for the CURRENT
+                        // selection without moving it
+                        if (mouse.button === Qt.LeftButton) {
+                            grid.currentIndex = index
+                            grid.forceActiveFocus()
+                        } else {
                             cardMenu.popup()
+                        }
                     }
                     onDoubleClicked: library.copy_name(index)
                 }
@@ -312,6 +318,21 @@ Item {
                 }
             }
             FgMenuItem {
+                id: exportItem
+                text: qsTr("Export…")
+                height: 30
+                onTriggered: cardExport.openWith(
+                    [{ id: "png", label: "PNG" },
+                     { id: "jpeg", label: "JPEG" },
+                     { id: "webp", label: "WebP" },
+                     { id: "ico", label: "ICO" },
+                     { id: "pdf", label: "PDF" },
+                     { id: "gif", label: "GIF" },
+                     { id: "tiff", label: "TIFF" },
+                     { id: "bmp", label: "BMP" }],
+                    library !== null ? library.lastExportDir : "")
+            }
+            FgMenuItem {
                 id: collMenuItem
                 text: qsTr("Add to collection")
                 height: 30
@@ -433,6 +454,64 @@ Item {
                     bottomPadding: 6
                 }
             }
+        }
+    }
+
+    // unified export: multi-format, destination, size option
+    property string exportSize: "orig"
+    ExportDialog {
+        id: cardExport
+        headline: qsTr("Export asset")
+        options: [
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    text: qsTr("size")
+                    font.family: theme.monoFont; font.pixelSize: 10
+                    color: theme.tokens.textMuted
+                    Layout.preferredWidth: 40
+                }
+                ComboBox {
+                    id: exportSizeBox
+                    model: ["orig", "16", "32", "64", "128", "256"]
+                    currentIndex: 0
+                    onActivated: function (idx) {
+                        cardExport.exportSize = exportSizeBox.model[idx]
+                    }
+                    background: Rectangle {
+                        radius: 4; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: exportSizeBox.displayText
+                        font.family: theme.monoFont; font.pixelSize: 10
+                        color: theme.tokens.text
+                        verticalAlignment: Text.AlignVCenter; leftPadding: 6
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: qsTr("applies to every selected format")
+                    font.family: theme.uiFont; font.pixelSize: 9
+                    color: theme.tokens.textMuted
+                }
+            }
+        ]
+        onDoExport: function (formats, dest) {
+            for (var i = 0; i < formats.length; i++)
+                library.export_asset(grid.currentIndex, formats[i],
+                                     cardExport.exportSize, dest)
+        }
+    }
+    Toast { id: exportToast }
+    Connections {
+        target: library
+        function onExportDone(path) {
+            exportToast.show(qsTr("Exported: %1").arg(path))
+        }
+        function onExportFailed(err) {
+            exportToast.show(qsTr("Export failed: %1").arg(err))
         }
     }
 }

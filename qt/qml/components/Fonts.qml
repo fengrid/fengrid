@@ -103,17 +103,13 @@ Item {
                 label: fonts !== null && fonts.selectedFamily !== ""
                        ? qsTr("Export CSS — %1").arg(fonts.selectedFamily)
                        : qsTr("Export CSS")
-                onClicked: {
-                    exportZip = false
-                    exportDialog.open()
-                }
+                onClicked: cssDialog.openWith(fonts.selectedFamily)
             }
             ExportButton {
                 label: qsTr(".zip")
-                onClicked: {
-                    exportZip = true
-                    exportDialog.open()
-                }
+                onClicked: zipExport.openWith(
+                    [{ id: "zip", label: qsTr("ZIP (fonts + CSS + README)") }],
+                    library !== null ? library.lastExportDir : "")
             }
             IconButton {
                 icon_name: "refresh"
@@ -121,21 +117,6 @@ Item {
                 ToolTip.text: qsTr("Re-scan font folders")
                 onClicked: fonts.rescan()
             }
-        }
-    }
-
-    property bool exportZip: false
-
-    FolderDialog {
-        id: exportDialog
-        onAccepted: {
-            var dest = Icons.toLocalPath(selectedFolder)
-            if (fonts === null || fonts.selectedFamily === "")
-                return
-            if (exportZip)
-                fonts.export_zip(fonts.selectedFamily, dest)
-            else
-                fonts.export_css(fonts.selectedFamily, dest)
         }
     }
 
@@ -231,8 +212,12 @@ Item {
                     onClicked: function (mouse) {
                         if (fonts === null)
                             return
-                        fonts.select(model.family)
-                        if (mouse.button === Qt.RightButton)
+                        // left-click selects (inspector follows);
+                        // right-click opens the menu for the CURRENT
+                        // selection without moving it
+                        if (mouse.button === Qt.LeftButton)
+                            fonts.select(model.family)
+                        else
                             famMenu.popup()
                     }
                 }
@@ -251,18 +236,15 @@ Item {
             FgMenuItem {
                 text: qsTr("Export CSS…")
                 height: 28
-                onTriggered: {
-                    exportZip = false
-                    exportDialog.open()
-                }
+                onTriggered:
+                    cssDialog.openWith(fonts.selectedFamily)
             }
             FgMenuItem {
                 text: qsTr("Export ZIP…")
                 height: 28
-                onTriggered: {
-                    exportZip = true
-                    exportDialog.open()
-                }
+                onTriggered: zipExport.openWith(
+                    [{ id: "zip", label: qsTr("ZIP (fonts + CSS + README)") }],
+                    library !== null ? library.lastExportDir : "")
             }
         }
 
@@ -302,6 +284,34 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                 }
             }
+        }
+    }
+
+    // export dialogs (unified interface) + result feedback
+    function openExportCss() { cssDialog.openWith(fonts.selectedFamily) }
+    function openExportZip() {
+        zipExport.openWith(
+            [{ id: "zip", label: qsTr("ZIP (fonts + CSS + README)") }],
+            library !== null ? library.lastExportDir : "")
+    }
+    FontsCssDialog { id: cssDialog }
+    ExportDialog {
+        id: zipExport
+        headline: qsTr("Export font family")
+        onDoExport: function (formats, dest) {
+            if (fonts === null || fonts.selectedFamily === "")
+                return
+            fonts.export_zip(fonts.selectedFamily, dest)
+        }
+    }
+    Toast { id: exportToast }
+    Connections {
+        target: fonts
+        function onExportDone(path) {
+            exportToast.show(qsTr("Exported: %1").arg(path))
+        }
+        function onExportFailed(err) {
+            exportToast.show(qsTr("Export failed: %1").arg(err))
         }
     }
 }

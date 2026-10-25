@@ -224,6 +224,11 @@ class Fonts(QObject):
         self._selected = "" if family == self._selected else (family or "")
         self.selectionChanged.emit()
 
+    @Slot(result="QVariantList")
+    def family_names(self) -> list:
+        """Plain family-name strings (CSS export dialog checkboxes)."""
+        return [f["family"] for f in core_fonts.families(self._con)]
+
     @Slot(str, result="QVariantList")
     def family_files(self, family: str) -> list:
         return core_fonts.family_files(self._con, family) \
@@ -247,6 +252,42 @@ class Fonts(QObject):
     @Slot(str, str)
     def export_zip(self, family: str, dest_dir: str) -> None:
         self._export(core_fonts.export_family_zip, family, dest_dir, "zip")
+
+    # ------------------------------------------------- fonts.css package
+    @Slot("QVariantList", "QVariantList", result=str)
+    def css_preview(self, families, fmts=None) -> str:
+        """The fonts.css text for the given families — relative package
+        paths, nothing written (the CSS dialog shows this editable)."""
+        from ..core import exportplus as core_exportplus
+        try:
+            return core_exportplus.css_preview(
+                self._con, [str(f) for f in families],
+                [str(f) for f in (fmts or [])] or None)["css"]
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return ""
+
+    @Slot(str, str, "QVariantList", "QVariantList")
+    def export_css_package(self, dest_dir: str, css_text: str,
+                           families, fmts) -> None:
+        """Save fonts.css exactly as shown/edited in the dialog plus
+        every referenced font file converted to the chosen flavors,
+        laid out as the CSS URLs expect (fonts/<Family>/<file>)."""
+        from ..core import exportplus as core_exportplus
+        dest = str(Path(dest_dir).expanduser()) if dest_dir else ""
+        if not dest:
+            self.exportFailed.emit("choose a folder first")
+            return
+        try:
+            out = core_exportplus.export_css_package(
+                self._con, dest, css_text or "",
+                [str(f) for f in families],
+                [str(f) for f in (fmts or [])] or None)
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return
+        settings.set(self._con, "last_export_dir", dest)
+        self.exportDone.emit(str(out))
 
     def _export(self, fn, family: str, dest_dir: str, what: str) -> None:
         if not family:

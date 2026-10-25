@@ -284,16 +284,22 @@ Item {
             model: !colorsRoot.termMode
                    ? [{ label: qsTr("Export CSS…"), kind: "css" },
                       { label: qsTr("Export JSON…"), kind: "json" },
-                      { label: qsTr("Export SVG…"), kind: "svg" },
-                      { label: qsTr("Export PNG…"), kind: "png" }]
+                      { label: qsTr("Export SVG board…"), kind: "svg" },
+                      { label: qsTr("Export PNG board…"), kind: "png" }]
                    : []
             FgMenuItem {
                 required property var modelData
                 text: modelData.label
                 height: 28
                 onTriggered: {
-                    colorsRoot.exportKind = modelData.kind
-                    exportDialog.open()
+                    colorExport.openWith(
+                        [{ id: "css", label: "CSS" },
+                         { id: "json", label: "JSON" },
+                         { id: "svg", label: "SVG board" },
+                         { id: "png", label: "PNG board" }],
+                        colorsRoot.exportDest)
+                    // preselect the kind that opened the dialog
+                    colorExport.selectedFormats = [modelData.kind]
                 }
             }
         }
@@ -362,12 +368,18 @@ Item {
         }
     }
 
-    // export kind set by whichever button opened the dialog
-    property string exportKind: "css"
-    FolderDialog {
-        id: exportDialog
-        onAccepted: colors !== null && colors.export(
-            colorsRoot.exportKind, Icons.toLocalPath(selectedFolder))
+    // shared export interface: multi-format, destination, one export run
+    property string exportDest: ""
+    ExportDialog {
+        id: colorExport
+        headline: qsTr("Export palette")
+        onDoExport: function (formats, dest) {
+            colorsRoot.exportDest = dest
+            if (colors === null)
+                return
+            for (var i = 0; i < formats.length; i++)
+                colors.export(formats[i], dest)
+        }
     }
 
     ListView {
@@ -470,11 +482,11 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 cursorShape: Qt.PointingHandCursor
                 onClicked: function (mouse) {
-                    colors !== null && colors.open_palette(modelData.id)
-                    if (mouse.button === Qt.RightButton) {
-                        palMenu.target = modelData
+                    // left-click opens (inspector follows); right-click
+                    // opens the menu for the CURRENTLY OPEN palette —
+                    // the generator and inspector stay untouched
+                    if (mouse.button !== Qt.LeftButton)
                         palMenu.popup()
-                    }
                 }
                 z: -1
             }
@@ -839,21 +851,19 @@ Item {
             border.color: theme.tokens.border
         }
         FgMenuItem {
-            text: qsTr("Load into generator")
-            height: 28
-            enabled: palMenu.target !== null
-            onTriggered: palMenu.target
-                         && colors.open_palette(palMenu.target.id)
-        }
-        FgMenuItem {
+            // acts on the CURRENTLY OPEN palette (left-click loads a
+            // palette into the generator — right-click never does)
             text: qsTr("Export…")
             height: 28
-            enabled: palMenu.target !== null
+            enabled: colors !== null && colors.paletteId > 0
             onTriggered: {
-                if (palMenu.target)
-                    colors.open_palette(palMenu.target.id)
-                exportKind = "css"
-                exportDialog.open()
+                colorExport.openWith(
+                    [{ id: "css", label: "CSS" },
+                     { id: "json", label: "JSON" },
+                     { id: "svg", label: "SVG board" },
+                     { id: "png", label: "PNG board" }],
+                    colorsRoot.exportDest)
+                colorExport.selectedFormats = ["css"]
             }
         }
         FgMenuItem {
