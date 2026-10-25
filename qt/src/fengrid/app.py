@@ -41,7 +41,9 @@ LIGHT = {
     "surface2": "#EEF1F3",
     "border": "#D5DCE0",
     "text": "#16202B",
-    "text_muted": "#6B7A88",
+    # A11Y-4: 4.97:1 on surface2 (#EEF1F3) — the old #6B7A88 was 3.9:1,
+    # below AA for small text
+    "text_muted": "#5A6977",
     "accent": "#0E7C86",
     "lit_pane": "#F5B841",
     "success": "#2E7D4F",

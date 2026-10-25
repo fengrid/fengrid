@@ -77,9 +77,33 @@ Rectangle {
         radius: 6
         color: active ? theme.tokens.surface2
                       : (itemMa.containsMouse ? theme.tokens.surface2 : "transparent")
+        border.color: itemRoot.activeFocus ? itemRoot.accent : "transparent"
+        border.width: itemRoot.activeFocus ? 2 : 0
         // smooth the hover/active switch — an abrupt transparent<->surface2
         // flip reads as "flicker" when the mouse sweeps across rows
         Behavior on color { ColorAnimation { duration: 90 } }
+
+        // A11Y-1: the rail is keyboard-reachable — Tab moves between
+        // rows, Return/Space activates, Up/Down walk the focus chain
+        activeFocusOnTab: true
+        Keys.onReturnPressed: itemRoot.picked()
+        Keys.onEnterPressed: itemRoot.picked()
+        Keys.onSpacePressed: itemRoot.picked()
+        Keys.onDownPressed: {
+            var n = nextItemInFocusChain(true)
+            if (n && n !== itemRoot)
+                n.forceActiveFocus()
+        }
+        Keys.onUpPressed: {
+            var n = nextItemInFocusChain(false)
+            if (n && n !== itemRoot)
+                n.forceActiveFocus()
+        }
+        Accessible.role: Accessible.ListItem
+        Accessible.name: itemRoot.label
+                        + (itemRoot.count !== "" ? " (" + itemRoot.count + ")"
+                                                 : "")
+        Accessible.selected: itemRoot.active
 
         Rectangle {
             width: 3
@@ -118,7 +142,10 @@ Rectangle {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
-            onClicked: itemRoot.picked()
+            onClicked: {
+                itemRoot.forceActiveFocus()
+                itemRoot.picked()
+            }
         }
     }
 
@@ -171,6 +198,26 @@ Rectangle {
             cursorShape: Qt.PointingHandCursor
             onClicked: rail.toggleSection(sectHdr.sectionKey)
         }
+        // A11Y-3: the chevron direction alone is color/shape signaling —
+        // expose the expanded state to assistive tech, and let the
+        // section be toggled from the keyboard
+        activeFocusOnTab: true
+        Keys.onReturnPressed: rail.toggleSection(sectHdr.sectionKey)
+        Keys.onEnterPressed: rail.toggleSection(sectHdr.sectionKey)
+        Keys.onSpacePressed: rail.toggleSection(sectHdr.sectionKey)
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: "transparent"
+            border.color: theme.tokens.accent
+            border.width: 2
+            visible: sectHdr.activeFocus
+        }
+        Accessible.role: Accessible.Button
+        Accessible.name: sectHdr.label
+        Accessible.description: sectHdr.open
+                                ? qsTr("expanded — press to collapse")
+                                : qsTr("collapsed — press to expand")
     }
 
     // ------------------------------------------------------------- pane tabs
@@ -202,6 +249,16 @@ Rectangle {
                 Behavior on opacity { NumberAnimation { duration: 120 } }
                 implicitWidth: 34
                 implicitHeight: 32
+                // A11Y-2: the pane glyph must be announced
+                Accessible.role: Accessible.PageTab
+                Accessible.name: {
+                    var names = ["Icons", "Fonts", "Colors", "Code",
+                                 "Projects"]
+                    return (names[paneIdx] || "pane")
+                            + (checked ? " (active)" : "")
+                }
+                Accessible.checkable: true
+                Accessible.checked: checked
 
                 background: Rectangle {
                     implicitWidth: tab.implicitWidth

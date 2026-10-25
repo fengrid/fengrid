@@ -43,6 +43,12 @@ Rectangle {
                 height: 18
                 color: scRoot.st.clean ? theme.tokens.success
                                        : theme.tokens.litPane
+                // A11Y-3: announce the repo state (the pill's color is a
+                // redundant cue; the label already reads clean/dirty)
+                Accessible.role: Accessible.Indicator
+                Accessible.name: scRoot.st.clean
+                                 ? qsTr("repository state: clean")
+                                 : qsTr("repository state: dirty — uncommitted changes")
                 Text {
                     id: statusText
                     anchors.centerIn: parent

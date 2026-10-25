@@ -32,6 +32,13 @@ ToolButton {
                            : (btn.hovered ? theme.tokens.surface2 : "transparent")
         Behavior on color { ColorAnimation { duration: 90 } }
     }
+    // A11Y-2: icon-only controls must announce themselves to screen
+    // readers — the icon glyph is the name, the ToolTip (if any) the
+    // description
+    Accessible.role: Accessible.Button
+    Accessible.name: btn.icon_name.replace("-", " ")
+    Accessible.description: btn.ToolTip.text
+    Accessible.ignored: btn.icon_name === ""
     ToolTip.visible: hovered && ToolTip.text.length > 0
     ToolTip.delay: 400
 

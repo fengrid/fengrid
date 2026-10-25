@@ -621,6 +621,7 @@ ApplicationWindow {
             // uncommitted-changes reminder — discrete but bright red, per
             // the source-control spec (dirty project repo at any time)
             Text {
+                id: uncommittedNote
                 text: sc !== null && sc.hasUncommitted
                       ? qsTr("● %1: uncommitted changes — commit or stash")
                         .arg(sc.currentBranch) : ""
@@ -628,6 +629,10 @@ ApplicationWindow {
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: "#E5484D"
+                // A11Y-3: the red is decorative — the ● marker + words
+                // carry the meaning; make sure AT reads it in the bar
+                Accessible.role: Accessible.StaticText
+                Accessible.name: text
             }
 
             // tip ticker / notification area — yields to every detail:
