@@ -319,8 +319,24 @@ def main(argv=None) -> int:
     # curated preset libraries (fonts / icon sets / site templates):
     # register pack rows (idempotent), never download anything
     core_presets.ensure_presets(con)
+    # downloaded preset clones become scan sources (#37) — startup sync
+    # covers entries downloaded by older builds or on another machine;
+    # _start_initial_scans rescans exactly the kinds that registered
+    preset_sources = core_presets.sync_downloaded_sources(con)
     presets_bridge = Presets(con, data_dir)
     ctx.setContextProperty("presets", presets_bridge)
+
+    def _on_preset_source(path: str, kind: str) -> None:
+        # fresh clone landed: index it right away (rescan queues while
+        # a scan is already running — never dropped)
+        if args.no_scan:
+            return
+        if kind == "fontroot":
+            fonts.rescan()
+        else:
+            library.rescan()
+
+    presets_bridge.sourceAdded.connect(_on_preset_source)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the
     # Loader, which stays inactive there
@@ -396,6 +412,14 @@ def main(argv=None) -> int:
         # first run: index the platform font dirs automatically (own thread
         # + own connection, cancellable at quit — see bridges/fonts.py)
         if fonts.totalFonts == 0:
+            QTimer.singleShot(0, fonts.rescan)
+        # preset clones that only registered now (downloaded by an older
+        # build, or while this database was unused): index them too —
+        # rescans queue behind whatever is already running (#37)
+        kinds = {s["kind"] for s in preset_sources}
+        if "folder" in kinds:
+            QTimer.singleShot(0, library.rescan)
+        if "fontroot" in kinds:
             QTimer.singleShot(0, fonts.rescan)
 
     if storage_bridge.mountCount != 0:

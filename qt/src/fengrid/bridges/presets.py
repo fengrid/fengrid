@@ -40,6 +40,9 @@ class Presets(QObject):
     entriesChanged = Signal()
     # entryId, ok, detail(path or error) — emitted on the MAIN thread
     cloneDone = Signal(int, bool, str)
+    # path, kind — a newly registered scan source for a fresh clone;
+    # the app wires this to the library/fonts rescans (#37)
+    sourceAdded = Signal(str, str)
 
     def __init__(self, con, data_dir: str = "", parent=None):
         super().__init__(parent)
@@ -196,8 +199,23 @@ class Presets(QObject):
                 (preview, int(entry_id)))
             self._con.commit()
         self.message.emit(f"{row['name']} downloaded — preview generated")
+        # register the clone as a scan source so its assets reach the
+        # grid (#37): icon packs index as icons, font packs as fonts;
+        # template packs are deliberately never indexed
+        kind = core_presets.entry_scan_kind(self._pack_kind(row))
+        if kind is not None:
+            registered = core_presets.sync_downloaded_sources(self._con)
+            clone = str(Path(detail).resolve())
+            if any(Path(n["path"]) == Path(clone) for n in registered):
+                self.sourceAdded.emit(str(clone), kind)
         self.entriesChanged.emit()
         self.librariesChanged.emit()
+
+    def _pack_kind(self, entry_row) -> str:
+        r = self._con.execute(
+            "SELECT kind FROM preset_library WHERE id = ?",
+            (entry_row["library_id"],)).fetchone()
+        return r["kind"] if r else ""
 
     @staticmethod
     def _current_branch(path: str) -> str:
@@ -213,6 +231,9 @@ class Presets(QObject):
         row = self._row(entry_id)
         if row is None or not row["downloaded"]:
             return
+        # undo the scan-source registration BEFORE the clone disappears,
+        # so no dangling source survives (#37)
+        core_presets.remove_entry_source(self._con, row["local_path"])
         if row["local_path"] and os.path.isdir(row["local_path"]):
             shutil.rmtree(row["local_path"], ignore_errors=True)
         if row["preview_path"] and os.path.isfile(row["preview_path"]):
