@@ -524,21 +524,30 @@ Item {
             }
         }
 
-        SplitView {
+        // two-row studio layout, mirroring the Code pane: upper row =
+        // studio screens + property inspector; lower row = the live
+        // preview spanning the full width
+        Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            orientation: Qt.Horizontal
 
-            handle: Rectangle { color: theme.tokens.border; width: 1 }
-
+            // ---- upper row: screen rail + screen area with the property
+            // inspector pinned right (the Code pane's editor arrangement)
+            RowLayout {
+                id: studioRow
+                anchors { top: parent.top; left: parent.left
+                         right: parent.right }
+                height: parent.height * 0.55 - 0.5
+                spacing: 0
             // ---- studio screen rail + screen area
             ColumnLayout {
-                SplitView.preferredWidth: 360
-                // #24: minimums must SUM below the available width at the
+                Layout.fillHeight: true
+                Layout.preferredWidth: 360
+                // minimums must SUM below the available width at the
                 // default window (1280 - rail - sidebar ≈ 819px) or the
-                // SplitView overflows past the window edge
-                SplitView.minimumWidth: 300
-                SplitView.maximumWidth: 420
+                // row overflows past the window edge
+                Layout.minimumWidth: 300
+                Layout.maximumWidth: 420
                 spacing: 0
 
                 // screen rail: Design · Theme · Assets · Templates ·
@@ -1004,10 +1013,153 @@ Item {
                 }           // StackLayout
             }               // screen-area column
 
-            // ---- live preview + bottom dock + status bar
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.fillHeight: true
+                    color: theme.tokens.border
+                }
+            // ---- property inspector (right panel): project facts + the
+            // selected preview element with quick parameter edits
             Rectangle {
-                SplitView.fillWidth: true
-                SplitView.minimumWidth: 240
+                Layout.fillHeight: true
+                Layout.preferredWidth: 250
+                Layout.minimumWidth: 180
+                color: theme.tokens.surface
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 8
+                    clip: true
+
+                    Text {
+                        text: qsTr("INSPECTOR")
+                        font.family: theme.headingFont
+                        font.pixelSize: 11
+                        font.letterSpacing: 1.4
+                        font.capitalization: Font.AllUppercase
+                        color: theme.tokens.textMuted
+                    }
+
+                    Text { text: qsTr("Selected element")
+                           font.family: theme.uiFont; font.pixelSize: 12
+                           font.weight: Font.DemiBold
+                           color: theme.tokens.text }
+                    Text {
+                        Layout.fillWidth: true
+                        text: projectsRoot.selInfo && projectsRoot.selInfo.tag
+                              ? projectsRoot.selInfo.tag
+                              : qsTr("click an element in the preview…")
+                        font.family: theme.monoFont; font.pixelSize: 11
+                        color: projectsRoot.selInfo
+                               && projectsRoot.selInfo.tag
+                               ? theme.tokens.accentProject
+                               : theme.tokens.textMuted
+                        // #24 follow-up: WrapAnywhere sliced "preview"
+                        // mid-word — prefer word boundaries
+                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        visible: projectsRoot.selInfo
+                                 && projectsRoot.selInfo.text !== undefined
+                        text: projectsRoot.selInfo.text || ""
+                        font.family: theme.monoFont; font.pixelSize: 10
+                        color: theme.tokens.textMuted
+                        wrapMode: Text.WrapAnywhere
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                    }
+                    TextField {
+                        id: selTextEdit
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 26
+                        placeholderText: qsTr("edit element text…")
+                        enabled: projectsRoot.selInfo
+                                 && projectsRoot.selInfo.tag !== undefined
+                        font.family: theme.monoFont; font.pixelSize: 11
+                        color: theme.tokens.text
+                        background: Rectangle {
+                            radius: 6; color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                        }
+                        onAccepted: projectsRoot.applySelText(text)
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        TextField {
+                            id: styleKey
+                            Layout.preferredWidth: 70
+                            Layout.preferredHeight: 24
+                            placeholderText: "css"
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            color: theme.tokens.text
+                            background: Rectangle {
+                                radius: 4; color: theme.tokens.surface2
+                                border.color: theme.tokens.border
+                            }
+                        }
+                        TextField {
+                            id: styleVal
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 24
+                            placeholderText: qsTr("value")
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            color: theme.tokens.text
+                            background: Rectangle {
+                                radius: 4; color: theme.tokens.surface2
+                                border.color: theme.tokens.border
+                            }
+                            onAccepted: {
+                                projectsRoot.applySelStyle(styleKey.text,
+                                                           styleVal.text)
+                                styleVal.text = ""
+                            }
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: qsTr("Live DOM tweaks apply instantly but reset when the preview regenerates — save a revision (or bake the value into your snippet CSS) to keep them.")
+                        font.family: theme.uiFont; font.pixelSize: 10
+                        color: theme.tokens.textMuted
+                        wrapMode: Text.Wrap
+                    }
+
+                    Text { text: qsTr("Project")
+                           font.family: theme.uiFont; font.pixelSize: 12
+                           font.weight: Font.DemiBold
+                           color: theme.tokens.text }
+                    Text {
+                        Layout.fillWidth: true
+                        text: projects !== null && projects.currentId >= 0
+                              ? ("name: " + (projects.current.name || "")
+                                 + "\ndescription: "
+                                 + (projects.current.description || "—")
+                                 + "\nprefix: "
+                                 + ((projects.settings || {}).prefix || "—"))
+                              : qsTr("no project open")
+                        font.family: theme.monoFont; font.pixelSize: 10
+                        color: theme.tokens.text
+                    }
+                    Item { Layout.fillHeight: true }
+                }
+            }
+            }
+
+            Rectangle {
+                anchors { top: studioRow.bottom; left: parent.left
+                         right: parent.right }
+                height: 1
+                color: theme.tokens.border
+            }
+
+            // ---- lower row: live preview + bottom dock + status bar
+            // across the full band — the inspector lives in the upper
+            // row, so nothing squeezes the preview now
+            Rectangle {
+                anchors { top: studioRow.bottom; left: parent.left
+                         right: parent.right; bottom: parent.bottom }
+                clip: true
                 color: theme.tokens.surface
                 ColumnLayout {
                     anchors.fill: parent
@@ -1043,7 +1195,7 @@ Item {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: Math.min(pvArea.width - 40, 420)
-                                text: qsTr("Live preview renders automatically — tweak any parameter on the left")
+                                text: qsTr("Live preview renders automatically — tweak any parameter above")
                                 font.family: theme.uiFont; font.pixelSize: 12
                                 color: theme.tokens.textMuted
                                 wrapMode: Text.Wrap
@@ -1427,132 +1579,6 @@ Item {
                                 } catch (e) { projectsRoot.selInfo = ({}) }
                             })
                     }
-                }
-            }
-
-            // ---- property inspector (right panel): project facts + the
-            // selected preview element with quick parameter edits
-            Rectangle {
-                SplitView.preferredWidth: 250
-                SplitView.minimumWidth: 180
-                color: theme.tokens.surface
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 8
-                    clip: true
-
-                    Text {
-                        text: qsTr("INSPECTOR")
-                        font.family: theme.headingFont
-                        font.pixelSize: 11
-                        font.letterSpacing: 1.4
-                        font.capitalization: Font.AllUppercase
-                        color: theme.tokens.textMuted
-                    }
-
-                    Text { text: qsTr("Selected element")
-                           font.family: theme.uiFont; font.pixelSize: 12
-                           font.weight: Font.DemiBold
-                           color: theme.tokens.text }
-                    Text {
-                        Layout.fillWidth: true
-                        text: projectsRoot.selInfo && projectsRoot.selInfo.tag
-                              ? projectsRoot.selInfo.tag
-                              : qsTr("click an element in the preview…")
-                        font.family: theme.monoFont; font.pixelSize: 11
-                        color: projectsRoot.selInfo
-                               && projectsRoot.selInfo.tag
-                               ? theme.tokens.accentProject
-                               : theme.tokens.textMuted
-                        // #24 follow-up: WrapAnywhere sliced "preview"
-                        // mid-word — prefer word boundaries
-                        wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        visible: projectsRoot.selInfo
-                                 && projectsRoot.selInfo.text !== undefined
-                        text: projectsRoot.selInfo.text || ""
-                        font.family: theme.monoFont; font.pixelSize: 10
-                        color: theme.tokens.textMuted
-                        wrapMode: Text.WrapAnywhere
-                        maximumLineCount: 3
-                        elide: Text.ElideRight
-                    }
-                    TextField {
-                        id: selTextEdit
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 26
-                        placeholderText: qsTr("edit element text…")
-                        enabled: projectsRoot.selInfo
-                                 && projectsRoot.selInfo.tag !== undefined
-                        font.family: theme.monoFont; font.pixelSize: 11
-                        color: theme.tokens.text
-                        background: Rectangle {
-                            radius: 6; color: theme.tokens.surface2
-                            border.color: theme.tokens.border
-                        }
-                        onAccepted: projectsRoot.applySelText(text)
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
-                        TextField {
-                            id: styleKey
-                            Layout.preferredWidth: 70
-                            Layout.preferredHeight: 24
-                            placeholderText: "css"
-                            font.family: theme.monoFont; font.pixelSize: 10
-                            color: theme.tokens.text
-                            background: Rectangle {
-                                radius: 4; color: theme.tokens.surface2
-                                border.color: theme.tokens.border
-                            }
-                        }
-                        TextField {
-                            id: styleVal
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 24
-                            placeholderText: qsTr("value (live DOM tweak)")
-                            font.family: theme.monoFont; font.pixelSize: 10
-                            color: theme.tokens.text
-                            background: Rectangle {
-                                radius: 4; color: theme.tokens.surface2
-                                border.color: theme.tokens.border
-                            }
-                            onAccepted: {
-                                projectsRoot.applySelStyle(styleKey.text,
-                                                           styleVal.text)
-                                styleVal.text = ""
-                            }
-                        }
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("Live DOM tweaks apply instantly but reset when the preview regenerates — save a revision (or bake the value into your snippet CSS) to keep them.")
-                        font.family: theme.uiFont; font.pixelSize: 10
-                        color: theme.tokens.textMuted
-                        wrapMode: Text.Wrap
-                    }
-
-                    Text { text: qsTr("Project")
-                           font.family: theme.uiFont; font.pixelSize: 12
-                           font.weight: Font.DemiBold
-                           color: theme.tokens.text }
-                    Text {
-                        Layout.fillWidth: true
-                        text: projects !== null && projects.currentId >= 0
-                              ? ("name: " + (projects.current.name || "")
-                                 + "\ndescription: "
-                                 + (projects.current.description || "—")
-                                 + "\nprefix: "
-                                 + ((projects.settings || {}).prefix || "—"))
-                              : qsTr("no project open")
-                        font.family: theme.monoFont; font.pixelSize: 10
-                        color: theme.tokens.text
-                    }
-                    Item { Layout.fillHeight: true }
                 }
             }
         }
