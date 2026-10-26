@@ -34,6 +34,7 @@ GLOBAL_KEYS = frozenset({
     "update_check",
     "last_export_dir",
     "command_shortcut",
+    "web_previews",
 })
 
 _REGISTRY: sqlite3.Connection | None = None

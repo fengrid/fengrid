@@ -45,6 +45,17 @@ def webengine_available() -> bool:
     # segfaults, #27/#32)
     if os.environ.get("FENGRID_NO_WEBENGINE", "") == "1":
         return False
+    # FENGRID_SOFTWARE_DISPLAY=1: set by __main__ when the GL probe says
+    # the display has no usable GL stack. On such displays Chromium MAY
+    # segfault natively (#32) — but whether it does is MEASURED, not
+    # assumed: the crash-isolated probe child sets FENGRID_WEBENGINE_OK=1
+    # when it survived, and FENGRID_FORCE_WEBENGINE=1 is the explicit
+    # user override. Only a failed probe degrades to the preview-less
+    # shell.
+    if (os.environ.get("FENGRID_SOFTWARE_DISPLAY") == "1"
+            and os.environ.get("FENGRID_WEBENGINE_OK") != "1"
+            and os.environ.get("FENGRID_FORCE_WEBENGINE", "") != "1"):
+        return False
     try:
         from PySide6 import QtWebEngineCore  # noqa: F401 — links the module
     except ImportError:

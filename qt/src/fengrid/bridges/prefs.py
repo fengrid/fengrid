@@ -26,6 +26,7 @@ class Prefs(QObject):
     updateCheckChanged = Signal()
     firstRunNeededChanged = Signal()
     commandShortcutChanged = Signal()
+    webPreviewsChanged = Signal()
     message = Signal(str)
 
     # Alt+/ — the slash menu. (Option+/ on macs — Qt maps Alt to Option
@@ -51,6 +52,12 @@ class Prefs(QObject):
             stored = ""
             settings.set(con, "command_shortcut", "")
         self._command_shortcut = stored or self.DEFAULT_COMMAND_SHORTCUT
+        # live web previews on GL-less displays (#32): auto = the
+        # crash-isolated startup probe decides, on = always try, off =
+        # never start Chromium
+        self._web_previews = settings.get(con, "web_previews", "auto")
+        if self._web_previews not in ("auto", "on", "off"):
+            self._web_previews = "auto"
         # detected at construction, resolved so they string-match the
         # source rows the scanner registers (which are stored resolved)
         self._system_icon_paths = [
@@ -99,6 +106,22 @@ class Prefs(QObject):
         self._update_check = on
         settings.set_bool(self._con, "update_check", on)
         self.updateCheckChanged.emit()
+
+    # ------------------------------------------------------------ web previews
+    @Property(str, notify=webPreviewsChanged)
+    def webPreviews(self) -> str:
+        return self._web_previews or "auto"
+
+    @Slot(str)
+    def set_web_previews(self, value: str) -> None:
+        if value not in ("auto", "on", "off"):
+            return
+        if value == self._web_previews:
+            return
+        self._web_previews = value
+        settings.set(self._con, "web_previews", value)
+        self.message.emit(
+            "Web previews setting applies on the next app launch")
 
     # --------------------------------------------------------------- first run
     @Property(bool, notify=firstRunNeededChanged)
