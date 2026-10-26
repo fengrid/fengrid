@@ -661,16 +661,40 @@ def set_source_enabled(con: sqlite3.Connection, source_id: int,
     return cur.rowcount > 0
 
 
+def register_detected_paths(
+        con: sqlite3.Connection,
+        paths: list[tuple[Path | str, str]]) -> None:
+    """Pre-register detected system paths as DISABLED sources (#61).
+
+    First-run decision (user-directed): system folders are NOT scanned
+    until the user selects them. Setup pre-registers every detected
+    path with enabled=0 so its checkbox starts unchecked, and — because
+    ensure_sources() keeps existing rows' flags — a later scan never
+    resurrects the unselected paths. Checking a box flips the row via
+    set_path_enabled(path, kind, True) and triggers the scan.
+    """
+    known = {r["path"] for r in
+             con.execute("SELECT path FROM source")}
+    for raw, kind in paths:
+        path_str = str(Path(raw).resolve())
+        if path_str in known:
+            continue
+        con.execute(
+            "INSERT INTO source(kind, path, label, enabled)"
+            " VALUES (?, ?, ?, 0)",
+            (kind, path_str, Path(path_str).name or path_str))
+
+
 def set_path_enabled(con: sqlite3.Connection, path: str, kind: str,
                      enabled: bool) -> None:
     """Upsert the enabled flag for a DETECTED path.
 
-    The first-run screen toggles system roots before any scan has
-    registered them, so the row may not exist yet: enabled=True with no
-    row is a no-op (registration defaults to on), enabled=False inserts
-    a disabled row so the first scan's ensure_sources() skips it. A
-    known path keeps its existing kind; `kind` is only used on insert
-    ('system' icon roots, 'fontroot' font dirs, 'folder' user folders).
+    The first-run screen toggles system roots; since #61 every detected
+    path is pre-registered DISABLED (checkboxes start unchecked), so
+    both branches of this upsert are live: enabling inserts/flips the
+    row to enabled (and the caller triggers the scan), disabling
+    inserts/keeps a disabled row so ensure_sources() skips it and the
+    next scan purges its assets.
     """
     assert kind in ("system", "folder", "fontroot"), kind
     path = str(Path(path).resolve())
@@ -679,11 +703,11 @@ def set_path_enabled(con: sqlite3.Connection, path: str, kind: str,
     if row:
         con.execute("UPDATE source SET enabled = ? WHERE id = ?",
                     (1 if enabled else 0, row[0]))
-    elif not enabled:
+    else:
         con.execute(
             "INSERT INTO source(kind, path, label, enabled)"
-            " VALUES (?, ?, ?, 0)",
-            (kind, path, Path(path).name or path))
+            " VALUES (?, ?, ?, ?)",
+            (kind, path, Path(path).name or path, 1 if enabled else 0))
     con.commit()
 
 

@@ -450,6 +450,20 @@ def main(argv=None) -> int:
     ctx.setContextProperty(
         "initialFirstRun",
         prefs_bridge.firstRunNeeded and not bool(args.screenshot))
+    # #61 (user decision): system folders are NEVER scanned by default.
+    # On first run, every detected path is pre-registered DISABLED so
+    # the setup checkboxes start unchecked, and nothing indexes until
+    # the user selects paths (each toggle triggers its own scan). A
+    # skipped setup leaves an honestly-empty library.
+    if prefs_bridge.firstRunNeeded and not bool(args.screenshot):
+        from fengrid.core import indexer as core_indexer
+        from fengrid.core import scanner as core_scanner
+        from fengrid.core import fonts as core_fonts
+        core_indexer.register_detected_paths(con, [
+            *[(p, "system") for p in core_scanner.platform_candidates()],
+            *[(p, "fontroot") for p in core_fonts.platform_font_dirs()],
+        ])
+        con.commit()
     # QA affordances (icons pane): pre-select an icon so the inspector
     # panel is present in screenshots, and optionally scroll its body so
     # the pinned action footer is captured mid-overflow
@@ -504,16 +518,11 @@ def main(argv=None) -> int:
     def _start_initial_scans():
         if args.no_scan:
             return
-        # first run: index the platform icon roots automatically
-        if library.totalAssets == 0:
-            QTimer.singleShot(0, library.rescan)
-        # first run: index the platform font dirs automatically (own thread
-        # + own connection, cancellable at quit — see bridges/fonts.py)
-        if fonts.totalFonts == 0:
-            QTimer.singleShot(0, fonts.rescan)
-        # preset clones that only registered now (downloaded by an older
-        # build, or while this database was unused): index them too —
-        # rescans queue behind whatever is already running (#37)
+        # #61 (user decision): system icon/font roots are no longer
+        # indexed automatically — first-run pre-registers them DISABLED
+        # and the setup screen scans exactly what the user checks. Only
+        # previously-downloaded preset clones (registered sources with
+        # no assets yet) still auto-index.
         kinds = {s["kind"] for s in preset_sources}
         if "folder" in kinds:
             QTimer.singleShot(0, library.rescan)
