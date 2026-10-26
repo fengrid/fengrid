@@ -338,6 +338,68 @@ def ensure_presets(con: sqlite3.Connection) -> None:
     con.commit()
 
 
+# --------------------------------------------------------- scan sources
+
+def entry_scan_kind(pack_kind: str) -> str | None:
+    """Scan-source kind for a downloaded preset pack's clone, or None
+    when the clone must NOT be indexed: icon packs join the icon grid
+    ('folder'), font packs the fonts pane ('fontroot'). Template clones
+    stay out of the library on purpose — indexing a site theme's
+    imagery would flood the asset grid with its screenshots/logos."""
+    return {"icon": "folder", "font": "fontroot"}.get(pack_kind)
+
+
+def sync_downloaded_sources(con: sqlite3.Connection) -> list[dict]:
+    """Register scan sources for every downloaded preset entry whose
+    clone exists on disk.
+
+    Idempotent: an existing source row is left alone (a disabled one is
+    re-enabled), and entries with no kind mapping or a vanished clone
+    are skipped. Returns the registrations made BY THIS CALL so callers
+    can trigger exactly the rescans needed — startup calls this so
+    clones downloaded by older builds (#37) still reach the grid.
+    """
+    from . import indexer
+    new: list[dict] = []
+    rows = con.execute(
+        "SELECT e.id, e.local_path, l.kind AS pack_kind"
+        " FROM preset_entry e JOIN preset_library l ON l.id = e.library_id"
+        " WHERE e.downloaded = 1").fetchall()
+    for r in rows:
+        kind = entry_scan_kind(r["pack_kind"])
+        if kind is None or not r["local_path"]:
+            continue
+        p = Path(r["local_path"]).resolve()
+        if not p.is_dir():
+            continue
+        existing = con.execute(
+            "SELECT id, enabled FROM source WHERE path = ?",
+            (str(p),)).fetchone()
+        if existing is not None:
+            if not existing["enabled"]:
+                indexer.set_source_enabled(con, existing["id"], True)
+                new.append({"path": str(p), "kind": kind})
+            continue
+        indexer.add_folder_source(con, str(p), kind=kind)
+        new.append({"path": str(p), "kind": kind})
+    return new
+
+
+def remove_entry_source(con: sqlite3.Connection, local_path: str) -> bool:
+    """Drop the scan source registered for a downloaded preset entry
+    (forget() must undo what sync_downloaded_sources did — a forgotten
+    pack must not leave a dangling source pointing at a deleted dir)."""
+    if not local_path:
+        return False
+    row = con.execute(
+        "SELECT id FROM source WHERE path = ?",
+        (str(Path(local_path).resolve()),)).fetchone()
+    if row is None:
+        return False
+    from . import indexer
+    return indexer.remove_source(con, row["id"])
+
+
 # ------------------------------------------------------------ file paths
 
 def entry_dir(data_dir: str | Path, library_name: str, repo: str) -> Path:

@@ -242,3 +242,132 @@ def test_fallback_preview_rendered_when_no_imagery(env, tmp_path):
     from PySide6.QtGui import QImage
     img = QImage(r["preview_path"])
     assert img.width() == 1280 and img.height() == 640
+
+
+# ------------------------------------------------- scan-source wiring (#37)
+def _mk_icon_repo(path: Path) -> Path:
+    """A tiny local git repo standing in for a downloaded icon pack."""
+    path.mkdir(parents=True, exist_ok=True)
+    repo = Repo(path)
+    repo.init()
+    (path / "icons").mkdir()
+    (path / "icons" / "smile.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
+    repo.commit_all("init")
+    return path
+
+
+def _mark_downloaded(con, entry_id: int, local_path) -> None:
+    con.execute("UPDATE preset_entry SET downloaded = 1, local_path = ?"
+                " WHERE id = ?", (str(local_path), entry_id))
+    con.commit()
+
+
+def test_entry_scan_kind_mapping():
+    assert core_presets.entry_scan_kind("icon") == "folder"
+    assert core_presets.entry_scan_kind("font") == "fontroot"
+    # template clones are deliberately never indexed (their imagery
+    # would flood the asset grid)
+    assert core_presets.entry_scan_kind("template") is None
+    assert core_presets.entry_scan_kind("") is None
+
+
+def test_sync_downloaded_sources_registers_icon_clone(env, tmp_path):
+    bridge, con, tmp = env
+    icon_lib = bridge.libraries[1]               # Open Icon Sets
+    clone = tmp / "presets" / "open-icon-sets" / "feather"
+    clone.mkdir(parents=True)
+    (clone / "feather.svg").write_text("<svg/>", encoding="utf-8")
+    eid = con.execute(
+        "SELECT id FROM preset_entry WHERE library_id = ? LIMIT 1",
+        (icon_lib["id"],)).fetchone()["id"]
+    _mark_downloaded(con, eid, clone)
+
+    new = core_presets.sync_downloaded_sources(con)
+    assert len(new) == 1 and new[0]["kind"] == "folder"
+    row = con.execute(
+        "SELECT kind, enabled FROM source WHERE path = ?",
+        (str(clone.resolve()),)).fetchone()
+    assert row is not None and row["kind"] == "folder"
+    assert row["enabled"] == 1
+
+    # idempotent — nothing new the second time
+    assert core_presets.sync_downloaded_sources(con) == []
+
+    # a DISABLED source re-enables (re-download after a settings toggle)
+    from fengrid.core import indexer
+    sid = con.execute("SELECT id FROM source WHERE path = ?",
+                      (str(clone.resolve()),)).fetchone()["id"]
+    indexer.set_source_enabled(con, sid, False)
+    new = core_presets.sync_downloaded_sources(con)
+    assert len(new) == 1 and new[0]["kind"] == "folder"
+    assert con.execute("SELECT enabled FROM source WHERE id = ?",
+                       (sid,)).fetchone()["enabled"] == 1
+
+
+def test_sync_skips_templates_and_missing_clones(env, tmp_path):
+    bridge, con, tmp = env
+    tpl_lib = bridge.libraries[2]                # Site Templates & Themes
+    eid = con.execute(
+        "SELECT id FROM preset_entry WHERE library_id = ? LIMIT 1",
+        (tpl_lib["id"],)).fetchone()["id"]
+    _mark_downloaded(con, eid, tmp / "nowhere")  # dir never existed
+    assert core_presets.sync_downloaded_sources(con) == []
+    assert con.execute("SELECT COUNT(*) FROM source").fetchone()[0] == 0
+
+    # a template clone that DOES exist stays unregistered
+    tpl_clone = tmp / "template-clone"
+    tpl_clone.mkdir()
+    _mark_downloaded(con, eid, tpl_clone)
+    assert core_presets.sync_downloaded_sources(con) == []
+    assert con.execute("SELECT COUNT(*) FROM source").fetchone()[0] == 0
+
+
+def test_download_icon_entry_registers_scan_source(env, tmp_path):
+    """Full clone flow: an ICON entry download must land a scan source
+    and emit sourceAdded — this is the bug (#37)."""
+    bridge, con, tmp = env
+    icon_lib = bridge.libraries[1]
+    src = _mk_icon_repo(tmp / "remote-icons")
+    row = bridge.entries(icon_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(src), row["id"]))
+    con.commit()
+
+    done, added = [], []
+    bridge.cloneDone.connect(
+        lambda eid, ok, detail: done.append((eid, ok, detail)))
+    bridge.sourceAdded.connect(
+        lambda path, kind: added.append((path, kind)))
+    bridge.download(row["id"])
+    import time
+    from PySide6.QtCore import QCoreApplication
+    deadline = time.time() + 30
+    while (not done or not added) and time.time() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.05)
+    assert done and done[0][1] is True, done
+    assert added and added[0][1] == "folder", added
+    assert Path(added[0][0]).is_dir()
+    srow = con.execute(
+        "SELECT kind, enabled FROM source WHERE path = ?",
+        (str(Path(added[0][0])),)).fetchone()
+    assert srow is not None and srow["kind"] == "folder"
+
+
+def test_forget_removes_scan_source(env, tmp_path):
+    bridge, con, tmp = env
+    icon_lib = bridge.libraries[1]
+    clone = tmp / "presets" / "open-icon-sets" / "feather"
+    clone.mkdir(parents=True)
+    (clone / "feather.svg").write_text("<svg/>", encoding="utf-8")
+    eid = con.execute(
+        "SELECT id FROM preset_entry WHERE library_id = ? LIMIT 1",
+        (icon_lib["id"],)).fetchone()["id"]
+    _mark_downloaded(con, eid, clone)
+    assert core_presets.sync_downloaded_sources(con)
+    assert con.execute("SELECT COUNT(*) FROM source").fetchone()[0] == 1
+
+    bridge.forget(eid)
+    assert con.execute("SELECT COUNT(*) FROM source").fetchone()[0] == 0
+    assert not clone.exists()
