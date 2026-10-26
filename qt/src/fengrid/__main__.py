@@ -265,6 +265,7 @@ def main(argv=None) -> int:
     import signal
     crash_dir = (os.path.dirname(os.path.abspath(args.db))
                  if args.db else data_dir)
+    _crash_log = None
     try:
         _crash_log = open(                      # noqa: SIM115 - process-lifetime
             os.path.join(crash_dir, "crash.log"), "a", encoding="utf-8")
@@ -306,6 +307,19 @@ def main(argv=None) -> int:
         else:
             db_path = default_db
     con = core_db.connect(db_path)
+    # #61: name the storage conditions in every future report — a read
+    # stall on a non-WAL (e.g. network) filesystem looks exactly like a
+    # logic freeze in the dumps; the dumps name the statement, never
+    # the disk.
+    if _crash_log is not None:
+        try:
+            _crash_log.write(
+                f"db {db_path} — journal "
+                f"{con.execute('PRAGMA journal_mode').fetchone()[0]}"
+                f" — fs {core_db.filesystem_type(db_path) or 'unknown'}\n")
+            _crash_log.flush()
+        except (OSError, ValueError):
+            pass
     # studio pages (Projects pane rework) — same migration discipline
     # as the guid/slug backfill: run after connect, before any bridge
     from fengrid.core import studio as core_studio

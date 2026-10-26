@@ -109,6 +109,40 @@ def test_sources_summary_counts_and_empty_sources(tmp_path):
         con.close()
 
 
+# ------------------------------------------------------------ storage diagnostics
+def test_filesystem_type_longest_mount_prefix(tmp_path):
+    """#61: the crash-log launch line must name the filesystem — a read
+    stall on a non-WAL (network) FS looks like a logic freeze in the
+    dumps. Longest matching mount prefix wins (nested mounts)."""
+    fake = tmp_path / "mounts"
+    fake.write_text(
+        "sysfs /sys sysfs rw 0 0\n"
+        "/dev/nvme0n1p2 / ext4 rw,relatime 0 0\n"
+        "nas:/volume1 /home nfs rw 0 0\n"
+        "nas:/volume1/home /home/native nfs4 rw,relatime 0 0\n")
+    assert db.filesystem_type("/home/native/dev/x.db",
+                                   mounts_path=str(fake)) == "nfs4"
+    assert db.filesystem_type("/usr/share/icons/x.svg",
+                                   mounts_path=str(fake)) == "ext4"
+    assert db.filesystem_type("/sys/class/x",
+                                   mounts_path=str(fake)) == "sysfs"
+    monkey_missing = tmp_path / "nope"
+    assert db.filesystem_type("/x", mounts_path=str(monkey_missing)) == ""
+
+
+def test_connect_warns_when_wal_unavailable(tmp_path, capsys):
+    """#61: when journal_mode=WAL silently fails (network FS), the
+    warning names the path, the fallback mode, and the filesystem —
+    the user's terminal is where the freeze is first reported."""
+    con = db.connect(tmp_path / "t.db")
+    try:
+        assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        # tmpfs/ext4 supports WAL here: no warning on a healthy FS
+        assert "WAL unavailable" not in capsys.readouterr().err
+    finally:
+        con.close()
+
+
 # -------------------------------------------------------------- search
 def test_search_candidates_deterministic_order(tmp_path, monkeypatch):
     """The candidate cap must pick the NEWEST rows by id deterministically
