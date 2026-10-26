@@ -41,26 +41,12 @@ Dialog {
         }
     }
 
-    property var fams: []                // all family names
-    property var chosen: []              // checked families
-    property string famFilter: ""        // #33: search box over 300+ families
+    property var chosen: []              // families passed in by the caller
     property var flavors: ["woff2", "woff"]
     property bool includeOriginal: false
     property bool userEdited: false      // stop regenerating once edited
     property string dest: ""
     property string previewError: ""
-    // families matching the filter — a full 300+-chip cloud made the
-    // dialog unreadable (#33); a filter keeps it compact
-    readonly property var famsFiltered: {
-        var f = famFilter.trim().toLowerCase()
-        if (f === "")
-            return fams
-        var out = []
-        for (var i = 0; i < fams.length; i++)
-            if (fams[i].toLowerCase().indexOf(f) >= 0)
-                out.push(fams[i])
-        return out
-    }
     readonly property bool canSave: chosen.length > 0
                                     && destField.text.trim() !== ""
 
@@ -77,32 +63,31 @@ Dialog {
 
     // open FIRST, fill SECOND: a failed preview can never swallow the
     // click (the "Export CSS button does nothing" class of bug — the
-    // dialog always appears, and any error shows inside it)
-    function openWith(selectedFamily) {
+    // dialog always appears, and any error shows inside it).
+    // #52: the family-selection portion is REMOVED — the caller passes
+    // the checked families (grid checkboxes / Ctrl/Shift multi-select)
+    // or the currently selected family.
+    function openWith(families) {
         userEdited = false
-        famFilter = ""
         // QVariantList from Python is NOT an Array in QML (typeof
         // "object", Array.isArray false) — copy it element-wise
+        var arr = []
         try {
-            var raw = fonts !== null ? fonts.family_names() : []
-            var arr = []
-            for (var i = 0; i < raw.length; i++)
-                arr.push(raw[i])
-            fams = arr        // ONE assignment — mutating in place would
-                              // never notify the Repeater binding
+            if (typeof families === "string") {
+                if (families !== "")
+                    arr.push(families)
+            } else if (families) {
+                for (var i = 0; i < families.length; i++)
+                    arr.push(families[i])
+            }
         } catch (e) {
-            fams = []
+            arr = []
         }
-        chosen = selectedFamily && fams.indexOf(selectedFamily) >= 0
-                 ? [selectedFamily] : (fams.length ? [fams[0]] : [])
+        // ONE assignment — mutating in place would never notify canSave
+        chosen = arr
         dest = library !== null && library.lastExportDir !== ""
                ? library.lastExportDir : ""
         open()
-        // #33: scroll the picker so the pre-selected family is visible
-        // first — the dialog opens focused on the current selection
-        famList.positionViewAtIndex(
-            Math.max(0, fams.indexOf(chosen.length ? chosen[0] : "")),
-            ListView.Contain)
         regenerate()
     }
     function regenerate() {
@@ -121,13 +106,6 @@ Dialog {
             cssEdit.text = "/* preview unavailable */"
         }
         userEdited = false
-    }
-    function toggleFamily(name) {
-        var sel = chosen.slice()
-        var i = sel.indexOf(name)
-        if (i >= 0) sel.splice(i, 1); else sel.push(name)
-        chosen = sel
-        regenerate()
     }
     function toggleFlavor(f) {
         var sel = flavors.slice()
@@ -165,49 +143,19 @@ Dialog {
                        "converts the files to the selected formats.")
         }
 
-        // family selection (#33): a search field over the library plus a
-        // bounded list — the old unbounded chip cloud rendered every
-        // family in the library (300+) and filled the whole screen
-        FormInput {
+        // #52: the family-selection chips are GONE — families are picked
+        // in the grid (checkboxes / Ctrl / Shift) and passed in here
+        Text {
             Layout.fillWidth: true
-            label: qsTr("filter families")
-            onTextEdited: function (t) {
-                cssRoot.famFilter = t
-                // keep the view honest while typing
-                cssRoot.famList.positionViewAtBeginning()
-            }
-        }
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 150
-            radius: 8
-            color: theme.tokens.bg
-            border.color: theme.tokens.border
-            ListView {
-                id: famList
-                anchors.fill: parent
-                clip: true
-                model: cssRoot.famsFiltered
-                spacing: 4
-                ScrollBar.vertical: ScrollBar { }
-                delegate: Chip {
-                    required property var modelData
-                    required property int index
-                    width: ListView.view.width - 12
-                    x: 6
-                    chipText: modelData
-                    active: cssRoot.chosen.indexOf(modelData) >= 0
-                    activeColor: theme.tokens.accentFont
-                    onClicked: cssRoot.toggleFamily(modelData)
-                }
-                Text {
-                    anchors.centerIn: parent
-                    visible: cssRoot.famsFiltered.length === 0
-                    text: qsTr("no families match")
-                    font.family: theme.uiFont; font.pixelSize: 11
-                    color: theme.tokens.textMuted
-                }
-            }
+            wrapMode: Text.WrapAnywhere
+            font.family: theme.monoFont; font.pixelSize: 10
+            color: theme.tokens.text
+            text: chosen.length === 0
+                  ? qsTr("no families — check families in the grid first")
+                  : (chosen.length === 1
+                     ? qsTr("family: %1").arg(chosen[0])
+                     : qsTr("%1 families: %2")
+                           .arg(chosen.length).arg(chosen.join(", ")))
         }
 
         // conversion formats
