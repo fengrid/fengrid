@@ -20,6 +20,7 @@ from pathlib import Path
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from ..core import db as core_db
+from ..core import paths as core_paths
 from ..core import registry
 
 
@@ -100,8 +101,9 @@ class Databases(QObject):
 
     @Property(str, constant=True)
     def defaultDir(self) -> str:
-        """file:// dir the New/Open dialogs start in."""
-        return "file://" + self._data_dir
+        """file:// dir the New/Open dialogs start in (QUrl builds the
+        correct form for Windows drives too — "file://D:\…" is malformed)."""
+        return core_paths.file_url(self._data_dir)
 
     # -------------------------------------------------------------- slots
     @Slot()
@@ -120,7 +122,7 @@ class Databases(QObject):
     def createDatabase(self, path: str) -> None:
         """New empty Fengrid DB (schema built by db.connect) → active →
         relaunch into it."""
-        p = Path(path).expanduser()
+        p = Path(core_paths.local_path(path)).expanduser()
         if p.exists():
             self.message.emit(f"Already exists: {p.name}")
             return
@@ -131,7 +133,7 @@ class Databases(QObject):
 
     @Slot(str)
     def openDatabase(self, path: str) -> None:
-        p = Path(path).expanduser()
+        p = Path(core_paths.local_path(path)).expanduser()
         if not p.is_file():
             self.message.emit(f"Not found: {p.name}")
             return

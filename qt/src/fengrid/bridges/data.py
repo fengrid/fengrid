@@ -28,6 +28,7 @@ from ..core import backup as core_backup
 from ..core import db as core_db
 from ..core import exportplus as xp
 from ..core import indexer, ingest, settings as core_settings
+from ..core import paths as core_paths
 from ..core import watch as core_watch
 
 
@@ -305,6 +306,8 @@ class DataIO(QObject):
     def importFolder(self, path: str) -> None:
         """Folders become SOURCES (linked, not copied) — the scanner
         indexes them; identical to the first-run folder flow."""
+        path = core_paths.local_path(path)   # dialog callers may pass a URL
+
         def job():
             desc = ingest.import_folder(path)
             con = core_db.connect(self._db_path)
@@ -440,6 +443,8 @@ class DataIO(QObject):
     @Slot(str, str, bool)
     def exportBundle(self, scope: str, dest: str,
                      with_files: bool = True) -> None:
+        dest = core_paths.local_path(dest)   # dialog callers may pass a URL
+
         def job():
             with _job_con(self._db_path) as con:
                 rep = xp.export_bundle(con, dest, scope=scope,
