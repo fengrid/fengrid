@@ -548,15 +548,35 @@ class Taxonomy(QObject):
             if kind in ("project", "library"):
                 meta = self._entity_meta(kind, item_id)
             return {"kind": kind, "id": item_id, "tags": [], "fields": [],
-                    "links": [], "meta": meta, "starred": False}
+                    "links": [], "meta": self._shaped_meta(meta),
+                    "starred": False}
         tags = core_db.tags_for(self._con, item_id, kind)
         fields = core_tax.asset_field_values(self._con, item_id, kind)
         links = core_tax.links_for(self._con, kind, item_id, "both")
         return {"kind": kind, "id": item_id, "tags": tags,
                 "fields": fields,
                 "links": links,
-                "meta": self._kind_meta(kind, item_id),
+                "meta": self._shaped_meta(self._kind_meta(kind, item_id)),
                 "starred": core_db.is_starred(self._con, item_id, kind)}
+
+    def _shaped_meta(self, meta: dict) -> dict:
+        """Merge the full meta shape the QML panels read over a
+        kind-specific payload. The Properties panel evaluates EVERY
+        page's bindings (docs, license, font, palette, snippet) against
+        whatever payload is current — including during the itemKind
+        change window before reload() swaps payloads, and at startup
+        against the last-saved palette's row (#58). A key the payload
+        lacks reads as `undefined`, which the engine logs as
+        'Unable to assign [undefined] to bool/QString', and a missing
+        list's `.length` throws TypeError. Defaults first; the kind
+        payload wins on conflicts."""
+        shaped = {"readme": {"exists": False, "path": "", "text": ""},
+                  "license": {"exists": False, "path": "",
+                              "standard": None},
+                  "family": "", "name": "", "path": "", "title": "",
+                  "colors": []}
+        shaped.update(meta or {})
+        return shaped
 
     def _kind_meta(self, kind: str, item_id: int) -> dict:
         """Kind-specific detail payload for the inspector's pages."""

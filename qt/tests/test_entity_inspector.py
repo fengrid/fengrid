@@ -106,6 +106,52 @@ def test_entity_meta_missing_files(env):
     assert meta2["readme"]["exists"] is False
 
 
+# ------------------------------------------------- meta shape (#58)
+# The Properties panel evaluates EVERY page's bindings (docs, license,
+# font, palette, snippet) against whatever payload is current — including
+# during the itemKind change window before reload() swaps payloads, and
+# at startup against the last-saved palette's row. A meta key a payload
+# lacks reads as `undefined`, which the engine logs as 'Unable to assign
+# [undefined] to bool/QString' and a missing list's `.length` throws
+# TypeError — the #58 startup flood.
+
+_META_SHAPE_KEYS = {
+    "readme": dict, "license": dict, "family": str, "name": str,
+    "path": str, "title": str, "colors": list,
+}
+
+
+def _assert_meta_shape(meta):
+    for key, typ in _META_SHAPE_KEYS.items():
+        assert key in meta, f"meta missing {key!r}"
+        assert isinstance(meta[key], typ), (
+            f"meta[{key!r}] is {type(meta[key]).__name__},"
+            f" not {typ.__name__}")
+    assert isinstance(meta["readme"]["exists"], bool)
+    assert isinstance(meta["readme"]["path"], str)
+    assert isinstance(meta["readme"]["text"], str)
+    assert isinstance(meta["license"]["exists"], bool)
+    assert isinstance(meta["license"]["path"], str)
+
+
+def test_meta_shape_every_kind(env):
+    tax, con, tmp = env
+    icon_id = _mkasset(con, "icon", "a.svg", "/tmp/58a")
+    font_id = _mkasset(con, "font", "A.ttf", "/tmp/58A.ttf")
+    con.execute("UPDATE asset SET family = 'A' WHERE id = ?", (font_id,))
+    con.commit()
+    pal = con.execute("INSERT INTO palette(name) VALUES ('P')").lastrowid
+    snip = con.execute("INSERT INTO snippet(title) VALUES ('S')").lastrowid
+    proj = _mkproject(con, "Shape Proj")
+    cases = [("icon", icon_id), ("font", font_id), ("palette", pal),
+             ("snippet", snip), ("project", proj), ("library", proj),
+             ("preset", 9999), ("preset_entry", 9999),
+             ("icon", 9999), ("font", 9999), ("palette", 9999),
+             ("snippet", 9999), ("bogus", 1)]
+    for kind, iid in cases:
+        _assert_meta_shape(tax.item_properties(kind, iid)["meta"])
+
+
 # ------------------------------------------------------------ git summary
 def test_git_summary_roundtrip(env):
     tax, con, tmp = env
