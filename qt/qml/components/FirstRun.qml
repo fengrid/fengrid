@@ -41,13 +41,15 @@ Rectangle {
     }
     function pathEnabled(path) {
         if (library === null)
-            return true
+            return false
         var s = library.sources
         for (var i = 0; i < s.length; i++) {
             if (s[i].path === path)
                 return s[i].enabled
         }
-        return true
+        // #61: detected system paths start UNCHECKED — nothing is
+        // scanned until the user selects it
+        return false
     }
     function rescanKind(kind) {
         if (kind === "fontroot")
@@ -123,7 +125,7 @@ Rectangle {
                     wrapMode: Text.Wrap
                 }
                 Text {
-                    text: qsTr("One screen, everything saves as you go: system paths and folders feed the initial scan running right now, then look and behavior. Change any of it later from the main menu → Settings…")
+                    text: qsTr("One screen, everything saves as you go: select the system paths or folders you want indexed — nothing is scanned until you choose — then look and behavior. Change any of it later from the main menu → Settings…")
                     font.family: theme.uiFont
                     font.pixelSize: 12
                     color: theme.tokens.textMuted
@@ -152,7 +154,7 @@ Rectangle {
                         filterRows: false
                         title: qsTr("1 · System paths")
                         Text {
-                            text: qsTr("Detected platform locations — uncheck anything you don't want indexed.")
+                            text: qsTr("Detected platform locations — select the ones you want indexed; nothing is scanned until you do.")
                             font.family: theme.uiFont
                             font.pixelSize: 11
                             color: theme.tokens.textMuted
@@ -709,9 +711,11 @@ Rectangle {
                             ? qsTr("Indexing in the background — icons %1 · fonts %2 · add folders whenever you like")
                                   .arg(library.scanCount)
                                   .arg(fonts.scanCount)
-                            : qsTr("%1 assets ready · %2 font files indexed")
-                                  .arg(library.totalAssets)
-                                  .arg(fonts.totalFonts)
+                            : (library.totalAssets || fonts.totalFonts)
+                              ? qsTr("%1 assets ready · %2 font files indexed")
+                                    .arg(library.totalAssets)
+                                    .arg(fonts.totalFonts)
+                              : qsTr("Nothing indexed yet — select the paths above (or add folders), then Get started")
                     font.family: theme.monoFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted
