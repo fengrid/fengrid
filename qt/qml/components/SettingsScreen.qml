@@ -162,8 +162,9 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.topMargin: 12
-                // #56: the nav list read as one dense block
-                spacing: 3
+                // #56 tightened the nav list; #47 settled it at 1 — the
+                // merge of the two briefly duplicated the assignment,
+                // which made SettingsScreen fail to load entirely (#76)
                 spacing: 1
                 // #55: a back button in the left panel — same close path
                 // as the corner X, discoverable where the eye starts

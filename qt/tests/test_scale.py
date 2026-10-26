@@ -406,3 +406,16 @@ def test_lists_refresh_coalesces_mutations(tmp_path):
             lib._on_about_to_quit()
     finally:
         con.close()
+
+
+def test_identify_workers_env_knob(monkeypatch):
+    """#61 (user: limit scan CPU on weak machines): FENGRID_SCAN_WORKERS
+    caps the identify pool; invalid values fall back to the default 4."""
+    monkeypatch.delenv("FENGRID_SCAN_WORKERS", raising=False)
+    assert indexer.identify_workers() == 4
+    monkeypatch.setenv("FENGRID_SCAN_WORKERS", "1")
+    assert indexer.identify_workers() == 1
+    monkeypatch.setenv("FENGRID_SCAN_WORKERS", "bogus")
+    assert indexer.identify_workers() == 4
+    monkeypatch.setenv("FENGRID_SCAN_WORKERS", "-3")
+    assert indexer.identify_workers() == 1
