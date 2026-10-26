@@ -126,6 +126,14 @@ def main(argv=None) -> int:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
             os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
             + " --disable-gpu").strip()
+        # #32: --disable-gpu was NOT enough on the reporter's GL-less
+        # display — a rebuilt bundle still segfaulted, and their
+        # FENGRID_NO_WEBENGINE=1 run was the only stable configuration.
+        # Chromium's GPU process dies natively here regardless of the
+        # flag, so WebEngine degrades to the preview-less shell by
+        # DEFAULT on software-rendered displays (webengine_available()
+        # reads this). FENGRID_FORCE_WEBENGINE=1 opts back in.
+        os.environ["FENGRID_SOFTWARE_DISPLAY"] = "1"
         print("warning: no usable hardware GL on this display —"
               " using the software renderer", file=sys.stderr)
     # Exposed to QML: shader-based scene-graph effects (MultiEffect blur
@@ -138,8 +146,13 @@ def main(argv=None) -> int:
     # app object exists — Chromium reads the command line during its
     # construction. Both spawn no work when WebEngine is unavailable.
     if not register_asset_scheme():
-        print("warning: QtWebEngineCore unavailable — preview surfaces"
-              " disabled", file=sys.stderr)
+        if os.environ.get("FENGRID_SOFTWARE_DISPLAY") == "1":
+            print("warning: no usable hardware GL — web previews are"
+                  " disabled on this display (FENGRID_FORCE_WEBENGINE=1"
+                  " overrides)", file=sys.stderr)
+        else:
+            print("warning: QtWebEngineCore unavailable — preview surfaces"
+                  " disabled", file=sys.stderr)
     initialize_webengine()
 
     # must precede QGuiApplication — controls are token-driven from QML

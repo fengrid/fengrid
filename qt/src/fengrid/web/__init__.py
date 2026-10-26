@@ -45,6 +45,17 @@ def webengine_available() -> bool:
     # segfaults, #27/#32)
     if os.environ.get("FENGRID_NO_WEBENGINE", "") == "1":
         return False
+    # FENGRID_SOFTWARE_DISPLAY=1: set by __main__ when the GL probe says
+    # the display has no usable hardware GL. On such displays the whole
+    # app runs on the software scene graph and Chromium's GPU process
+    # segfaults natively EVEN WITH --disable-gpu (reporter's bisect run:
+    # FENGRID_NO_WEBENGINE=1 was the only stable configuration, #32) —
+    # so the preview-less shell is the DEFAULT there, not a manual
+    # lever. FENGRID_FORCE_WEBENGINE=1 opts back in, at the user's own
+    # crash risk.
+    if (os.environ.get("FENGRID_SOFTWARE_DISPLAY") == "1"
+            and os.environ.get("FENGRID_FORCE_WEBENGINE", "") != "1"):
+        return False
     try:
         from PySide6 import QtWebEngineCore  # noqa: F401 — links the module
     except ImportError:
