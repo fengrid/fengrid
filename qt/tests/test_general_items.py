@@ -6,6 +6,7 @@ import os
 import sys
 
 import pytest
+from PySide6.QtCore import Qt                    # noqa: E402
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
@@ -103,6 +104,55 @@ def test_fonts_collection_and_smart_filter(con):
     names_s = [f["name"] for f in fonts._families]
     assert names_s == ["Tuffy"]
     assert fonts.smartFilter == str(sid)
+
+
+# ------------------------------------------------- fonts starred row (#40)
+def test_fonts_starred_filter(con):
+    """The rail Starred row on the fonts pane: a reactive starred count,
+    a starred-families filter on the model, and star_family updating a
+    live starredOnly view."""
+    from fengrid.bridges.fonts import Fonts
+    src = con.execute(
+        "INSERT INTO source(kind, path, label, enabled)"
+        " VALUES ('folder', '/tmp/starred-f', 't', 1)").lastrowid
+    con.execute(
+        "INSERT INTO asset(source_id, kind, name, path, family, ext)"
+        " VALUES (?, 'font', 'Tuffy Bold', '/tmp/starred-f/t.ttf',"
+        " 'Tuffy', 'ttf')", (src,))
+    con.execute(
+        "INSERT INTO asset(source_id, kind, name, path, family, ext)"
+        " VALUES (?, 'font', 'Demo Regular', '/tmp/starred-f/d.ttf',"
+        " 'Demo', 'ttf')", (src,))
+    con.commit()
+    fonts = Fonts(con, "/tmp")
+    fonts._refresh()
+    assert fonts.starredOnly is False
+    assert fonts.starredCount == 0
+
+    # starring a family feeds the count and the starredOnly view live
+    fonts.set_starred_only(True)
+    assert [f["name"] for f in fonts._families] == []   # nothing starred yet
+    fonts.star_family("Tuffy", True)
+    assert fonts.starredCount == 1
+    assert [f["name"] for f in fonts._families] == ["Tuffy"]
+
+    # the grid model follows the same filter
+    role = Qt.ItemDataRole(Qt.ItemDataRole.UserRole + 1)   # "family"
+    rows = [fonts._model.data(fonts._model.index(i), role)
+            for i in range(fonts._model.rowCount())]
+    assert rows == ["Tuffy"]
+
+    # collection pick drops the starred filter (mirrors colors)
+    fonts.set_collection("0")
+    assert fonts.starredOnly is False
+    names = [f["name"] for f in fonts._families]
+    assert names == ["Demo", "Tuffy"]
+
+    # unstarring empties the starred view again
+    fonts.set_starred_only(True)
+    fonts.star_family("Tuffy", False)
+    assert fonts.starredCount == 0
+    assert [f["name"] for f in fonts._families] == []
 
 
 # ------------------------------------------------- library bulk slots
