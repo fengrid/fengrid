@@ -25,7 +25,8 @@ RowLayout {
 
     ColumnLayout {
         Layout.fillWidth: true
-        spacing: 2
+        // #56: a little more room between the label and its description
+        spacing: 4
         Text {
             text: row.label
             font.family: theme.uiFont
@@ -38,6 +39,10 @@ RowLayout {
             text: row.desc
             font.family: theme.uiFont
             font.pixelSize: 11
+            // #56: loosen wrapped body text — tight default leading read
+            // as dense on multi-line descriptions
+            lineHeight: 1.3
+            lineHeightMode: Text.ProportionalHeight
             color: theme.tokens.textMuted
             Layout.fillWidth: true
             wrapMode: Text.Wrap

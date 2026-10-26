@@ -162,7 +162,8 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.topMargin: 12
-                spacing: 1
+                // #56: the nav list read as one dense block
+                spacing: 3
                 Repeater {
                     model: [
                         { k: "all", t: qsTr("All settings") },
@@ -229,7 +230,8 @@ Rectangle {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 2
+                    // #56: breathing room under the page title
+                    spacing: 4
                     Text {
                         text: qsTr("Settings")
                         font.family: theme.headingFont
@@ -850,6 +852,9 @@ Rectangle {
                                     wrapMode: Text.Wrap
                                     font.family: theme.uiFont
                                     font.pixelSize: 10
+                                    // #56: loosen wrapped body text
+                                    lineHeight: 1.3
+                                    lineHeightMode: Text.ProportionalHeight
                                     color: theme.tokens.textMuted
                                 }
                             }
@@ -873,7 +878,8 @@ Rectangle {
                                     + modelData.key + " network cloud")
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    spacing: 2
+                                    // #56: label/description gap
+                                    spacing: 4
                                     Text {
                                         text: backendRow.modelData.label
                                         font.family: theme.uiFont
@@ -888,6 +894,9 @@ Rectangle {
                                         wrapMode: Text.Wrap
                                         font.family: theme.uiFont
                                         font.pixelSize: 11
+                                        // #56: loosen wrapped body text
+                                        lineHeight: 1.3
+                                        lineHeightMode: Text.ProportionalHeight
                                         color: backendRow.modelData.available
                                                ? theme.tokens.textMuted
                                                : theme.tokens.hlInk
