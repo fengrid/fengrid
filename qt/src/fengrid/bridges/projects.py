@@ -94,7 +94,7 @@ class Projects(QObject):
     def assets(self):
         return self._current.get("assets", [])
 
-    @Property(int, constant=True)
+    @Property(int, notify=projectsChanged)
     def projectCount(self):
         return len(self._projects)
 
@@ -113,6 +113,10 @@ class Projects(QObject):
     def create(self, name: str, description: str = "", tags: str = ""):
         pid = core_projects.create_project(self._con, name, description, tags)
         self.open(pid)
+        # open() only swaps _current — the sidebar list and projectCount
+        # must refresh too, or the new project is invisible and the
+        # "No projects yet" empty state sticks (#57)
+        self._refresh()
         self.message.emit("Project created: " + (name.strip() or "Untitled project"))
 
     @Slot(int)
