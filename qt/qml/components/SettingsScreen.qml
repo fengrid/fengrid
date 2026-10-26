@@ -162,6 +162,8 @@ Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
                 anchors.topMargin: 12
+                // #56: the nav list read as one dense block
+                spacing: 3
                 spacing: 1
                 // #55: a back button in the left panel — same close path
                 // as the corner X, discoverable where the eye starts
@@ -259,7 +261,8 @@ Rectangle {
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 2
+                    // #56: breathing room under the page title
+                    spacing: 4
                     Text {
                         text: qsTr("Settings")
                         font.family: theme.headingFont
@@ -888,6 +891,9 @@ Rectangle {
                                     wrapMode: Text.Wrap
                                     font.family: theme.uiFont
                                     font.pixelSize: 10
+                                    // #56: loosen wrapped body text
+                                    lineHeight: 1.3
+                                    lineHeightMode: Text.ProportionalHeight
                                     color: theme.tokens.textMuted
                                 }
                             }
@@ -911,7 +917,8 @@ Rectangle {
                                     + modelData.key + " network cloud")
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    spacing: 2
+                                    // #56: label/description gap
+                                    spacing: 4
                                     Text {
                                         text: backendRow.modelData.label
                                         font.family: theme.uiFont
@@ -926,6 +933,9 @@ Rectangle {
                                         wrapMode: Text.Wrap
                                         font.family: theme.uiFont
                                         font.pixelSize: 11
+                                        // #56: loosen wrapped body text
+                                        lineHeight: 1.3
+                                        lineHeightMode: Text.ProportionalHeight
                                         color: backendRow.modelData.available
                                                ? theme.tokens.textMuted
                                                : theme.tokens.hlInk
