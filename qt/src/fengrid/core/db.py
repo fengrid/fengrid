@@ -8,7 +8,9 @@ per-pane server SQLite) into one database with unified tags and collections
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -786,6 +788,37 @@ def is_starred(con: sqlite3.Connection, item_id: int,
     return row is not None
 
 
+def filesystem_type(path: str | os.PathLike,
+                    mounts_path: str = "/proc/mounts") -> str:
+    """Filesystem type hosting `path` (Linux /proc/mounts; '' elsewhere).
+
+    #61 diagnostics: a read stall on a non-WAL-capable filesystem
+    (network home mounts, some FUSE/overlay setups) looks exactly like
+    a logic freeze in the freeze-watchdog dumps — the dumps name the
+    statement, never the storage. Every crash-log launch line now
+    records this so the next report answers it outright.
+    """
+    if sys.platform != "linux":
+        return ""
+    real = os.path.realpath(str(path))
+    best_mnt, best_fs = "", ""
+    try:
+        with open(mounts_path, encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mnt = (parts[1].replace("\\040", " ")
+                       .replace("\\011", "\t").replace("\\134", "\\"))
+                if mnt == "/" or real == mnt \
+                        or real.startswith(mnt.rstrip("/") + "/"):
+                    if len(mnt) >= len(best_mnt):
+                        best_mnt, best_fs = mnt, parts[2]
+    except OSError:
+        return ""
+    return best_fs
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     """Open (and initialise) the library database. WAL + foreign keys on."""
     # timeout=30: with two scan workers writing concurrently, polite
@@ -793,7 +826,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
     # tight once fonts+icons collided at startup)
     con = sqlite3.connect(str(path), timeout=30)
     con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
+    mode = con.execute("PRAGMA journal_mode=WAL").fetchone()[0]
     # NORMAL under WAL: commits don't fsync on every transaction — the
     # chunked scan commits (400 rows apiece) otherwise pay a full disk
     # flush each, and a 1M-file import pays it 2500 times. WAL +
@@ -801,6 +834,18 @@ def connect(path: str | Path) -> sqlite3.Connection:
     # can only lose the last transactions, never corrupt the DB.
     con.execute("PRAGMA synchronous=NORMAL")
     con.execute("PRAGMA foreign_keys=ON")
+    if str(mode).lower() != "wal":
+        # #61: WAL silently unavailable (network/overlay filesystems
+        # refuse it) means rollback-journal mode — every operation takes
+        # fcntl locks that can stall for whole lock-timeout periods and
+        # freeze the UI with NO writers anywhere in the dumps.
+        fs = filesystem_type(path)
+        print(
+            f"warning: {path} is on filesystem '{fs or 'unknown'}' —"
+            f" SQLite WAL unavailable (journal mode '{mode}'); database"
+            " operations will be slow and can stall for seconds under"
+            " load. Consider a data directory on a local disk (--db or"
+            " XDG_DATA_HOME).", file=sys.stderr)
     con.executescript(SCHEMA)
     _migrate(con)
     ensure_defaults(con)
