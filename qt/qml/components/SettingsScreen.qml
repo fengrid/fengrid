@@ -48,10 +48,7 @@ Rectangle {
         dataio.setExportOpts(m)
     }
     function url2path(u) {
-        var s = String(u)
-        if (s.indexOf("file://") === 0)
-            return decodeURIComponent(s.substring(7))
-        return s
+        return Icons.toLocalPath(u)   // single source of truth (#41)
     }
     function toggleFmt(list, fmt) {
         var out = []

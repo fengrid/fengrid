@@ -30,6 +30,7 @@ from ..core import db as core_db
 from ..core import export as core_export
 from ..core import taxonomy as core_tax
 from ..core import indexer, migrate, scanner, search as core_search
+from ..core import paths as core_paths
 from ..core import settings
 from ..core.export import ExportError
 
@@ -913,7 +914,10 @@ class Library(QObject):
         """Register an asset folder ('folder' = icons, 'fontroot' =
         fonts) and rescan. Icon folders rescan here; for font folders
         the caller rescans fonts (fonts bridge owns that worker)."""
-        p = str(Path(path).expanduser())
+        # dialog callers may hand over a file:// URL — QUrl.toLocalFile
+        # converts Windows drive-letter URLs (file:///D:/…) correctly;
+        # a substring slice would leave "/D:/…" and isdir would fail (#41)
+        p = str(Path(core_paths.local_path(path)).expanduser())
         if not os.path.isdir(p):
             self.message.emit(f"Not a folder: {p}")
             return

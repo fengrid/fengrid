@@ -46,10 +46,7 @@ Rectangle {
     }
 
     function toLocalPath(u) {
-        var s = u.toString()
-        if (s.indexOf("file://") === 0)
-            return decodeURIComponent(s.substring(7))
-        return s
+        return Icons.toLocalPath(u)   // single source of truth (#41)
     }
 
     Connections {

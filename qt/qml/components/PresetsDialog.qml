@@ -285,7 +285,8 @@ Dialog {
                                          && entryCard.modelData.preview !== ""
                                 source: entryCard.modelData.downloaded
                                         && entryCard.modelData.preview !== ""
-                                        ? "file://" + entryCard.modelData.preview
+                                        ? Icons.fileUrl(
+                                              entryCard.modelData.preview)
                                         : ""
                                 fillMode: Image.PreserveAspectCrop
                                 smooth: true

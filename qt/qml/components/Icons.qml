@@ -55,14 +55,32 @@ QtObject {
     }
 
     function fileUrl(path) {
-        // file URL that survives spaces and '#' in indexed paths
-        return "file://" + encodeURI(path).replace(/#/g, "%23");
+        // file URL that survives spaces and '#' in indexed paths — and
+        // is well-formed on Windows: drive paths need the third slash
+        // ("file:///D:/…"; "file://D:/…" would parse 'D:' as a host),
+        // UNC paths keep both slashes ("file://host/share/…")
+        var s = String(path).replace(/\\/g, "/");
+        var enc = encodeURI(s).replace(/#/g, "%23");
+        if (/^[A-Za-z]:($|[\/?#])/.test(s))
+            return "file:///" + enc;
+        if (s.indexOf("//") === 0)
+            return "file:" + enc;
+        return "file://" + enc;
     }
 
     function toLocalPath(u) {
+        // file:///D:/Library/… → "D:/Library/…" (NOT "/D:/…" — Windows
+        // isdir can never match that). POSIX URLs keep the leading
+        // slash; file://host/share becomes a //host/share UNC path.
+        // decodeURIComponent handles %20 spaces, %23 hashes, UTF-8.
         var s = u.toString();
-        if (s.indexOf("file://") === 0)
-            return decodeURIComponent(s.substring(7));
-        return s;
+        if (s.indexOf("file://") !== 0)
+            return s;
+        var rest = decodeURIComponent(s.substring(7));
+        if (/^\/[A-Za-z]:($|[\/?#])/.test(rest))
+            return rest.substring(1);           // Windows drive letter
+        if (rest.charAt(0) === "/")
+            return rest;                        // POSIX absolute
+        return "//" + rest;                     // UNC: file://host/share
     }
 }

@@ -776,7 +776,8 @@ Rectangle {
                                 if (panel.props && panel.props.meta.license
                                         && panel.props.meta.license.path)
                                     Qt.openUrlExternally(
-                                        "file://" + panel.props.meta.license.path)
+                                        Icons.fileUrl(
+                                            panel.props.meta.license.path))
                             }
                         }
                     }
