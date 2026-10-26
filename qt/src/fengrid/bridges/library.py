@@ -30,6 +30,12 @@ from ..core import db as core_db
 from ..core import export as core_export
 from ..core import taxonomy as core_tax
 from ..core import indexer, migrate, scanner, search as core_search
+
+# #61: a sources_summary call slower than this lands in crash.log — the
+# freeze dumps kept implicating this read with three contradictory
+# theories; the measured duration separates a slow read from a slow
+# QML load happening around it.
+_SLOW_SUMMARY_S = 0.25
 from ..core import paths as core_paths
 from ..core import settings
 from ..core.export import ExportError
@@ -958,12 +964,32 @@ class Library(QObject):
     def sources(self):
         """All registered sources with per-source asset counts — the
         Settings / first-run library section binds to this."""
+        t0 = time.perf_counter()
         out = []
         for s in indexer.sources_summary(self._con):
             s = dict(s)
             s["enabled"] = bool(s["enabled"])
             out.append(s)
+        dt = time.perf_counter() - t0
+        if dt > _SLOW_SUMMARY_S:
+            # #61: this read kept showing up in freeze dumps with
+            # contradictory theories (slow query, lock contention,
+            # storage stall — each disproven by the next dump). Record
+            # the ACTUAL duration so the next report distinguishes a
+            # genuinely slow read from a slow QML load around it.
+            self._log_slow(f"sources_summary {dt:.2f}s")
         return out
+
+    def _log_slow(self, line: str) -> None:
+        try:
+            with open(os.path.join(os.path.dirname(self._db_path)
+                                   if self._db_path else ".",
+                                   "crash.log"), "a",
+                      encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} — slow: "
+                        f"{line}\n")
+        except OSError:
+            pass
 
     @Slot(str)
     def remove_folder_path(self, path: str) -> None:

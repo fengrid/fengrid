@@ -129,6 +129,11 @@ def _probe_webengine() -> None:
 
 
 def main(argv=None) -> int:
+    # #61: startup phase timings land in crash.log — three freeze dumps
+    # each implicated a different statement; measured phase durations
+    # separate a slow database, a slow registration, and a slow QML
+    # engine load instead of guessing from a sampled frame.
+    _t_phase = time.perf_counter()
     # FIRST: drop the benign qt.svg "Duplicate unique style id" flood
     # (third-party icon sets ship duplicate ids; Qt re-logs per render).
     # Everything else keeps flowing; FENGRID_DEBUG_QT_SVG=1 shows it all.
@@ -320,6 +325,7 @@ def main(argv=None) -> int:
             _crash_log.flush()
         except (OSError, ValueError):
             pass
+    t_connect = time.perf_counter() - _t_phase
     # studio pages (Projects pane rework) — same migration discipline
     # as the guid/slug backfill: run after connect, before any bridge
     from fengrid.core import studio as core_studio
@@ -327,6 +333,8 @@ def main(argv=None) -> int:
     core_registry.seed_globals(con, reg_con)
     core_registry.set_active(reg_con, db_path)
     prefs_bridge = Prefs(con, db_path)
+    t_prefs = time.perf_counter() - _t_phase
+    _t_phase = time.perf_counter()
     dbs_bridge = Databases(db_path, reg_con, data_dir,
                            default_path=default_db)
     storage_bridge = Storage(con, data_dir)
@@ -478,6 +486,8 @@ def main(argv=None) -> int:
             *[(p, "fontroot") for p in core_fonts.platform_font_dirs()],
         ])
         con.commit()
+    t_register = time.perf_counter() - _t_phase
+    _t_phase = time.perf_counter()
     # QA affordances (icons pane): pre-select an icon so the inspector
     # panel is present in screenshots, and optionally scroll its body so
     # the pinned action footer is captured mid-overflow
@@ -495,7 +505,20 @@ def main(argv=None) -> int:
     # QML gates its shader effects on this (crash guard). Must precede
     # engine.load: Main.qml reads it in a root binding.
     ctx.setContextProperty("softwareRenderer", software_renderer)
+    _t_load = time.perf_counter()
     engine.load(QUrl.fromLocalFile(os.path.join(_asset_dir("qml"), "Main.qml")))
+    t_engine_load = time.perf_counter() - _t_load
+    # #61: the phase profile — a slow read, a slow registration, and a
+    # slow QML load all looked identical in the freeze dumps
+    if _crash_log is not None:
+        try:
+            _crash_log.write(
+                f"startup: connect {t_connect:.2f}s prefs {t_prefs:.2f}s"
+                f" register {t_register:.2f}s"
+                f" engine.load {t_engine_load:.2f}s\n")
+            _crash_log.flush()
+        except (OSError, ValueError):
+            pass
     if not engine.rootObjects():
         print("error: failed to load the QML shell", file=sys.stderr)
         return 1
