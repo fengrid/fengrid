@@ -155,7 +155,10 @@ Dialog {
         }
 
         // ── library tabs ──
-        RowLayout {
+        // #36: a Flow (not a row) — packs wrap instead of running flush
+        // off the dialog edge, and every card carries real inner padding
+        // so the "N entries" line never touches the card border
+        Flow {
             Layout.fillWidth: true
             Layout.leftMargin: 16
             Layout.rightMargin: 16
@@ -165,8 +168,8 @@ Dialog {
                 delegate: AbstractButton {
                     id: libTab
                     required property var modelData
-                    Layout.preferredHeight: 44
-                    Layout.preferredWidth: 200
+                    implicitWidth: 200
+                    padding: 10
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
                     background: Rectangle {
                         radius: 8
@@ -178,7 +181,7 @@ Dialog {
                                       : theme.tokens.border
                     }
                     contentItem: ColumnLayout {
-                        spacing: 1
+                        spacing: 2
                         Text {
                             text: libTab.modelData.name
                                   + (libTab.modelData.downloaded > 0
