@@ -325,6 +325,7 @@ def _migrate(con: sqlite3.Connection) -> None:
     _migrate_collections(con)
     _migrate_taxonomy_items(con)
     _migrate_grid_indexes(con)
+    _migrate_source_index(con)
     _migrate_fts_trigger_v2(con)
 
 
@@ -356,6 +357,20 @@ def _migrate_grid_indexes(con: sqlite3.Connection) -> None:
     con.execute(
         "CREATE INDEX IF NOT EXISTS idx_item_tag_tagid"
         " ON item_tag(item_kind, tag_id)")
+
+
+def _migrate_source_index(con: sqlite3.Connection) -> None:
+    """idx_asset_source: every per-source asset lookup was a full-table
+    scan — not only sources_summary()'s LEFT JOIN … GROUP BY, which ran
+    that scan PER SOURCE on the MAIN thread during first-run setup and
+    froze the UI for minutes while the initial icon+font scans wrote
+    (#61 freeze dumps: main thread 78s inside the aggregate), but also
+    the purge/sweep/disable lookups (indexer WHERE source_id = ?),
+    including the one inside scan_fonts itself.
+    """
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_source"
+        " ON asset(source_id)")
 
 
 def _migrate_fts_trigger_v2(con: sqlite3.Connection) -> None:
