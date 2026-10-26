@@ -31,6 +31,35 @@ _GLX_RENDER_TYPE = 0x8011
 _GLX_RGBA_BIT = 0x00000001
 
 
+def _egl_display_ok(native: int) -> bool:
+    """True when EGL initializes on the given native display handle."""
+    try:
+        egl = ctypes.CDLL("libEGL.so.1")
+    except OSError:
+        return False
+    egl.eglGetDisplay.restype = ctypes.c_void_p
+    egl.eglGetDisplay.argtypes = [ctypes.c_void_p]
+    d = egl.eglGetDisplay(ctypes.c_void_p(native))
+    if not d:
+        return False
+    egl.eglInitialize.restype = ctypes.c_uint
+    egl.eglInitialize.argtypes = [ctypes.c_void_p,
+                                  ctypes.c_void_p, ctypes.c_void_p]
+    return bool(egl.eglInitialize(d, None, None))
+
+
+def _x11_display() -> int:
+    """Open the default X display (ctypes); 0 when unavailable."""
+    try:
+        x11 = ctypes.CDLL("libX11.so.6")
+    except OSError:
+        return 0
+    x11.XOpenDisplay.restype = ctypes.c_void_p
+    x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    dpy = x11.XOpenDisplay(None)
+    return dpy or 0
+
+
 def _glx_ok() -> bool:
     """True when the X display offers at least one usable FBConfig."""
     try:
@@ -95,19 +124,41 @@ def _egl_ok() -> bool:
     return bool(egl.eglInitialize(d, None, None))
 
 
-def needs_software_fallback() -> bool:
-    """True when the (auto-chosen) windowing platform has no usable GL.
+def display_gl_mode() -> str:
+    """How the (auto-chosen) windowing platform can render.
 
-    Respects explicit user overrides — if QT_QUICK_BACKEND, QSG_RHI_BACKEND
-    or QT_QPA_PLATFORM is already set, the caller knows what they want and
-    we do not second-guess (this also keeps the offscreen QA path untouched).
+    Returns one of:
+    - ``"override"`` — QT_QUICK_BACKEND / QSG_RHI_BACKEND / QT_QPA_PLATFORM
+      already set: the caller knows what they want, we do not second-guess
+      (this also keeps the offscreen QA path untouched).
+    - ``"glx"`` — usable GLX on the X display: the healthy default.
+    - ``"egl"`` — GLX unusable but EGL initializes on the same display
+      (GLX-less XWayland, VMs): Mesa's software GL (llvmpipe) can drive a
+      REAL GL scene graph through the xcb EGL integration, so the app and
+      Chromium both run — slower than hardware, but nothing is disabled.
+      The probe deliberately never tried EGL on the X11 path before #32,
+      which forced whole machines onto the QPainter scene graph that
+      cannot host WebEngine at all.
+    - ``"none"`` — no usable GL at all: software (QPainter) scene graph.
     """
     if (os.environ.get("QT_QUICK_BACKEND")
             or os.environ.get("QSG_RHI_BACKEND")
             or os.environ.get("QT_QPA_PLATFORM")):
-        return False
+        return "override"
+    if os.environ.get("FENGRID_FORCE_SOFTWARE") == "1":
+        return "none"            # QA lever: exercise the #32 fallback chain
     if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("WAYLAND_SOCKET"):
-        return not _egl_ok()
+        return "egl" if _egl_ok() else "none"
     if os.environ.get("DISPLAY"):
-        return not _glx_ok()
-    return False  # no display at all: Qt's own error is the honest signal
+        if _glx_ok():
+            return "glx"
+        dpy = _x11_display()
+        if dpy and (_egl_display_ok(dpy) or _egl_ok()):
+            return "egl"
+        return "none"
+    return "glx"  # no display at all: Qt's own error is the honest signal
+
+
+def needs_software_fallback() -> bool:
+    """True when the app must run on the software (QPainter) scene graph."""
+    return display_gl_mode() == "none"

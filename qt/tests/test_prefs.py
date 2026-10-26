@@ -54,6 +54,18 @@ def test_prefs_persist_and_clamp(tmp_path):
     assert settings.get_bool(con, "update_check") is False
     p.set_update_check(True)
     assert settings.get_bool(con, "update_check") is True
+
+    # web previews (#32): tri-state pref, invalid values ignored
+    assert p.webPreviews == "auto"       # default
+    p.set_web_previews("bogus")
+    assert p.webPreviews == "auto"
+    p.set_web_previews("on")
+    assert p.webPreviews == "on"
+    assert settings.get(con, "web_previews") == "on"
+    p.set_web_previews("off")
+    assert p.webPreviews == "off"
+    p.set_web_previews("auto")
+    assert p.webPreviews == "auto"
     con.close()
 
 

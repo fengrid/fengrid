@@ -43,7 +43,7 @@ from fengrid.bridges.updater import Updater
 from fengrid.core import db as core_db
 from fengrid.core import registry as core_registry
 from fengrid.core import settings as settings_mod
-from fengrid.glprobe import needs_software_fallback
+from fengrid import glprobe
 from fengrid.web import initialize_webengine, make_preview_profile, \
     register_asset_scheme
 
@@ -67,6 +67,65 @@ def _user_data_dir() -> str:
         d = os.path.join(base, "fengrid")
     os.makedirs(d, exist_ok=True)
     return d
+
+
+def _web_previews_pref() -> str:
+    """Read the web_previews preference (auto/on/off) before Qt exists.
+
+    Reads the app registry directly ( GLOBAL key ). A missing/unreadable
+    registry — first run, --db pointing elsewhere — means "auto": the
+    probe decides. Never creates the file.
+    """
+    registry = os.path.join(_user_data_dir(), "registry.db")
+    if not os.path.isfile(registry):
+        return "auto"
+    try:
+        import sqlite3
+
+        from fengrid.core import settings
+        con = sqlite3.connect(registry)
+        try:
+            value = settings.get(con, "web_previews", "auto") or "auto"
+        finally:
+            con.close()
+        return value if value in ("auto", "on", "off") else "auto"
+    except Exception:
+        return "auto"
+
+
+def _probe_webengine() -> None:
+    """Measure whether Chromium survives this display — in a child (#32).
+
+    Spawns a throwaway ``--webengine-probe`` process that inherits the
+    mode environment (software scene graph + SwiftShader flags, or the
+    EGL integration) and actually loads a page. Exit 0 → Chromium works
+    here (FENGRID_WEBENGINE_OK=1); anything else — segfault, QML load
+    failure, timeout — means previews must degrade to the preview-less
+    shell (FENGRID_SOFTWARE_DISPLAY=1 without the OK flag), which the
+    user can override in Settings (web_previews=on).
+    """
+    import subprocess
+
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--webengine-probe"]
+    else:
+        cmd = [sys.executable, "-m", "fengrid", "--webengine-probe"]
+    print("note: probing web preview support for this display…",
+          file=sys.stderr)
+    try:
+        result = subprocess.run(
+            cmd, timeout=30,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ok = result.returncode == 0
+    except subprocess.TimeoutExpired:
+        ok = False
+    if ok:
+        os.environ["FENGRID_WEBENGINE_OK"] = "1"
+        print("note: web previews available (verified)", file=sys.stderr)
+    else:
+        print("warning: web previews are not stable on this display —"
+              " running preview-less (Settings → General → Web previews"
+              " can force them on)", file=sys.stderr)
 
 
 def main(argv=None) -> int:
@@ -109,25 +168,55 @@ def main(argv=None) -> int:
                              " (QA screenshots)")
     parser.add_argument("--version", action="version",
                         version=f"fengrid {__version__}")
+    parser.add_argument("--webengine-probe", action="store_true",
+                        help=argparse.SUPPRESS)  # internal: #32 probe child
     args = parser.parse_args(argv)
 
-    # Degrade to the software renderer instead of letting Qt abort the
-    # process when the display has no usable hardware GL (GLX-less XWayland,
-    # NVIDIA/VM edge cases — SIGABRT "Could not initialize GLX"). The probe
-    # respects explicit QT_* overrides, so the QA offscreen path is untouched.
-    if needs_software_fallback():
+    # crash-isolated WebEngine capability probe (#32): runs as its own
+    # process so a native segfault lands in the child, not the app
+    if args.webengine_probe:
+        from .webengine_probe import run as _probe_run
+        sys.exit(_probe_run())
+
+    # Renderer decision (#32, tiered — previews are core, never disabled
+    # by assumption):
+    #   glx      — healthy default, nothing changes.
+    #   egl      — GLX unusable but EGL works (GLX-less XWayland, VMs):
+    #              run a REAL GL scene graph over Mesa software GL via
+    #              the xcb EGL integration. The app AND Chromium render,
+    #              just on the CPU (llvmpipe). Never tried before #32.
+    #   none     — no GL at all: software (QPainter) scene graph, and a
+    #              crash-isolated probe child decides whether Chromium
+    #              survives here (SwiftShader) or previews must degrade.
+    # The Settings toggle web_previews (auto/on/off) overrides the
+    # measurement in both directions; FENGRID_FORCE_WEBENGINE=1 is the
+    # env equivalent of "on", FENGRID_NO_WEBENGINE=1 of "off".
+    mode = glprobe.display_gl_mode()
+    web_pref = _web_previews_pref()
+    if web_pref == "off":
+        os.environ["FENGRID_NO_WEBENGINE"] = "1"
+    if mode == "none":
         os.environ["QT_QUICK_BACKEND"] = "software"
         os.environ["QT_XCB_GL_INTEGRATION"] = "none"
+        os.environ["FENGRID_SOFTWARE_DISPLAY"] = "1"
         # Chromium's GPU process is a known native-crash source on
-        # GLX-less displays (QtWebEngineCore links at import, BEFORE
-        # this point is too late — this runs first, so the flag lands).
-        # Not proven to be the #32 segfault, but it removes the most
-        # likely native GL consumer left after the blur guard.
+        # GL-less displays; SwiftShader keeps a CPU-only GL path alive
+        # for it. Whether THAT survives the software scene graph is what
+        # the probe child measures — set BEFORE the child spawns (it
+        # inherits the environment) and before initialize_webengine().
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
             os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-            + " --disable-gpu").strip()
+            + " --disable-gpu --use-angle=swiftshader"
+              " --enable-unsafe-swiftshader").strip()
         print("warning: no usable hardware GL on this display —"
               " using the software renderer", file=sys.stderr)
+    elif mode == "egl":
+        os.environ["QT_XCB_GL_INTEGRATION"] = "egl"
+        print("note: no GLX on this display — rendering through EGL"
+              " (software GL); web previews stay available",
+              file=sys.stderr)
+    if mode in ("egl", "none") and web_pref == "auto":
+        _probe_webengine()
     # Exposed to QML: shader-based scene-graph effects (MultiEffect blur
     # layer) must NEVER engage on the software backend — segfaults were
     # observed there (user report, ElementaryOS/GLX-less display).
@@ -138,8 +227,13 @@ def main(argv=None) -> int:
     # app object exists — Chromium reads the command line during its
     # construction. Both spawn no work when WebEngine is unavailable.
     if not register_asset_scheme():
-        print("warning: QtWebEngineCore unavailable — preview surfaces"
-              " disabled", file=sys.stderr)
+        if os.environ.get("FENGRID_SOFTWARE_DISPLAY") == "1":
+            print("warning: web previews are disabled on this display"
+                  " (Settings → General → Web previews can force them"
+                  " on)", file=sys.stderr)
+        else:
+            print("warning: QtWebEngineCore unavailable — preview surfaces"
+                  " disabled", file=sys.stderr)
     initialize_webengine()
 
     # must precede QGuiApplication — controls are token-driven from QML

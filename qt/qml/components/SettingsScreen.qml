@@ -347,6 +347,52 @@ Rectangle {
 
                         SettingRow {
                             section: "general"
+                            label: qsTr("Web previews")
+                            desc: qsTr("Live HTML previews in Code and Projects (WebEngine). Auto: launch verifies this display can run the web engine (a few seconds on GL-less machines) and only disables previews if it measurably cannot. Always: force previews on. Off: never start the web engine.")
+                            keys: "web previews webengine html live code projects enable disable software rendering"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            ComboBox {
+                                id: webPreviewsRow
+                                Layout.preferredWidth: 170
+                                Layout.preferredHeight: 30
+                                Layout.alignment: Qt.AlignVCenter
+                                model: [qsTr("Auto"), qsTr("Always on"),
+                                        qsTr("Off")]
+                                function syncIndex() {
+                                    currentIndex = ["auto", "on", "off"]
+                                        .indexOf(prefs !== null
+                                                 ? prefs.webPreviews
+                                                 : "auto")
+                                }
+                                Component.onCompleted: syncIndex()
+                                onActivated: function (idx) {
+                                    prefs !== null && prefs.set_web_previews(
+                                        ["auto", "on", "off"][idx])
+                                }
+                                Connections {
+                                    target: prefs
+                                    function onWebPreviewsChanged() {
+                                        webPreviewsRow.syncIndex()
+                                    }
+                                }
+                                background: Rectangle {
+                                    radius: 6
+                                    color: theme.tokens.surface2
+                                    border.color: theme.tokens.border
+                                }
+                                contentItem: Text {
+                                    text: webPreviewsRow.displayText
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 11
+                                    color: theme.tokens.text
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: 8
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "general"
                             label: qsTr("Slash menu hotkey")
                             desc: qsTr("Opens the slash menu — search assets and snippets, run commands, jump anywhere. Default Alt + /.")
                             keys: "slash menu palette hotkey shortcut key sequence spotlight alfred vscode search jump"
