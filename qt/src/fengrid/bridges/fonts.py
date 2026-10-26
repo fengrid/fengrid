@@ -132,6 +132,8 @@ class Fonts(QObject):
         # rail Collections row (fonts pane): None = no filter, else id
         self._collection: int | None = None
         self._smart_id = 0
+        # rail Starred row (fonts pane, #40)
+        self._starred_only = False
         self._types: list = []
         self._selected = ""
         self._scanning = False
@@ -247,13 +249,17 @@ class Fonts(QObject):
     @Slot(str)
     def set_collection(self, coll: str) -> None:
         """Toggle the collection filter (fonts pane). Same id twice
-        clears it."""
+        clears it. Leaving the collection view also drops the starred
+        filter (mirrors colors.set_collection)."""
         s = (coll or "").strip()
         cid = int(s) if s.isdigit() else None
         if cid is None or cid == self._collection:
             self._collection = None
         else:
             self._collection = cid
+        if self._starred_only:
+            self._starred_only = False
+            self.starredChanged.emit()
         self.collectionChanged.emit()
         self._refresh()
 
@@ -270,6 +276,38 @@ class Fonts(QObject):
     @Property(str, notify=collectionChanged)
     def smartFilter(self) -> str:
         return "" if not self._smart_id else str(self._smart_id)
+
+    # ── starred rail row: filter the pane to starred families (#40) ──
+    starredChanged = Signal()
+
+    @Property(bool, notify=starredChanged)
+    def starredOnly(self) -> bool:
+        return self._starred_only
+
+    @Slot(bool)
+    def set_starred_only(self, on: bool) -> None:
+        """Toggle the starred-families filter (rail Starred row)."""
+        on = bool(on)
+        if on == self._starred_only:
+            return
+        self._starred_only = on
+        self.starredChanged.emit()
+        self._refresh()
+
+    @Property(int, notify=starredChanged)
+    def starredCount(self) -> int:
+        """Families with at least one starred file — the rail's Starred
+        count on the fonts pane (reactive, unlike a raw slot call)."""
+        return len(self._starred_families())
+
+    def _starred_families(self) -> set[str]:
+        rows = self._con.execute(
+            "SELECT DISTINCT a.family FROM item_tag it"
+            " JOIN tag t ON t.id = it.tag_id"
+            " JOIN asset a ON a.id = it.item_id"
+            " WHERE t.name = 'starred' AND it.item_kind = 'font'"
+            " AND a.kind = 'font' AND a.family IS NOT NULL").fetchall()
+        return {r[0] for r in rows}
 
     # -------------------------------------------------- specimen text
     sampleCustomChanged = Signal()
@@ -318,6 +356,9 @@ class Fonts(QObject):
         for aid in ids:
             core_db.set_starred(self._con, int(aid), bool(starred),
                                 kind="font")
+        # the rail Starred count + a live starredOnly view follow (#40)
+        self.starredChanged.emit()
+        self._refresh()
         self.message.emit(
             f"{('Starred' if starred else 'Unstarred')} “{family}”"
             f" ({len(ids)} file{'s' if len(ids) != 1 else ''})")
@@ -529,9 +570,16 @@ class Fonts(QObject):
                 " JOIN asset a ON a.id = cr.item_id"
                 " WHERE cr.collection_id = ? AND cr.item_kind = 'font'"
                 " AND a.kind = 'font'", (self._collection,))}
+        # starred filter (rail Starred row, #40): families with at least
+        # one starred file survive
+        star_fams: set[str] | None = None
+        if self._starred_only:
+            star_fams = self._starred_families()
         fams = all_fams
         if coll_fams is not None:
             fams = [f for f in all_fams if f["family"] in coll_fams]
+        if star_fams is not None:
+            fams = [f for f in fams if f["family"] in star_fams]
         if self._smart_id:
             fams = [f for f in fams if self._family_matches_smart(
                 f["family"])]
@@ -557,6 +605,8 @@ class Fonts(QObject):
             if self._type_filter and fam["family"] not in type_fams:
                 continue
             if coll_fams is not None and fam["family"] not in coll_fams:
+                continue
+            if star_fams is not None and fam["family"] not in star_fams:
                 continue
             if self._smart_id and not self._family_matches_smart(
                     fam["family"]):

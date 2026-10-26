@@ -376,12 +376,13 @@ Rectangle {
                 accent: theme.tokens.accentFont
                 count: fonts !== null ? String(fonts.totalFonts) : ""
                 active: fonts !== null && fonts.familyFilter === ""
-                        && fonts.typeFilter === ""
+                        && fonts.typeFilter === "" && !fonts.starredOnly
                 onPicked: {
                     if (fonts === null)
                         return
                     fonts.set_family_filter("")
                     fonts.set_type_filter("")
+                    fonts.set_starred_only(false)
                 }
             }
             SectionHeader {
@@ -519,11 +520,15 @@ Rectangle {
                          : String(code !== null ? code.snippetCount : 0)
                 active: rail.pane === 0
                         ? (library !== null && library.collectionFilter === "")
-                        : rail.pane === 2
-                          ? (colors !== null && colors.collectionFilter === ""
-                             && !colors.starredOnly)
-                          : (code !== null && code.collectionFilter === ""
-                             && !code.starredOnly)
+                        : rail.pane === 1
+                          ? (fonts !== null && fonts.collectionFilter === ""
+                             && !fonts.starredOnly)
+                          : rail.pane === 2
+                            ? (colors !== null
+                               && colors.collectionFilter === ""
+                               && !colors.starredOnly)
+                            : (code !== null && code.collectionFilter === ""
+                               && !code.starredOnly)
                 onPicked: {
                     if (rail.pane === 0 && library !== null)
                         library.set_collection("")
@@ -538,15 +543,24 @@ Rectangle {
             RailItem {
                 visible: rail.showCollections && rail.pane !== 0
                 label: qsTr("Starred")
-                count: String(library !== null
-                              ? library.starred_count(rail.pane === 2
-                                                      ? "palette" : "snippet")
-                              : 0)
-                active: rail.pane === 2
-                        ? (colors !== null && colors.starredOnly)
-                        : (code !== null && code.starredOnly)
+                // fonts pane: the fonts bridge owns a reactive starred
+                // count (#40); palettes/snippets keep the library query
+                count: String(rail.pane === 1
+                              ? (fonts !== null ? fonts.starredCount : 0)
+                              : (library !== null
+                                 ? library.starred_count(rail.pane === 2
+                                                         ? "palette"
+                                                         : "snippet")
+                                 : 0))
+                active: rail.pane === 1
+                        ? (fonts !== null && fonts.starredOnly)
+                        : rail.pane === 2
+                          ? (colors !== null && colors.starredOnly)
+                          : (code !== null && code.starredOnly)
                 onPicked: {
-                    if (rail.pane === 2 && colors !== null)
+                    if (rail.pane === 1 && fonts !== null)
+                        fonts.set_starred_only(!fonts.starredOnly)
+                    else if (rail.pane === 2 && colors !== null)
                         colors.set_starred_only(!colors.starredOnly)
                     else if (rail.pane === 3 && code !== null)
                         code.set_starred_only(!code.starredOnly)
