@@ -30,6 +30,14 @@ class FamilyModel(QAbstractListModel):
         super().__init__(parent)
         self._rows: list[dict] = []
 
+    @Slot(int, result=str)
+    def family_at(self, row: int) -> str:
+        """Grid row → family name — Shift-range multi-select needs to
+        map row indices to families from QML (#39/#52)."""
+        if 0 <= row < len(self._rows):
+            return str(self._rows[row].get("family", ""))
+        return ""
+
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._rows)
 

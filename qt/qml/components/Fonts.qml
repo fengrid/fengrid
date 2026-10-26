@@ -12,6 +12,26 @@ Item {
 
     property string filter: ""
 
+    // multi-select (#39/#52): the same pattern as AssetGrid — checkbox
+    // click toggles, Ctrl-click toggles, Shift-click fills a range;
+    // empty checkboxes show ONLY on hover of a card, once ANY box is
+    // checked every checkbox stays visible. Export targets the checked
+    // families when ≥1 is checked, else the selected family.
+    property var checkedFams: []
+    readonly property bool anyChecked: checkedFams.length > 0
+    function toggleSelect(family) {
+        var next = []
+        for (var i = 0; i < checkedFams.length; i++)
+            if (checkedFams[i] !== family)
+                next.push(checkedFams[i])
+        if (next.length === checkedFams.length)
+            next.push(family)
+        checkedFams = next
+    }
+    function isSelected(family) {
+        return checkedFams.indexOf(family) >= 0
+    }
+
     // `fonts !== null` guards mirror SideRail's: context properties are
     // nulled during app teardown while lingering bindings re-evaluate
     Rectangle {
@@ -80,8 +100,9 @@ Item {
                 id: expBtn
                 property string label
                 implicitHeight: 26
-                enabled: fonts !== null && fonts.selectedFamily !== ""
-                         && !fonts.scanning
+                enabled: fonts !== null && !fonts.scanning
+                         && (fontsRoot.anyChecked
+                             || fonts.selectedFamily !== "")
                 contentItem: Text {
                     text: expBtn.label
                     color: expBtn.enabled ? theme.tokens.text : theme.tokens.textMuted
@@ -100,14 +121,21 @@ Item {
                 }
             }
             ExportButton {
-                label: fonts !== null && fonts.selectedFamily !== ""
-                       ? qsTr("Export CSS — %1").arg(fonts.selectedFamily)
-                       : qsTr("Export CSS")
-                onClicked: cssDialog.openWith(fonts.selectedFamily)
+                label: fontsRoot.anyChecked
+                       ? qsTr("Export CSS — %1 families")
+                             .arg(fontsRoot.checkedFams.length)
+                       : (fonts !== null && fonts.selectedFamily !== ""
+                          ? qsTr("Export CSS — %1").arg(fonts.selectedFamily)
+                          : qsTr("Export CSS"))
+                onClicked: cssDialog.openWith(fontsRoot.anyChecked
+                                              ? fontsRoot.checkedFams
+                                              : fonts.selectedFamily)
             }
             ExportButton {
                 label: qsTr(".zip")
-                onClicked: cssDialog.openWith(fonts.selectedFamily)
+                onClicked: cssDialog.openWith(fontsRoot.anyChecked
+                                              ? fontsRoot.checkedFams
+                                              : fonts.selectedFamily)
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Same dialog — use «Save as ZIP…» " +
                                    "inside; formats are selectable there")
@@ -163,7 +191,8 @@ Item {
                     anchors.top: parent.top
                     anchors.topMargin: 8
                     anchors.left: parent.left
-                    anchors.leftMargin: 10
+                    // clear the selection checkbox (#39/#52) when visible
+                    anchors.leftMargin: famSelBox.visible ? 28 : 10
                     anchors.right: parent.right
                     anchors.rightMargin: 10
                     // curated default specimen: a passage whose word
@@ -207,25 +236,80 @@ Item {
                     color: theme.tokens.textMuted
                     visible: famName.truncated !== true
                 }
+                // selection checkbox (#39/#52) — empty boxes hover-only; once ANY
+                // box is checked every checkbox is visible everywhere
+                Rectangle {
+                    id: famSelBox
+                    width: 16
+                    height: 16
+                    radius: 4
+                    anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.margins: 5
+                    visible: famMa.containsMouse || fontsRoot.anyChecked
+                    color: fontsRoot.isSelected(model.family)
+                           ? theme.tokens.accentFont : theme.tokens.surface
+                    border.color: fontsRoot.isSelected(model.family)
+                                  ? theme.tokens.accentFont
+                                  : theme.tokens.textMuted
+                    border.width: 1
+                    z: 3
+                    IconImage {
+                        anchors.centerIn: parent
+                        name: "check"
+                        px: 10
+                        tint: theme.tokens.bg
+                        visible: fontsRoot.isSelected(model.family)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: fontsRoot.toggleSelect(model.family)
+                    }
+                }
                 MouseArea {
                     id: famMa
                     anchors.fill: parent
                     hoverEnabled: true
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: Qt.PointingHandCursor
-                    // single click selects; the Details tab of the
-                    // property inspector (right panel) carries the
-                    // specimen view — no more popup on click
                     onClicked: function (mouse) {
                         if (fonts === null)
                             return
-                        // left-click selects (inspector follows);
-                        // right-click opens the menu for the CURRENT
-                        // selection without moving it
-                        if (mouse.button === Qt.LeftButton)
-                            fonts.select(model.family)
-                        else
+                        if (mouse.button === Qt.LeftButton) {
+                            if (mouse.modifiers & (Qt.ControlModifier
+                                                   | Qt.ShiftModifier)) {
+                                // Ctrl toggles this card; Shift fills a
+                                // range from the anchor card (AssetGrid
+                                // semantics — #39/#52)
+                                var start = famGrid.currentIndex >= 0
+                                            ? famGrid.currentIndex : index
+                                if (mouse.modifiers & Qt.ShiftModifier) {
+                                    var lo = Math.min(start, index)
+                                    var hi = Math.max(start, index)
+                                    var next = fontsRoot.checkedFams.slice()
+                                    for (var r = lo; r <= hi; r++) {
+                                        var fam = fonts.model.family_at(r)
+                                        if (fam !== ""
+                                            && next.indexOf(fam) < 0)
+                                            next.push(fam)
+                                    }
+                                    fontsRoot.checkedFams = next
+                                } else {
+                                    fontsRoot.toggleSelect(model.family)
+                                }
+                                famGrid.currentIndex = index
+                            } else {
+                                fontsRoot.checkedFams = []
+                                famGrid.currentIndex = index
+                                fonts.select(model.family)
+                            }
+                            famGrid.forceActiveFocus()
+                        } else {
+                            // right-click opens the menu for the CURRENT
+                            // selection without moving it
                             famMenu.popup()
+                        }
                     }
                 }
             }
