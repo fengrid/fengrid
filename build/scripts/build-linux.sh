@@ -3,7 +3,9 @@
 # build-linux.sh — build Fengrid (Qt 6) for linux-x64 | linux-arm64.
 #
 # Usage:
-#   build-linux.sh <linux-x64|linux-arm64>
+#   build-linux.sh [--clean] <linux-x64|linux-arm64>
+#   --clean  remove previous artifacts (qt/dist, this target's spec dir)
+#            before building, so the bundle cannot inherit stale state (#44)
 #   FENGRID_VARIANT=prod|dev   (default: prod; dev adds pytest/ruff to the env)
 #   FENGRID_IN_CONTAINER=1     (set by docker/linux-*.Dockerfile: use the
 #                               container's system python, skip the venv)
@@ -17,7 +19,16 @@
 # paths in a checked-in spec are a landmine; see .dockerignore *.spec).
 set -euo pipefail
 
-TARGET="${1:?usage: build-linux.sh <linux-x64|linux-arm64>}"
+CLEAN=0
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --clean|-c) CLEAN=1 ;;
+        *)          ARGS+=("$arg") ;;
+    esac
+done
+TARGET="${ARGS[0]:-}"
+[ -n "$TARGET" ] || { echo "usage: build-linux.sh [--clean] <linux-x64|linux-arm64>" >&2; exit 1; }
 VARIANT="${FENGRID_VARIANT:-prod}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 QT_DIR="$ROOT/qt"
@@ -32,6 +43,11 @@ case "$VARIANT" in
     prod|dev) ;;
     *) echo "unknown variant: $VARIANT (use prod or dev)" >&2; exit 1 ;;
 esac
+
+if [ "$CLEAN" = "1" ]; then
+    echo "clean: removing previous artifacts ($OUT_DIR, $SPEC_DIR)"
+    rm -rf "$OUT_DIR" "$SPEC_DIR"
+fi
 
 cd "$QT_DIR"
 
@@ -68,6 +84,18 @@ add_data() {
         echo "warning: data tree missing, skipped: $src" >&2
     fi
 }
+
+# build provenance (#43): stamp the commit this bundle was built from —
+# the About screen reads it via fengrid.buildinfo. Docker runs have no
+# .git inside the image; build-docker-linux.sh forwards the host commit
+# as FENGRID_BUILD_COMMIT. The stamp file is gitignored.
+commit="${FENGRID_BUILD_COMMIT:-}"
+[ -z "$commit" ] && commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+[ -z "$commit" ] && commit="unknown"
+stamp="$QT_DIR/.build-commit"
+printf '%s\n' "$commit" > "$stamp"
+add_data "$stamp" "."
+
 add_data "$QT_DIR/qml" "qml"
 add_data "$ROOT/fonts" "fonts"
 add_data "$QT_DIR/resources" "resources"

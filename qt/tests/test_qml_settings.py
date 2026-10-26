@@ -103,6 +103,7 @@ def settings_ui(tmp_path):
     ctx.setContextProperty("updater", updater)
     ctx.setContextProperty("storage", storage)
     ctx.setContextProperty("appVersion", "0.0-test")
+    ctx.setContextProperty("appCommit", "0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b")
     # comp stays a local of this frame for the whole yield — created
     # objects die with their component
     comp = QQmlComponent(
@@ -291,3 +292,15 @@ def test_data_management_sections_present(settings_ui):
     assert shown == {"database"}, shown
     root.setProperty("category", "all")
     _qapp().processEvents()
+
+
+def test_about_shows_the_build_commit(settings_ui):
+    """#43: the About section carries a Build commit row fed by the
+    appCommit context property (stamped by the build scripts)."""
+    root = settings_ui["root"]
+    rows = [r for r in _by_class(root, "SettingRow")
+            if r.property("label") == "Build commit"]
+    assert len(rows) == 1, f"expected exactly one Build commit row: {rows}"
+    assert rows[0].property("desc") == \
+        "0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b"
+    assert rows[0].isVisible()

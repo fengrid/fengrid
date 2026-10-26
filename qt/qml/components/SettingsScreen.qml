@@ -2161,6 +2161,16 @@ Rectangle {
                             keys: "about version license credit native it help"
                             rowMatches: settingsRoot.matches(section, label, keys)
                         }
+                        // build provenance (#43): hidden when the binary
+                        // carries no stamp and git metadata is absent
+                        SettingRow {
+                            section: "about"
+                            visible: appCommit !== ""
+                            label: qsTr("Build commit")
+                            desc: appCommit
+                            keys: "commit build hash git revision sha about version"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                        }
                         SettingRow {
                             section: "about"
                             label: qsTr("Library database")

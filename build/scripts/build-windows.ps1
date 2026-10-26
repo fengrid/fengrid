@@ -2,6 +2,7 @@
 #
 # Usage (PowerShell, on a Windows host):
 #   .\build-windows.ps1 -Target windows-x64
+#   .\build-windows.ps1 -Target windows-x64 -Clean   # wipe artifacts first (#44)
 #   $env:FENGRID_VARIANT = "prod" | "dev"    # default: prod; dev adds pytest/ruff
 #   $env:FENGRID_SMOKE   = "1"               # after PyInstaller, launch the frozen
 #                                            # binary offscreen and capture a
@@ -20,7 +21,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("windows-x64", "windows-arm64")]
-    [string]$Target
+    [string]$Target,
+    # remove previous artifacts (dist, spec dir) before building (#44)
+    [switch]$Clean
 )
 $ErrorActionPreference = "Stop"
 $VARIANT = if ($env:FENGRID_VARIANT) { $env:FENGRID_VARIANT } else { "prod" }
@@ -35,6 +38,12 @@ $SpecDir = Join-Path $Root (Join-Path "build\pyinstaller" "$Target-$VARIANT")
 
 Push-Location $QtDir
 try {
+    if ($Clean) {
+        Write-Host "clean: removing previous artifacts ($OutDir, $SpecDir)"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue `
+            $OutDir, $SpecDir
+    }
+
     # native run: isolated venv so CI/local builds don't pollute the host env
     python -m venv .venv
     . .\.venv\Scripts\Activate.ps1
@@ -73,6 +82,15 @@ try {
     Add-DataTree (Join-Path $QtDir "qml") "qml"
     Add-DataTree (Join-Path $Root "fonts") "fonts"
     Add-DataTree (Join-Path $QtDir "resources") "resources"
+
+    # build provenance (#43): stamp the commit for the About screen
+    # (fengrid.buildinfo); the stamp file is gitignored
+    $Commit = $env:FENGRID_BUILD_COMMIT
+    if (-not $Commit) { $Commit = (git -C $Root rev-parse HEAD 2>$null) }
+    if (-not $Commit) { $Commit = "unknown" }
+    $Stamp = Join-Path $QtDir ".build-commit"
+    Set-Content -Path $Stamp -Value $Commit
+    Add-DataTree $Stamp "."
 
     New-Item -ItemType Directory -Force -Path $SpecDir | Out-Null
     python -m PyInstaller --noconfirm --clean `

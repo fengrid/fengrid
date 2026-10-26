@@ -8,7 +8,8 @@
 # docker/README.md).
 #
 # Usage:
-#   build-macos.sh <macos-x64|macos-arm64>
+#   build-macos.sh [--clean] <macos-x64|macos-arm64>
+#   --clean  remove previous artifacts (qt/dist) before building (#44)
 #   FENGRID_VARIANT=prod|dev   (default: prod)
 #   MAC_CODESIGN_ID            (optional: codesign the bundle when set;
 #                               notarization is a manual/post step — see
@@ -17,7 +18,16 @@
 # DRAFT (2026-10-18): not yet executed.
 set -euo pipefail
 
-TARGET="${1:?usage: build-macos.sh <macos-x64|macos-arm64>}"
+CLEAN=0
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --clean|-c) CLEAN=1 ;;
+        *)          ARGS+=("$arg") ;;
+    esac
+done
+TARGET="${ARGS[0]:-}"
+[ -n "$TARGET" ] || { echo "usage: build-macos.sh [--clean] <macos-x64|macos-arm64>" >&2; exit 1; }
 VARIANT="${FENGRID_VARIANT:-prod}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 QT_DIR="$ROOT/qt"
@@ -31,6 +41,11 @@ case "$VARIANT" in
     prod|dev) ;;
     *) echo "unknown variant: $VARIANT (use prod or dev)" >&2; exit 1 ;;
 esac
+
+if [ "$CLEAN" = "1" ]; then
+    echo "clean: removing previous artifacts ($OUT_DIR)"
+    rm -rf "$OUT_DIR"
+fi
 
 cd "$QT_DIR"
 
@@ -46,8 +61,17 @@ REQS="$ROOT/build/requirements-build.txt"
 python -m pip install -r "$REQS"
 python -c "import PySide6; print('PySide6', PySide6.__version__)"
 
+# build provenance (#43): stamp the commit for the About screen
+# (fengrid.buildinfo); the stamp file is gitignored
+commit="${FENGRID_BUILD_COMMIT:-}"
+[ -z "$commit" ] && commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+[ -z "$commit" ] && commit="unknown"
+stamp="$QT_DIR/.build-commit"
+printf '%s\n' "$commit" > "$stamp"
+
 pyinstaller --noconfirm --clean \
     --name fengrid \
+    --add-data "$stamp:." \
     --add-data "$QT_DIR/qml:qml" \
     --add-data "$ROOT/fonts:fonts" \
     --paths "$QT_DIR/src" \
