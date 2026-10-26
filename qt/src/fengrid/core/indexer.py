@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 import time
 from collections import deque
 from pathlib import Path
@@ -27,7 +28,7 @@ from typing import Any
 
 from . import db as core_db
 from . import kinds as core_kinds
-from . import scanner
+from . import lognoise, scanner
 
 try:
     # hardened parser when available (entity-expansion hardening)
@@ -289,6 +290,16 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
          progress=None) -> dict:
     """Incrementally index the given sources into the library.
 
+    Third-party identify noise (PIL per-file warnings) is gated at the
+    scan boundary — see core/lognoise.py (issue #63)."""
+    with lognoise.scan_noise_gate():
+        return _scan_impl(con, sources, progress=progress)
+
+
+def _scan_impl(con: sqlite3.Connection, sources: list[tuple[int, str]],
+               progress=None) -> dict:
+    """Incrementally index the given sources into the library.
+
     sources: [(source_id, root_path)] for ENABLED sources only.
     Returns a counts report. Writes commit in chunks (every _CHUNK files
     and per source) so concurrent main-thread writes — theme changes,
@@ -441,6 +452,20 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
                files_by_root: dict[str, list[str]] | None = None) -> dict:
     """Incrementally index font sources (kind='font' rows).
 
+    fontTools log noise (per-file head-table warnings) is gated at the
+    scan boundary — see core/lognoise.py (issue #63). WOFF2 files are
+    skipped quietly when brotli is missing, counted once per scan."""
+    with lognoise.scan_noise_gate():
+        return _scan_fonts_impl(con, sources, progress=progress,
+                                should_stop=should_stop,
+                                files_by_root=files_by_root)
+
+
+def _scan_fonts_impl(con: sqlite3.Connection, sources: list[tuple[int, str]],
+                     progress=None, should_stop=None,
+                     files_by_root: dict[str, list[str]] | None = None) -> dict:
+    """Incrementally index font sources (kind='font' rows).
+
     Same fingerprint/incremental scheme as scan(); one row per FILE with the
     first face's metadata (core/fonts.identify_font documents the .ttc
     scope note). should_stop() is checked per file so an app quit ends the
@@ -455,6 +480,7 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
     counts = {"total": 0, "new": 0, "changed": 0, "unchanged": 0,
               "pruned": 0, "errors": 0}
     now = time.time()
+    skipped_woff2 = 0  # woff2 files not identified (no brotli) — noted once
 
     con.execute("BEGIN IMMEDIATE")
     try:
@@ -503,6 +529,13 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
             else:
                 for path, _fp, _prev in pending:
                     metas[path] = fonts_mod.identify_font(path)
+            if not fonts_mod.brotli_available():
+                # every woff2 in pending was skipped by identify_font
+                # (core/fonts.py short-circuits before fontTools logs its
+                # per-file brotli ERROR) — issue #63
+                skipped_woff2 += sum(
+                    1 for p, _fp, _prev in pending
+                    if os.path.splitext(p)[1].lower() == ".woff2")
             for path, fp, prev in pending:
                 if should_stop is not None and should_stop():
                     raise ScanAborted
@@ -542,11 +575,22 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
     except ScanAborted:
         con.rollback()
         counts["aborted"] = True
+        _note_woff2_skips(skipped_woff2)
         return counts
     except Exception:
         con.rollback()
         raise
+    _note_woff2_skips(skipped_woff2)
     return counts
+
+
+def _note_woff2_skips(n: int) -> None:
+    """One summary line per scan for the woff2 files identify_font skipped
+    (issue #63) — never per file."""
+    if n:
+        print(f"fengrid: skipped WOFF2 identification for {n} font file(s) —"
+              " install brotli (pip install brotli) for full font metadata",
+              file=sys.stderr)
 
 
 def _upsert_font(con: sqlite3.Connection, source_id: int, path: str,
