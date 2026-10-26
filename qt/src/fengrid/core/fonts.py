@@ -29,6 +29,24 @@ try:
 except ImportError:  # pragma: no cover - fontTools is a build requirement
     TTFont = None
 
+_BROTLI: bool | None = None
+
+
+def brotli_available() -> bool:
+    """Cached probe of fontTools' WOFF2 decoder dependency (issue #63).
+
+    fontTools logs an ERROR per WOFF2 file when brotli is missing; callers
+    probe once and skip those files quietly instead.
+    """
+    global _BROTLI
+    if _BROTLI is None:
+        try:
+            from fontTools.ttLib import woff2 as _woff2
+            _BROTLI = bool(getattr(_woff2, "haveBrotli", False))
+        except Exception:
+            _BROTLI = False
+    return _BROTLI
+
 FONT_EXTS = {"ttf", "otf", "ttc", "otc", "woff", "woff2"}
 _TTC_EXTS = {"ttc", "otc"}
 _MAX_FACES = 32
@@ -82,6 +100,11 @@ def identify_font(path: str | Path) -> dict | None:
     if TTFont is None:
         return None
     ext = os.path.splitext(str(path))[1].lower().lstrip(".")
+    if ext == "woff2" and not brotli_available():
+        # Issue #63: fontTools logs an ERROR per WOFF2 file when brotli is
+        # missing — skip quietly (the row keeps filename + size; scan_fonts
+        # counts the skips and notes it once per scan).
+        return None
     try:
         if ext in _TTC_EXTS:
             face_count = 0
