@@ -163,6 +163,36 @@ Rectangle {
                 anchors.bottom: parent.bottom
                 anchors.topMargin: 12
                 spacing: 1
+                // #55: a back button in the left panel — same close path
+                // as the corner X, discoverable where the eye starts
+                AbstractButton {
+                    width: parent.width
+                    implicitHeight: 28
+                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    contentItem: Row {
+                        leftPadding: 10
+                        spacing: 8
+                        IconImage {
+                            name: "chevron-left"
+                            px: 13
+                            tint: theme.tokens.textMuted
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: qsTr("Back")
+                            font.family: theme.uiFont
+                            font.pixelSize: 12
+                            color: theme.tokens.text
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+                    background: Rectangle {
+                        radius: 5
+                        color: parent.hovered ? theme.tokens.surface2
+                                              : "transparent"
+                    }
+                    onClicked: settingsRoot.closed()
+                }
                 Repeater {
                     model: [
                         { k: "all", t: qsTr("All settings") },
@@ -264,7 +294,7 @@ Rectangle {
                         TextField {
                             id: queryField
                             Layout.fillWidth: true
-                            placeholderText: qsTr("Search settings")
+                            placeholderText: qsTr("search settings")
                             background: null
                             color: theme.tokens.text
                             placeholderTextColor: theme.tokens.textMuted
@@ -275,11 +305,19 @@ Rectangle {
                         }
                     }
                 }
-                IconButton {
-                    icon_name: "x"
-                    ToolTip.text: qsTr("Close settings (Esc)")
-                    onClicked: settingsRoot.closed()
-                }
+            }
+
+            // #55: the X sat right next to the search field, where a
+            // search button would be expected — it lives in the screen's
+            // top-right corner instead
+            IconButton {
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 10
+                z: 2
+                icon_name: "x"
+                ToolTip.text: qsTr("Close settings (Esc)")
+                onClicked: settingsRoot.closed()
             }
 
             Flickable {
