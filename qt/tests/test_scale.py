@@ -45,7 +45,7 @@ def test_scale_indexes_present_fresh(tmp_path):
             "SELECT name FROM sqlite_master WHERE type = 'index'")}
         for expected in ("idx_asset_grid", "idx_asset_kind_context",
                          "idx_asset_kind_ext", "idx_asset_kind_family",
-                         "idx_item_tag_tagid"):
+                         "idx_asset_source", "idx_item_tag_tagid"):
             assert expected in names, expected
         # WAL + NORMAL: chunked scan commits must not fsync per chunk
         assert con.execute("PRAGMA synchronous").fetchone()[0] == 1
@@ -61,6 +61,7 @@ def test_scale_indexes_recreated_on_legacy_connect(tmp_path):
     con = db.connect(path)
     con.execute("DROP INDEX idx_asset_grid")
     con.execute("DROP INDEX idx_item_tag_tagid")
+    con.execute("DROP INDEX idx_asset_source")
     con.commit()
     con.close()
     con = db.connect(path)
@@ -69,6 +70,41 @@ def test_scale_indexes_recreated_on_legacy_connect(tmp_path):
             "SELECT name FROM sqlite_master WHERE type = 'index'")}
         assert "idx_asset_grid" in names
         assert "idx_item_tag_tagid" in names
+        assert "idx_asset_source" in names
+    finally:
+        con.close()
+
+
+# ------------------------------------------------------------ sources summary
+def test_sources_summary_counts_and_empty_sources(tmp_path):
+    """#61: sources_summary feeds the first-run setup screen ON THE MAIN
+    THREAD while the initial scans write. The old LEFT JOIN … GROUP BY
+    visited the whole asset table per source (no source_id index); the
+    single-pass aggregate + idx_asset_source keeps it off the freeze
+    path. Also pins the LEFT JOIN semantics: a source with zero assets
+    still lists with n=0."""
+    con = db.connect(tmp_path / "lib.db")
+    try:
+        for label in ("alpha", "beta", "empty"):
+            con.execute("INSERT INTO source(kind, path, label) VALUES"
+                        " ('system', ?, ?)", (f"/{label}", label))
+        for i in range(7):
+            con.execute(
+                "INSERT INTO asset(source_id, kind, path, name)"
+                " VALUES (1, 'icon', ?, ?)", (f"/alpha/{i}.png", f"a{i}"))
+        for i in range(3):
+            con.execute(
+                "INSERT INTO asset(source_id, kind, path, name)"
+                " VALUES (2, 'icon', ?, ?)", (f"/beta/{i}.png", f"b{i}"))
+        con.commit()
+        rows = {r["label"]: r for r in indexer.sources_summary(con)}
+        assert rows["alpha"]["n"] == 7
+        assert rows["beta"]["n"] == 3
+        assert rows["empty"]["n"] == 0        # LEFT JOIN semantics kept
+        assert rows["empty"]["enabled"] in (0, 1)
+        # kind, label ordering preserved
+        order = [r["label"] for r in indexer.sources_summary(con)]
+        assert order == sorted(order)
     finally:
         con.close()
 

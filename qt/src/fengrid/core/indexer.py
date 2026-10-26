@@ -719,10 +719,14 @@ def remove_source(con: sqlite3.Connection, source_id: int) -> bool:
 
 
 def sources_summary(con: sqlite3.Connection) -> list[dict]:
+    # #61: the LEFT JOIN … GROUP BY form made SQLite visit the whole
+    # asset table PER SOURCE (no source_id index until the migration);
+    # on the main thread mid-scan that froze first-run setup for minutes.
+    # One indexed aggregate + a merge is O(assets) once, index-only.
+    counts = {r[0]: r[1] for r in con.execute(
+        "SELECT source_id, COUNT(*) FROM asset GROUP BY source_id")}
     rows = con.execute(
-        "SELECT s.id, s.kind, s.path, s.label, s.enabled,"
-        " COUNT(a.id) AS n"
-        " FROM source s LEFT JOIN asset a ON a.source_id = s.id"
-        " GROUP BY s.id ORDER BY s.kind, s.label"
+        "SELECT id, kind, path, label, enabled"
+        " FROM source ORDER BY kind, label"
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [{**dict(r), "n": counts.get(r["id"], 0)} for r in rows]
