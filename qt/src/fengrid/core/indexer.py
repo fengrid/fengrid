@@ -168,6 +168,21 @@ _IDENTIFY_WINDOW = 32
 _IDENTIFY_WORKERS = 4
 
 
+def identify_workers() -> int:
+    """Parallel identify-pool size, user-tunable via FENGRID_SCAN_WORKERS.
+
+    #61 follow-up (user: "limit it so it behaves more reasonably"): on
+    CPU-starved machines a 4-worker pool competes with the UI for every
+    core while big scans run — FENGRID_SCAN_WORKERS=1 effectively
+    serializes identification (paint stays smooth, scan just slower).
+    Default stays 4.
+    """
+    try:
+        return max(1, int(os.environ.get("FENGRID_SCAN_WORKERS", "4")))
+    except ValueError:
+        return _IDENTIFY_WORKERS
+
+
 def _parallel_identify() -> bool:
     """FENGRID_SCAN_PARALLEL=0 forces the serial path (tests, debugging)."""
     return os.environ.get("FENGRID_SCAN_PARALLEL", "1") != "0"
@@ -342,7 +357,7 @@ def _scan_impl(con: sqlite3.Connection, sources: list[tuple[int, str]],
             if _parallel_identify():
                 from concurrent.futures import ThreadPoolExecutor
                 pool = ThreadPoolExecutor(
-                    max_workers=_IDENTIFY_WORKERS)
+                    max_workers=identify_workers())
             window: deque = deque()
             try:
                 def _stage(seen_set: set, src_root: str,
@@ -520,7 +535,7 @@ def _scan_fonts_impl(con: sqlite3.Connection, sources: list[tuple[int, str]],
             metas: dict[str, dict | None] = {}
             if len(pending) > 8:
                 from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=4) as pool:
+                with ThreadPoolExecutor(max_workers=identify_workers()) as pool:
                     for path, meta in zip(
                             [p for p, _f, _pr in pending],
                             pool.map(fonts_mod.identify_font,
