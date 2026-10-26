@@ -336,12 +336,6 @@ def main(argv=None) -> int:
     ctx.setContextProperty(
         "initialFirstRun",
         prefs_bridge.firstRunNeeded and not bool(args.screenshot))
-    # startup scan session: drives the launch splash (shown only while
-    # these initial scans actually run — manual rescans never reshow it)
-    ctx.setContextProperty(
-        "initialScans",
-        (not args.no_scan)
-        and (library.totalAssets == 0 or fonts.totalFonts == 0))
     # QA affordances (icons pane): pre-select an icon so the inspector
     # panel is present in screenshots, and optionally scroll its body so
     # the pinned action footer is captured mid-overflow

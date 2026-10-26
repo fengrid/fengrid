@@ -3,9 +3,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "."
 
-// Launch splash: shown while the INITIAL scans run (Main gates
-// `session`) — auto-hides when the scans go quiet, never reshow for
-// manual rescans. Deliberately NON-MODAL: no MouseArea, so clicks pass
+// Launch splash: shows itself while a scan runs on a still-empty
+// database (first run, post-setup relaunch, watch-folder ingestion into
+// a fresh DB) — it owns the session: no gating snapshot from Main, so
+// the splash opens whenever the condition is actually met, however late
+// the scan is scheduled (#34). A rescan of a populated library never
+// opens it, so manual rescans keep the shell quiet. Auto-hides when the
+// scans go quiet. Deliberately NON-MODAL: no MouseArea, so clicks pass
 // through to the shell; this informs, it does not block. Live status =
 // current path under the scanner + per-scan counts against a
 // pre-counted total (indeterminate until `scanTotal` arrives). QA
@@ -16,6 +20,8 @@ Item {
     visible: shown
 
     property bool force: false
+    // session state — opened by the Connections below, closed when the
+    // scans go quiet. `shown` = session && anyScan.
     property bool session: false
     readonly property bool anyScan:
         (typeof library !== "undefined" && library !== null
@@ -23,6 +29,29 @@ Item {
         || (typeof fonts !== "undefined" && fonts !== null && fonts.scanning)
     readonly property bool shown: force
                                   || (session && anyScan)
+
+    Connections {
+        target: library
+        function onScanningChanged() {
+            if (library.scanning && library.totalAssets === 0)
+                splash.session = true
+        }
+        function onScanFinished() {
+            if (!fonts.scanning)
+                splash.session = false
+        }
+    }
+    Connections {
+        target: fonts
+        function onScanningChanged() {
+            if (fonts.scanning && fonts.totalFonts === 0)
+                splash.session = true
+        }
+        function onScanFinished() {
+            if (!library.scanning)
+                splash.session = false
+        }
+    }
 
     // soft scrim — visual only, input falls through to the app
     Rectangle {
