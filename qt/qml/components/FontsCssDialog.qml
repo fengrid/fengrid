@@ -259,8 +259,14 @@ Dialog {
 
     footer: ColumnLayout {
         spacing: 8
+        // #47: the footer spans the dialog edge-to-edge — without insets
+        // the buttons sat flush against the bottom-right corner (the
+        // shared FgDialogFooter carries the same 16px insets)
         RowLayout {
             Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            Layout.bottomMargin: 16
             spacing: 8
             Item { Layout.fillWidth: true }
             Button {

@@ -63,7 +63,9 @@ Rectangle {
         // ── action row: small buttons (commit / branch / merge / push) ──
         RowLayout {
             Layout.fillWidth: true
-            spacing: 4
+            // #47: the tiles read crowded — labels touched the tile
+            // borders and the row had almost no gutters
+            spacing: 8
             component ScButton: AbstractButton {
                 id: sb
                 property string label
@@ -76,6 +78,9 @@ Rectangle {
                     font.family: theme.uiFont
                     font.pixelSize: 10
                     horizontalAlignment: Text.AlignHCenter
+                    // #47: keep the label clear of the tile border
+                    leftPadding: 10
+                    rightPadding: 10
                 }
                 background: Rectangle {
                     radius: 5
