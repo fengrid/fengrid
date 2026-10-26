@@ -24,11 +24,15 @@ ARG VARIANT=prod
 # this, the env never reaches build-linux.sh and docker artifacts ship
 # WITHOUT the smoke gate the docs promise
 ARG SMOKE=1
+# host commit for the About screen (#43): the image has no .git, so
+# build-docker-linux.sh forwards it and build-linux.sh stamps it
+ARG COMMIT=unknown
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     FENGRID_VARIANT=${VARIANT} \
     FENGRID_SMOKE=${SMOKE} \
+    FENGRID_BUILD_COMMIT=${COMMIT} \
     FENGRID_IN_CONTAINER=1
 
 # Qt WebEngine runtime dependencies + build tooling. Validated on the first

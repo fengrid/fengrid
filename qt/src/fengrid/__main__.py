@@ -21,6 +21,7 @@ from PySide6.QtQuickControls2 import QQuickStyle
 
 from fengrid import __version__
 from fengrid.app import APP_NAME, ORG_NAME
+from fengrid.buildinfo import build_commit
 from fengrid.bridges.code import Code
 from fengrid.bridges.presets import Presets
 from fengrid.core import presets as core_presets
@@ -326,6 +327,9 @@ def main(argv=None) -> int:
     # Loader, which stays inactive there
     ctx.setContextProperty("previewProfile", preview_profile)
     ctx.setContextProperty("appVersion", __version__)
+    # '' when the build carried no stamp and git metadata is absent —
+    # the About screen hides the row in that case (#43)
+    ctx.setContextProperty("appCommit", build_commit())
     ctx.setContextProperty(
         "initialPane",
         args.pane if args.pane is not None else prefs_bridge.startupPane)

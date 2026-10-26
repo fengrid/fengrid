@@ -20,6 +20,9 @@ Thumbs.db
 __pycache__/
 *.pyc
 
+# build-provenance stamp written by the build scripts (#43)
+/qt/.build-commit
+
 # local build outputs — build/scripts/build-docker-linux.sh lands artifacts in
 # build/<target>/; build/pyinstaller/ holds regenerated spec files (never
 # commit host-absolute specs). build/scripts + requirements stay tracked.

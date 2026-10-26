@@ -7,7 +7,9 @@
 # this script with OUTPUT=local, so CI and local builds share one code path.
 #
 # Usage:
-#   build-docker-linux.sh [linux-x64|linux-arm64]     (default: linux-x64)
+#   build-docker-linux.sh [--clean] [linux-x64|linux-arm64]  (default: linux-x64)
+#   --clean  drop previous artifacts in BUILD_DIR and build with
+#            --no-cache so no docker layer cache is reused (#44)
 #
 # Environment knobs:
 #   FENGRID_VARIANT=prod|dev     build variant (default: prod)
@@ -29,7 +31,15 @@
 # All output is teed to $BUILD_DIR/build.log.
 set -euo pipefail
 
-TARGET="${1:-linux-x64}"
+CLEAN=0
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --clean|-c) CLEAN=1 ;;
+        *)          ARGS+=("$arg") ;;
+    esac
+done
+TARGET="${ARGS[0]:-linux-x64}"
 case "$TARGET" in
     linux-x64)   PLATFORM="linux/amd64" ;;
     linux-arm64) PLATFORM="linux/arm64" ;;
@@ -56,6 +66,11 @@ case "$OUTPUT" in
     *) echo "unknown OUTPUT: $OUTPUT (use bind or local)" >&2; exit 1 ;;
 esac
 
+if [ "$CLEAN" = "1" ]; then
+    echo "clean: removing previous artifacts ($BUILD_DIR) and building --no-cache"
+    rm -rf "$BUILD_DIR"
+fi
+
 mkdir -p "$BUILD_DIR"
 exec > >(tee -a "$BUILD_DIR/build.log") 2>&1
 
@@ -67,6 +82,8 @@ if [ "$OUTPUT" = "local" ]; then
         --platform "$PLATFORM" \
         --build-arg "VARIANT=$VARIANT" \
         --build-arg "SMOKE=$SMOKE" \
+        --build-arg "COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)" \
+        ${CLEAN:+--no-cache} \
         -f "$DOCKERFILE" \
         --output "type=local,dest=$BUILD_DIR" \
         "$ROOT"
@@ -77,6 +94,8 @@ else
         --target build \
         --build-arg "VARIANT=$VARIANT" \
         --build-arg "SMOKE=$SMOKE" \
+        --build-arg "COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)" \
+        ${CLEAN:+--no-cache} \
         -f "$DOCKERFILE" \
         -t "$IMAGE" \
         --load \
