@@ -17,7 +17,17 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+def _find_project_src() -> str:
+    script_parent = Path(__file__).resolve().parent     # .../scripts/
+    project_root = script_parent.parent               # .../fengrid/
+    for cand in ("src", "qt/src"):
+        pkg = project_root / cand / "fengrid"
+        if pkg.is_dir():
+            return str(project_root / cand)
+    # fallback to CWD-relative (legacy pre-qt repo layout)
+    return "src"
+
+sys.path.insert(0, _find_project_src())
 from fengrid.core import db as core_db  # noqa: E402
 from fengrid.core import indexer as core_indexer, scanner as core_scanner  # noqa: E402
 from fengrid.core import fonts as core_fonts  # noqa: E402
