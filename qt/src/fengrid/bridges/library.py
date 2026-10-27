@@ -1123,7 +1123,11 @@ class Library(QObject):
         self.message.emit(
             f"Indexed: {report['new']} new, {report['changed']} changed,"
             f" {report['pruned']} pruned ({report['total']} files)")
-        self.sourcesChanged.emit()  # per-source counts moved
+        # Do NOT emit sourcesChanged here — the background refresh
+        # (_mark_lists_dirty -> _flush_lists -> _refresh_lists(background=True))
+        # will emit listsChanged when the aggregates are ready. Emitting
+        # sourcesChanged on the main thread triggers sources_summary()
+        # which freezes the UI on software-rendered machines (#61).
         if self._rescan_pending:
             # deferred, not direct: the finished worker's thread refs are
             # still being cleared in this signal's delivery chain, and a

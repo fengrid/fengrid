@@ -34,6 +34,11 @@ ApplicationWindow {
     // for Projects and saved Libraries (opened from their context menus)
     property string entityKind: ""
     property int entityId: -1
+    // lazy-loaded panes (instantiated via Loader on first access, #61)
+    property var fontsPane: null
+    property var colorsPane: null
+    property var codePane: null
+    property var projectsPane: null
     // blur the main UI behind open modal windows (Preset Libraries,
     // entity inspector, Settings) — read by the blur-behind host.
     // CRASH GUARD: the MultiEffect layer is shader-based; on the
@@ -489,17 +494,45 @@ ApplicationWindow {
             Layout.fillHeight: true
             currentIndex: root.pane
 
+            // Pane 0 (Icons) — always instantiated (default startup pane)
             AssetGrid {
                 id: grid
                 iconPx: root.iconSize
             }
-            Fonts { id: fontsPane }
-            Colors {}
-            Code {}
-            Projects {
-                id: projectsPane
-                onEntityProperties: (kind, id) =>
-                    root.openEntityInspector(kind, id)
+
+            // Panes 1–4: lazy-loaded via Loader to avoid the 20+ s engine.load
+            // hit on software-rendered machines (#61). The Loader's source
+            // component is only compiled when the pane is first activated.
+            Loader {
+                id: fontsLoader
+                active: root.pane === 1 || root.startupPane === 1
+                asynchronous: true
+                sourceComponent: Fonts {}
+                onStatusChanged: if (status === Loader.Ready) fontsPane = item
+            }
+            Loader {
+                id: colorsLoader
+                active: root.pane === 2 || root.startupPane === 2
+                asynchronous: true
+                sourceComponent: Colors {}
+                onStatusChanged: if (status === Loader.Ready) colorsPane = item
+            }
+            Loader {
+                id: codeLoader
+                active: root.pane === 3 || root.startupPane === 3
+                asynchronous: true
+                sourceComponent: Code {}
+                onStatusChanged: if (status === Loader.Ready) codePane = item
+            }
+            Loader {
+                id: projectsLoader
+                active: root.pane === 4 || root.startupPane === 4
+                asynchronous: true
+                sourceComponent: Projects {
+                    id: projectsPane
+                    onEntityProperties: (kind, id) => root.openEntityInspector(kind, id)
+                }
+                onStatusChanged: if (status === Loader.Ready) projectsPane = item
             }
         }
 
@@ -1172,13 +1205,32 @@ ApplicationWindow {
         }
         if (name === "fonts-css") {
             root.pane = 1
-            fontsPane.openExportCss()
+            // Ensure Fonts pane is loaded before calling its method
+            if (fontsPane === null && fontsLoader.status === Loader.Ready) {
+                fontsPane = fontsLoader.item
+            }
+            if (fontsPane !== null) {
+                fontsPane.openExportCss()
+            } else {
+                // Force load and retry
+                fontsLoader.active = true
+                fontsLoader.onStatusChanged = function() {
+                    if (fontsLoader.status === Loader.Ready) {
+                        fontsPane = fontsLoader.item
+                        fontsPane.openExportCss()
+                    }
+                }
+            }
             return
         }
         if (name === "entity") {
             // first project (or library) in the DB → its inspector
             root.pane = 4
-            var rows = projects !== null ? projects.projects : []
+            // Ensure Projects pane is loaded
+            if (projectsPane === null && projectsLoader.status === Loader.Ready) {
+                projectsPane = projectsLoader.item
+            }
+            var rows = (projectsPane !== null) ? projectsPane.projects : []
             if (rows.length > 0) {
                 root.openEntityInspector("project", rows[0].id)
                 entityProps.activeTab = 2
