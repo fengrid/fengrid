@@ -127,7 +127,7 @@ Item {
                 verticalAlignment: Text.AlignVCenter; leftPadding: 6
             }
         }
-        Button {
+        FgButton {
             text: qsTr("+")
             onClicked: {
                 if (pick.currentIndex >= 0) {
@@ -734,7 +734,7 @@ Item {
                                 verticalAlignment: Text.AlignVCenter; leftPadding: 6
                             }
                         }
-                        Button {
+                        FgButton {
                             text: qsTr("apply")
                             onClicked: {
                                 if (palApply.currentIndex < 0) return
@@ -1759,14 +1759,14 @@ Item {
             RowLayout {
                 Layout.alignment: Qt.AlignRight
                 spacing: 8
-                Button {
+                FgButton {
                     text: qsTr("Discard")
                     onClicked: {
                         projects.batch_finish(projectsRoot.batchLabel, false)
                         batchReview.close()
                     }
                 }
-                Button {
+                FgButton {
                     text: qsTr("Commit & merge")
                     onClicked: {
                         projects.batch_finish(projectsRoot.batchLabel, true)

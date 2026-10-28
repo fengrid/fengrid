@@ -40,7 +40,7 @@ Item {
                 color: theme.tokens.text
             }
             Item { Layout.fillWidth: true }
-            Button {
+            FgButton {
                 text: qsTr("Refresh")
                 onClicked: docsRoot.refresh()
             }

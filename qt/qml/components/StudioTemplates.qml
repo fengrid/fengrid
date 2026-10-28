@@ -72,7 +72,7 @@ Item {
                 Layout.preferredWidth: 150
                 label: qsTr("new variable")
             }
-            Button {
+            FgButton {
                 text: qsTr("Add")
                 enabled: newName.text.trim() !== ""
                 onClicked: {
@@ -119,7 +119,7 @@ Item {
             }
         }
         RowLayout {
-            Button {
+            FgButton {
                 text: qsTr("Create instance…")
                 onClicked: instDialog.open()
                 ToolTip.visible: hovered
@@ -134,7 +134,7 @@ Item {
             RowLayout {
                 required property var modelData
                 Layout.fillWidth: true
-                Button {
+                FgButton {
                     text: qsTr("Open") + " · " + modelData.name
                     onClicked: if (projects !== null)
                                    projects.open(modelData.id)
