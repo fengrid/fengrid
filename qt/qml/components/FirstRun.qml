@@ -134,6 +134,36 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.Wrap
                 }
+                // heads-up: the initial ingest is the one heavy pass —
+                // set expectations before it starts rather than after
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: 6
+                    color: theme.tokens.surface
+                    border.color: theme.tokens.litPane
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.topMargin: 8
+                        anchors.bottomMargin: 8
+                        spacing: 10
+                        IconImage {
+                            name: "zap"
+                            px: 14
+                            tint: theme.tokens.litPane
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("Heads-up: the initial scan may run hard for a short while — indexing every selected folder at once. That load is temporary; once the library is built, browsing and searching stay light.")
+                            font.family: theme.uiFont
+                            font.pixelSize: 12
+                            color: theme.tokens.text
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
             }
 
             // ── body ──
@@ -438,6 +468,48 @@ Rectangle {
                                               : theme.tokens.textMuted
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "look"
+                            label: qsTr("Accent color")
+                            desc: qsTr("The main accent Fengrid tints active states with — pane outlines, selection, primary buttons. Pick from the brand palette.")
+                            keys: "accent color scheme tint brand teal amber violet coral rose green"
+                            RowLayout {
+                                spacing: 6
+                                Layout.alignment: Qt.AlignVCenter
+                                Repeater {
+                                    model: theme !== null ? theme.accentOptions : []
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        readonly property bool sel: theme !== null
+                                            && theme.accent === modelData.id
+                                        readonly property color c: theme !== null
+                                            && theme.isDark ? modelData.dark
+                                                            : modelData.light
+                                        width: 26; height: 20; radius: 5
+                                        color: c
+                                        border.width: sel ? 2 : 0
+                                        border.color: theme.tokens.text
+                                        // dim the unselected swatches a touch
+                                        // so the active one reads first
+                                        opacity: sel ? 1 : 0.62
+                                        ToolTip.visible: ma.hovered
+                                        ToolTip.text: modelData.name
+                                        MouseArea {
+                                            id: ma
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: theme !== null
+                                                && theme.set_accent(modelData.id)
+                                        }
+                                        Accessible.role: Accessible.RadioButton
+                                        Accessible.name: modelData.name
+                                        Accessible.checked: sel
                                     }
                                 }
                             }

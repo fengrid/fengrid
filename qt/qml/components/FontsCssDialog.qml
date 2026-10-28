@@ -250,7 +250,7 @@ Dialog {
                 text: cssRoot.dest
                 onEditingFinished: cssRoot.dest = text
             }
-            Button {
+            FgButton {
                 text: qsTr("Browse…")
                 onClicked: cssDestLoader.open()
             }
@@ -269,15 +269,11 @@ Dialog {
             Layout.bottomMargin: 16
             spacing: 8
             Item { Layout.fillWidth: true }
-            Button {
+            FgButton {
                 text: qsTr("Cancel")
                 onClicked: cssRoot.reject()
-                background: Rectangle {
-                    radius: 6; color: theme.tokens.surface2
-                    border.color: theme.tokens.border
-                }
             }
-            Button {
+            FgButton {
                 text: qsTr("Save as ZIP…")
                 enabled: cssRoot.canSave
                 ToolTip.visible: hovered
@@ -290,10 +286,6 @@ Dialog {
                                          cssRoot.includeOriginal,
                                          cssEdit.text)
                     cssRoot.accept()
-                }
-                background: Rectangle {
-                    radius: 6; color: theme.tokens.surface2
-                    border.color: theme.tokens.border
                 }
             }
             Button {

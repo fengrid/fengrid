@@ -575,6 +575,47 @@ Rectangle {
 
                         SettingRow {
                             section: "appearance"
+                            label: qsTr("Accent color")
+                            desc: qsTr("The main accent Fengrid tints active states with — pane outlines, selection, primary buttons. Pick from the brand palette.")
+                            keys: "accent color scheme tint brand teal amber violet coral rose green"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 6
+                                Layout.alignment: Qt.AlignVCenter
+                                Repeater {
+                                    model: theme !== null ? theme.accentOptions : []
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        readonly property bool sel: theme !== null
+                                            && theme.accent === modelData.id
+                                        readonly property color c: theme !== null
+                                            && theme.isDark ? modelData.dark
+                                                            : modelData.light
+                                        width: 26; height: 20; radius: 5
+                                        color: c
+                                        border.width: sel ? 2 : 0
+                                        border.color: theme.tokens.text
+                                        opacity: sel ? 1 : 0.62
+                                        ToolTip.visible: ma.hovered
+                                        ToolTip.text: modelData.name
+                                        MouseArea {
+                                            id: ma
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: theme !== null
+                                                && theme.set_accent(modelData.id)
+                                        }
+                                        Accessible.role: Accessible.RadioButton
+                                        Accessible.name: modelData.name
+                                        Accessible.checked: sel
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "appearance"
                             label: qsTr("Icon size")
                             desc: qsTr("Grid tile size on the Icons pane, 16–256 px. The header slider writes the same value.")
                             keys: "icon size grid tile thumb thumbnail px slider zoom scale"
@@ -2128,7 +2169,7 @@ Rectangle {
                             keys: "maintenance cleanup gc prune branches stale"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             RowLayout {
-                                Button {
+                                FgButton {
                                     text: qsTr("Run maintenance")
                                     onClicked: sc !== null && sc.maintenance_all()
                                 }

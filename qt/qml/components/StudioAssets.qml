@@ -64,7 +64,7 @@ Item {
                 verticalAlignment: Text.AlignVCenter; leftPadding: 6
             }
         }
-        Button {
+        FgButton {
             text: qsTr("attach")
             enabled: pickBox.currentIndex >= 0
             onClicked: {

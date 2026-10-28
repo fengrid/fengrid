@@ -770,7 +770,7 @@ Rectangle {
                             color: theme.tokens.textMuted
                             elide: Text.ElideMiddle
                         }
-                        Button {
+                        FgButton {
                             text: qsTr("Open file")
                             onClicked: {
                                 if (panel.props && panel.props.meta.license
@@ -824,7 +824,7 @@ Rectangle {
                         color: theme.tokens.textMuted
                         wrapMode: Text.Wrap
                     }
-                    Button {
+                    FgButton {
                         visible: panel.srcSum && !panel.srcSum.exists
                         text: qsTr("Initialize repository")
                         onClicked: taxonomy.git_init(panel.itemKind,
@@ -908,7 +908,7 @@ Rectangle {
                         Layout.fillWidth: true
                         visible: panel.srcSum && panel.srcSum.exists
                         spacing: 6
-                        Button {
+                        FgButton {
                             text: qsTr("Commit")
                             enabled: srcMsg.text.trim() !== ""
                             onClicked: {
@@ -918,17 +918,17 @@ Rectangle {
                                 srcMsg.text = ""
                             }
                         }
-                        Button {
+                        FgButton {
                             text: qsTr("Push")
                             onClicked: taxonomy.git_push(panel.itemKind,
                                                          panel.itemId)
                         }
-                        Button {
+                        FgButton {
                             text: qsTr("Pull")
                             onClicked: taxonomy.git_pull(panel.itemKind,
                                                          panel.itemId)
                         }
-                        Button {
+                        FgButton {
                             text: qsTr("Save & Push")
                             enabled: srcMsg.text.trim() !== ""
                             onClicked: {
@@ -938,7 +938,7 @@ Rectangle {
                                 srcMsg.text = ""
                             }
                         }
-                        Button {
+                        FgButton {
                             id: discardBtn
                             property bool armed: false
                             text: qsTr("Discard changes")
@@ -1082,7 +1082,7 @@ Rectangle {
                         color: theme.tokens.textMuted
                         elide: Text.ElideRight
                     }
-                    Button {
+                    FgButton {
                         text: qsTr("Reset")
                         onClicked: {
                             panel.resetSample()

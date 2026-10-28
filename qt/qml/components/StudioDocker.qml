@@ -82,7 +82,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 FormInput { id: cfgCtx; Layout.fillWidth: true }
-                Button {
+                FgButton {
                     text: qsTr("Browse…")
                     onClicked: ctxDialog.open()
                 }
@@ -92,33 +92,33 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 6
-            Button {
+            FgButton {
                 text: qsTr("Save config")
                 onClicked: dockRoot.writeCfg()
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Stored with the project settings")
             }
-            Button {
+            FgButton {
                 text: qsTr("Build")
                 enabled: st && st.dockerOk
                 onClicked: { dockRoot.writeCfg(); st.dockerBuild() }
             }
-            Button {
+            FgButton {
                 text: qsTr("Run")
                 enabled: st && st.dockerOk
                 onClicked: { dockRoot.writeCfg(); st.dockerRun() }
             }
-            Button {
+            FgButton {
                 text: qsTr("Stop")
                 enabled: st && st.dockerOk
                 onClicked: st.dockerStop()
             }
-            Button {
+            FgButton {
                 text: qsTr("Remove")
                 enabled: st && st.dockerOk
                 onClicked: st.dockerRm()
             }
-            Button {
+            FgButton {
                 text: qsTr("Logs")
                 enabled: st && st.dockerOk
                 onClicked: st.dockerLogs(300)
@@ -153,7 +153,7 @@ Item {
                 text: dockRoot.browsePath
                 onEditingFinished: dockRoot.browsePath = text
             }
-            Button {
+            FgButton {
                 text: qsTr("List")
                 enabled: st && st.dockerOk
                 onClicked: dockRoot.refresh()
@@ -194,7 +194,7 @@ Item {
                         }
                     }
                 }
-                Button {
+                FgButton {
                     text: qsTr("Copy out")
                     flat: true
                     ToolTip.visible: hovered

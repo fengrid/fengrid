@@ -20,6 +20,25 @@ ApplicationWindow {
     font.family: theme.uiFont
     font.pixelSize: 13
 
+    // the Qt Quick Controls default palette — every default-styled
+    // Button/ComboBox/Menu contentItem binds to these, so any control
+    // that skips its own themed skin still renders with theme colors.
+    // Before this, default Button text was #000 (the light control
+    // palette) sitting on themed dark backgrounds — illegible (#87).
+    palette.window: theme.tokens.bg
+    palette.windowText: theme.tokens.text
+    palette.button: theme.tokens.surface2
+    palette.buttonText: theme.tokens.text
+    palette.text: theme.tokens.text
+    palette.base: theme.tokens.surface
+    palette.toolTipBase: theme.tokens.surface2
+    palette.toolTipText: theme.tokens.text
+    palette.placeholderText: theme.tokens.textMuted
+    palette.accent: theme.tokens.accent
+    palette.highlight: theme.tokens.accent
+    palette.highlightedText: theme.tokens.bg
+    palette.link: theme.tokens.accent
+
     Component.onCompleted: {
         if (typeof startupNotice !== "undefined" && startupNotice !== "")
             toast.show(startupNotice)
@@ -338,7 +357,10 @@ ApplicationWindow {
 
                     IconImage {
                         name: "search"
-                        px: 15
+                        // header inline icons are 14px — one size below the
+                        // 16px IconButton glyphs, so field/decoration glyphs
+                        // sit quieter than the clickable ones next to them
+                        px: 14
                         tint: theme.tokens.textMuted
                         // magnifier = mouse entry into the slash menu
                         MouseArea {
@@ -368,7 +390,7 @@ ApplicationWindow {
 
                     IconImage {
                         name: "x"
-                        px: 13
+                        px: 14
                         tint: theme.tokens.textMuted
                         visible: searchField.text.length > 0
                         MouseArea {
@@ -393,7 +415,7 @@ ApplicationWindow {
 
             IconImage {
                 name: "grid"
-                px: 15
+                px: 14
                 tint: theme.tokens.textMuted
                 Layout.alignment: Qt.AlignVCenter
             }
@@ -1102,15 +1124,11 @@ ApplicationWindow {
                     right: parent.right; rightMargin: 16
                     bottom: parent.bottom; bottomMargin: 16
                 }
-                Button {
+                FgButton {
                     text: qsTr("Quit anyway")
                     onClicked: closePrompt.closeAndQuit()
-                    background: Rectangle {
-                        radius: 6; color: theme.tokens.surface2
-                        border.color: theme.tokens.border
-                    }
                 }
-                Button {
+                FgButton {
                     text: qsTr("Stash & close")
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Set the changes aside — restore " +
@@ -1120,10 +1138,6 @@ ApplicationWindow {
                         sc.stash(closeMsg.text.trim() !== ""
                                  ? closeMsg.text : "WIP before close")
                         closePrompt.stashAndClose()
-                    }
-                    background: Rectangle {
-                        radius: 6; color: theme.tokens.surface2
-                        border.color: theme.tokens.border
                     }
                 }
                 Button {
@@ -1212,14 +1226,24 @@ ApplicationWindow {
             if (fontsPane !== null) {
                 fontsPane.openExportCss()
             } else {
-                // Force load and retry
+                // Force load and retry once the loader finishes — signal
+                // handlers are read-only on dynamically created objects,
+                // so the poll exposes a plain property-var callback
                 fontsLoader.active = true
-                fontsLoader.onStatusChanged = function() {
+                var poll = Qt.createQmlObject(
+                    "import QtQuick; Timer { interval: 100; repeat: true;"
+                    + " property var onReady: null;"
+                    + " onTriggered: if (onReady) onReady() }",
+                    fontsLoader, "qaFontsCssPoll")
+                poll.onReady = function() {
                     if (fontsLoader.status === Loader.Ready) {
                         fontsPane = fontsLoader.item
                         fontsPane.openExportCss()
+                        poll.stop()
+                        poll.destroy()
                     }
                 }
+                poll.start()
             }
             return
         }

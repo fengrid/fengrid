@@ -114,7 +114,7 @@ Dialog {
                 text: exportRoot.dest
                 onEditingFinished: exportRoot.dest = text
             }
-            Button {
+            FgButton {
                 text: qsTr("Browse…")
                 onClicked: exportDestLoader.open()
             }
