@@ -251,7 +251,8 @@ def test_hsl_slider_drag_updates_swatch(colors_ui):
     h = by_label["H"]
     hslider = h.findChild(QObject, None)  # placeholder, replaced below
 
-    # the inner QQuickSlider: walk children for the Slider type
+    # the inner QQuickSlider: walk children for the Slider type —
+    # FgSlider's root IS a Slider, so its QML type name varies
     def find_slider(item):
         hits, seen = [], []
         stack2 = [item]
@@ -259,7 +260,8 @@ def test_hsl_slider_drag_updates_swatch(colors_ui):
             o = stack2.pop()
             cn = o.metaObject().className()
             seen.append(cn)
-            if cn.startswith("Slider_") and "Groove" not in cn and "Handle" not in cn:
+            if ("Slider" in cn or "FgSlider" in cn) \
+                    and "Groove" not in cn and "Handle" not in cn:
                 hits.append(o)
             stack2.extend(o.childItems())
         print("CHILD CLASSES:", seen)

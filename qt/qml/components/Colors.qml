@@ -551,7 +551,7 @@ Item {
                     ToolTip.delay: 350
                     ToolTip.text: parent.tip
                 }
-                Slider {
+                FgSlider {
                     id: es
                     Layout.preferredWidth: 140
                     from: 0; to: parent.maxVal
