@@ -66,3 +66,17 @@ LIGHT = {
     "hl_ink": "#A16207",    # raw amber on white is 1.78:1 — use the ink tone
     "ink_faint": "#9AA6B0",
 }
+
+# Accent presets for the Settings "Accent color" row and the first-run
+# picker — Fengrid's own palette ids (the 0.x pane accents + the amber
+# lit-pane), each with a light-surface variant that keeps ≥4.5:1 text
+# contrast. `accent` picks the *dark*-theme value; the light theme uses
+# the second slot. The default is the brand teal.
+ACCENTS = {
+    "teal":   ("Teal",   "#39B8C4", "#0E7C86"),
+    "amber":  ("Amber",  "#F5C25C", "#B07E12"),
+    "violet": ("Violet", "#A78BFA", "#7C5CD6"),
+    "coral":  ("Coral",  "#F0885C", "#C0561F"),
+    "rose":   ("Rose",   "#E879A6", "#C0437B"),
+    "green":  ("Green",  "#63C48B", "#2E8B57"),
+}
