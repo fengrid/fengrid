@@ -141,6 +141,16 @@ class SourceControl(QObject):
         except core_git.GitError:
             return ""
 
+    @Property(str, notify=statusChanged)
+    def currentRemoteUrl(self) -> str:
+        """#42: the active repo's origin push URL (tokenless display)."""
+        if self._current_repo is None or not self._current_repo.exists():
+            return ""
+        try:
+            return self._current_repo.remotes().get("origin", "")
+        except core_git.GitError:
+            return ""
+
     @Property("QVariant", notify=statusChanged)
     def clean(self):
         st = self._read_status()
