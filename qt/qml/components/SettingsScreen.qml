@@ -50,6 +50,17 @@ Rectangle {
     function url2path(u) {
         return Icons.toLocalPath(u)   // single source of truth (#41)
     }
+    // #51: every file/folder dialog opens in the last folder the user
+    // visited (persisted in prefs.lastDialogDir, a plain local path —
+    // encodeURI turns it into the file:// URL the dialogs bind to)
+    function lastDialogUrl() {
+        return (prefs !== null && prefs.lastDialogDir !== "")
+            ? encodeURI("file://" + prefs.lastDialogDir) : ""
+    }
+    function rememberDialogDir(u) {
+        if (prefs !== null && u !== undefined && u !== "")
+            prefs.rememberDialogDir(url2path(u))
+    }
     function toggleFmt(list, fmt) {
         var out = []
         for (var i = 0; i < list.length; i++)
@@ -1461,6 +1472,7 @@ Rectangle {
                             sourceComponent: FileDialog {
                                 id: filesDialog
                                 title: qsTr("Import files")
+                                currentFolder: settingsRoot.lastDialogUrl()
                                 fileMode: FileDialog.OpenFiles
                                 nameFilters: [qsTr("Assets (*.png *.svg *.bmp *.ico *.webp *.gif *.jpg *.jpeg *.tiff *.ttf *.otf *.ttc)"), qsTr("All files (*)")]
                                 onAccepted: {
@@ -1468,9 +1480,15 @@ Rectangle {
                                     for (var i = 0; i < selectedFiles.length; i++)
                                         paths.push(settingsRoot.url2path(selectedFiles[i]))
                                     dataio.importStart(paths)
+                                    settingsRoot.rememberDialogDir(
+                                        filesDialog.currentFolder)
                                     filesDialogLoader.active = false
                                 }
-                                onRejected: filesDialogLoader.active = false
+                                onRejected: {
+                                    settingsRoot.rememberDialogDir(
+                                        filesDialog.currentFolder)
+                                    filesDialogLoader.active = false
+                                }
                             }
                             // #81: item is null until the Loader finishes
                             // instantiating, so calling item.open() right
@@ -1493,14 +1511,21 @@ Rectangle {
                             sourceComponent: FileDialog {
                                 id: zipDialog
                                 title: qsTr("Import ZIP archive")
+                                currentFolder: settingsRoot.lastDialogUrl()
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("ZIP archives (*.zip)")]
                                 onAccepted: {
                                     dataio.importZip(
                                         settingsRoot.url2path(selectedFile))
+                                    settingsRoot.rememberDialogDir(
+                                        zipDialog.currentFolder)
                                     zipDialogLoader.active = false
                                 }
-                                onRejected: zipDialogLoader.active = false
+                                onRejected: {
+                                    settingsRoot.rememberDialogDir(
+                                        zipDialog.currentFolder)
+                                    zipDialogLoader.active = false
+                                }
                             }
                             // #81: item is null until the Loader finishes
                             // instantiating, so calling item.open() right
@@ -1516,6 +1541,7 @@ Rectangle {
                             sourceComponent: FileDialog {
                                 id: csvDialog
                                 title: qsTr("CSV name list")
+                                currentFolder: settingsRoot.lastDialogUrl()
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("CSV files (*.csv)")]
                                 onAccepted: {
@@ -1523,9 +1549,15 @@ Rectangle {
                                         settingsRoot.url2path(selectedFile)
                                     settingsRoot.setImportOpt(
                                         "csv_path", settingsRoot.csvPath)
+                                    settingsRoot.rememberDialogDir(
+                                        csvDialog.currentFolder)
                                     csvDialogLoader.active = false
                                 }
-                                onRejected: csvDialogLoader.active = false
+                                onRejected: {
+                                    settingsRoot.rememberDialogDir(
+                                        csvDialog.currentFolder)
+                                    csvDialogLoader.active = false
+                                }
                             }
                             // #81: item is null until the Loader finishes
                             // instantiating, so calling item.open() right
@@ -1541,12 +1573,19 @@ Rectangle {
                             sourceComponent: FolderDialog {
                                 id: folderImportDialog
                                 title: qsTr("Import folder as source")
+                                currentFolder: settingsRoot.lastDialogUrl()
                                 onAccepted: {
                                     dataio.importFolder(
                                         settingsRoot.url2path(selectedFolder))
+                                    settingsRoot.rememberDialogDir(
+                                        folderImportDialog.currentFolder)
                                     folderImportLoader.active = false
                                 }
-                                onRejected: folderImportLoader.active = false
+                                onRejected: {
+                                    settingsRoot.rememberDialogDir(
+                                        folderImportDialog.currentFolder)
+                                    folderImportLoader.active = false
+                                }
                             }
                             // #81: item is null until the Loader finishes
                             // instantiating, so calling item.open() right
@@ -1756,14 +1795,21 @@ Rectangle {
                             sourceComponent: FolderDialog {
                                 id: exportDestDialog
                                 title: qsTr("Export library bundle to…")
+                                currentFolder: settingsRoot.lastDialogUrl()
                                 onAccepted: {
                                     dataio.exportBundle(
                                         "library",
                                         settingsRoot.url2path(selectedFolder),
                                         true)
+                                    settingsRoot.rememberDialogDir(
+                                        exportDestDialog.currentFolder)
                                     exportDestLoader.active = false
                                 }
-                                onRejected: exportDestLoader.active = false
+                                onRejected: {
+                                    settingsRoot.rememberDialogDir(
+                                        exportDestDialog.currentFolder)
+                                    exportDestLoader.active = false
+                                }
                             }
                             // #81: item is null until the Loader finishes
                             // instantiating, so calling item.open() right
@@ -1779,14 +1825,21 @@ Rectangle {
                             sourceComponent: FileDialog {
                                 id: bundleImportDialog
                                 title: qsTr("Import fengrid bundle")
+                                currentFolder: settingsRoot.lastDialogUrl()
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("Fengrid bundles (*.zip)")]
                                 onAccepted: {
                                     dataio.importBundle(
                                         settingsRoot.url2path(selectedFile), "copy")
+                                    settingsRoot.rememberDialogDir(
+                                        bundleImportDialog.currentFolder)
                                     bundleImportLoader.active = false
                                 }
-                                onRejected: bundleImportLoader.active = false
+                                onRejected: {
+                                    settingsRoot.rememberDialogDir(
+                                        bundleImportDialog.currentFolder)
+                                    bundleImportLoader.active = false
+                                }
                             }
                             // #81: item is null until the Loader finishes
                             // instantiating, so calling item.open() right
@@ -2379,9 +2432,13 @@ Rectangle {
                 library.add_folder(p, folderDialogLoader.kind)
                 if (folderDialogLoader.kind === "fontroot")
                     fonts.rescan()
+                settingsRoot.rememberDialogDir(folderDialog.currentFolder)
                 folderDialogLoader.active = false
             }
-            onRejected: folderDialogLoader.active = false
+            onRejected: {
+                settingsRoot.rememberDialogDir(folderDialog.currentFolder)
+                folderDialogLoader.active = false
+            }
         }
         function open(kind_) {
             kind = kind_ || "folder"

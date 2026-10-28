@@ -324,12 +324,21 @@ Dialog {
         id: cssDestLoader
         active: false
         sourceComponent: FolderDialog {
+            id: cssFolderDialog
+            currentFolder: prefs !== null && prefs.lastDialogDir !== ""
+                           ? encodeURI("file://" + prefs.lastDialogDir) : ""
             onAccepted: {
                 cssRoot.dest = Icons.toLocalPath(selectedFolder)
                 destField.text = cssRoot.dest
+                if (prefs !== null)
+                    prefs.rememberDialogDir(cssFolderDialog.currentFolder)
                 cssDestLoader.active = false
             }
-            onRejected: cssDestLoader.active = false
+            onRejected: {
+                if (prefs !== null)
+                    prefs.rememberDialogDir(cssFolderDialog.currentFolder)
+                cssDestLoader.active = false
+            }
         }
         function open() { active = true; item.open() }
     }

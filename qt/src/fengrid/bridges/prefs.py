@@ -58,6 +58,10 @@ class Prefs(QObject):
         self._web_previews = settings.get(con, "web_previews", "auto")
         if self._web_previews not in ("auto", "on", "off"):
             self._web_previews = "auto"
+        # #51: dialogs open in the last folder the user visited, not in
+        # the executable's directory. Plain string path (not a URL) —
+        # QML encodes it into a file:// URL at the binding site.
+        self._last_dialog_dir = settings.get(con, "last_dialog_dir", "") or ""
         # detected at construction, resolved so they string-match the
         # source rows the scanner registers (which are stored resolved)
         self._system_icon_paths = [
@@ -174,6 +178,22 @@ class Prefs(QObject):
         self.commandShortcutChanged.emit()
 
     # ------------------------------------------------------------ system paths
+    lastDialogDirChanged = Signal()
+
+    @Property(str, notify=lastDialogDirChanged)
+    def lastDialogDir(self) -> str:
+        """#51: last folder a file/folder dialog visited (local path)."""
+        return self._last_dialog_dir
+
+    @Slot(str)
+    def rememberDialogDir(self, path: str) -> None:
+        """Persist the dialog's current folder after accept/reject."""
+        p = (path or "").strip()
+        if p and p != self._last_dialog_dir and Path(p).is_dir():
+            self._last_dialog_dir = p
+            settings.set(self._con, "last_dialog_dir", p)
+            self.lastDialogDirChanged.emit()
+
     @Property("QVariantList", constant=True)
     def systemIconPaths(self):
         """Detected platform icon roots, resolved — the setup screen

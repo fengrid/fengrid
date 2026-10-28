@@ -745,14 +745,22 @@ Rectangle {
         sourceComponent: FolderDialog {
             id: folderDialog
             title: qsTr("Choose folder")
+            currentFolder: prefs !== null && prefs.lastDialogDir !== ""
+                           ? encodeURI("file://" + prefs.lastDialogDir) : ""
             onAccepted: {
                 var p = Icons.toLocalPath(selectedFolder)
                 library.add_folder(p, folderDialogLoader.kind)
                 if (folderDialogLoader.kind === "fontroot")
                     fonts.rescan()
+                if (prefs !== null)
+                    prefs.rememberDialogDir(folderDialog.currentFolder)
                 folderDialogLoader.active = false
             }
-            onRejected: folderDialogLoader.active = false
+            onRejected: {
+                if (prefs !== null)
+                    prefs.rememberDialogDir(folderDialog.currentFolder)
+                folderDialogLoader.active = false
+            }
         }
         function open(kind_) {
             kind = kind_ || "folder"

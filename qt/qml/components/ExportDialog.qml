@@ -147,12 +147,21 @@ Dialog {
         id: exportDestLoader
         active: false
         sourceComponent: FolderDialog {
+            id: exportFolderDialog
+            currentFolder: prefs !== null && prefs.lastDialogDir !== ""
+                           ? encodeURI("file://" + prefs.lastDialogDir) : ""
             onAccepted: {
                 exportRoot.dest = Icons.toLocalPath(selectedFolder)
                 destField.text = exportRoot.dest
+                if (prefs !== null)
+                    prefs.rememberDialogDir(exportFolderDialog.currentFolder)
                 exportDestLoader.active = false
             }
-            onRejected: exportDestLoader.active = false
+            onRejected: {
+                if (prefs !== null)
+                    prefs.rememberDialogDir(exportFolderDialog.currentFolder)
+                exportDestLoader.active = false
+            }
         }
         function open() { active = true; item.open() }
     }
