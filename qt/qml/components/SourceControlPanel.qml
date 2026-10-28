@@ -113,6 +113,15 @@ Rectangle {
                 label: qsTr("Push")
                 onClicked: sc.push("origin")
             }
+            ScButton {
+                label: qsTr("Remote…")
+                onClicked: {
+                    remoteUrlField.text = hasRepo
+                            ? (sc.currentRemoteUrl || "") : ""
+                    remoteTokenField.text = ""
+                    remoteDialog.open()
+                }
+            }
         }
 
         TextInput {
@@ -411,6 +420,53 @@ Rectangle {
             onAcceptClicked: {
                 sc.delete_branch(deleteWarn.target)
                 deleteWarn.close()
+            }
+        }
+    }
+
+    // #42: per-repo remote management lives here, not in global settings
+    Dialog {
+        id: remoteDialog
+        width: 340
+        padding: 16
+        modal: true
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        background: Rectangle {
+            radius: 12; color: theme.tokens.surface
+            border.color: theme.tokens.border
+        }
+        contentItem: ColumnLayout {
+            spacing: 8
+            Text { text: qsTr("Forge remote (origin)")
+                   font.family: theme.headingFont; font.pixelSize: 13 }
+            TextField {
+                id: remoteUrlField
+                placeholderText: qsTr("https://github.com/user/repo.git")
+                Layout.fillWidth: true
+            }
+            TextField {
+                id: remoteTokenField
+                echoMode: TextInput.Password
+                placeholderText: qsTr("access token (optional)")
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Stored locally in .git/config — never committed.")
+                wrapMode: Text.Wrap
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+                Layout.fillWidth: true
+            }
+        }
+        footer: FgDialogFooter {
+            acceptLabel: qsTr("Save")
+            acceptEnabled: remoteUrlField.text.trim() !== ""
+            onCancelClicked: remoteDialog.close()
+            onAcceptClicked: {
+                sc.set_remote("origin", remoteUrlField.text.trim(),
+                              remoteTokenField.text.trim())
+                remoteDialog.close()
             }
         }
     }

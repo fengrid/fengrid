@@ -2017,52 +2017,6 @@ Rectangle {
 
                         SettingRow {
                             section: "sc"
-                            label: qsTr("Forge remote URL")
-                            desc: qsTr("https URL of the project's remote (applied on the active repo's origin).")
-                            keys: "remote url origin forge https"
-                            rowMatches: settingsRoot.matches(section, label, keys)
-                            RowLayout {
-                                spacing: 8
-                                Layout.fillWidth: true
-                                TextField {
-                                    id: scRemoteField
-                                    Layout.fillWidth: true
-                                    placeholderText: qsTr("https://github.com/user/repo.git")
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 11
-                                }
-                            }
-                        }
-
-                        SettingRow {
-                            section: "sc"
-                            label: qsTr("Apply remote + push")
-                            desc: qsTr("Set origin from the URL/token above and push the active branch.")
-                            keys: "push remote apply upload"
-                            rowMatches: settingsRoot.matches(section, label, keys)
-                            RowLayout {
-                                Button {
-                                    // literal & — plain string, NOT qsTr:
-                                    // Button mnemonics turn "&" into an
-                                    // underline and ate it ("Apply_push")
-                                    text: "Apply & push"
-                                    onClicked: {
-                                        if (sc === null)
-                                            return
-                                        if (scRemoteField.text.trim() !== "")
-                                            sc.set_remote(
-                                                "origin",
-                                                scRemoteField.text.trim(),
-                                                scTokenField.text.trim())
-                                        sc.push("origin")
-                                        scTokenField.text = ""
-                                    }
-                                }
-                            }
-                        }
-
-                        SettingRow {
-                            section: "sc"
                             label: qsTr("Maintain repositories")
                             desc: qsTr("Sweep every Project/Library repo: report uncommitted changes, drop merged dangling branches (stale ones force-dropped), run git gc.")
                             keys: "maintenance cleanup gc prune branches stale"
