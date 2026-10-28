@@ -338,7 +338,10 @@ ApplicationWindow {
 
                     IconImage {
                         name: "search"
-                        px: 15
+                        // header inline icons are 14px — one size below the
+                        // 16px IconButton glyphs, so field/decoration glyphs
+                        // sit quieter than the clickable ones next to them
+                        px: 14
                         tint: theme.tokens.textMuted
                         // magnifier = mouse entry into the slash menu
                         MouseArea {
@@ -368,7 +371,7 @@ ApplicationWindow {
 
                     IconImage {
                         name: "x"
-                        px: 13
+                        px: 14
                         tint: theme.tokens.textMuted
                         visible: searchField.text.length > 0
                         MouseArea {
@@ -393,7 +396,7 @@ ApplicationWindow {
 
             IconImage {
                 name: "grid"
-                px: 15
+                px: 14
                 tint: theme.tokens.textMuted
                 Layout.alignment: Qt.AlignVCenter
             }
