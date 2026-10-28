@@ -678,7 +678,7 @@ Item {
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
-                        Slider {
+                        FgSlider {
                             id: radiusSlider
                             Layout.fillWidth: true
                             from: 0; to: 32; stepSize: 1
@@ -863,7 +863,7 @@ Item {
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
-                        Slider {
+                        FgSlider {
                             id: iconSizeSlider
                             Layout.fillWidth: true
                             from: 12; to: 128; stepSize: 2

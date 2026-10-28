@@ -50,11 +50,15 @@ QtObject {
     function url(name, color, fill) {
         var body = _paths[name] || "";
         // 1.25px hairline stroke on the 24px Lucide grid — the
-        // technical, understated weight; sourceSize is 2x in
-        // IconImage so every glyph renders at the same optical size
-        // on any display
+        // technical, understated weight. The viewBox is padded to 28
+        // (-2..26): Lucide glyphs ink ~83% of their box, so without
+        // the inset a "14px" icon drew ~11.6px of ink next to 12px
+        // text (cap-height ~8.7px) and read as oversized. With the
+        // 28-box, ink = 0.71 x px — the optical size matches the text
+        // beside it, Hermes-style. sourceSize is 2x in IconImage so
+        // every glyph stays crisp on any display
         var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'" +
-                  " viewBox='0 0 24 24' fill='" + (fill || "none") + "' stroke='" + color + "'" +
+                  " viewBox='-2 -2 28 28' fill='" + (fill || "none") + "' stroke='" + color + "'" +
                   " stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'>" +
                   body + "</svg>";
         return "data:image/svg+xml;utf8," + encodeURIComponent(svg);

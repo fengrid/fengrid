@@ -877,7 +877,7 @@ Rectangle {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     spacing: 6
-                    IconImage { name: "zap"; px: 12; tint: theme.tokens.textMuted }
+                    IconImage { name: "zap"; px: 11; tint: theme.tokens.textMuted }
                     Text {
                         Layout.fillWidth: true
                         text: qsTr("New smart collection…")

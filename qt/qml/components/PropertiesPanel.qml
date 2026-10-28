@@ -1016,7 +1016,7 @@ Rectangle {
                         font.family: theme.monoFont; font.pixelSize: 10
                         color: theme.tokens.textMuted
                     }
-                    Slider {
+                    FgSlider {
                         id: sizeSlider
                         Layout.preferredWidth: 120
                         from: 10; to: 96; stepSize: 1

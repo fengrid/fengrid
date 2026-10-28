@@ -623,7 +623,7 @@ Rectangle {
                             RowLayout {
                                 spacing: 10
                                 Layout.alignment: Qt.AlignVCenter
-                                Slider {
+                                FgSlider {
                                     id: sizeRow
                                     from: 16
                                     to: 256
