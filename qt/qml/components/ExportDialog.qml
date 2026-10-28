@@ -163,6 +163,18 @@ Dialog {
                 exportDestLoader.active = false
             }
         }
-        function open() { active = true; item.open() }
+        // #81 dead-attempt recycle guard (same class as the settings
+        // dialog loaders): a native dialog that never maps leaves the
+        // Loader active forever, and every later click re-opens the
+        // same dead item — recycle the Loader and retry instead.
+        function open() {
+            if (prefs !== null)
+                prefs.noteDialogEvent(
+                    "exportBrowse", active ? "retry-click" : "click", 0)
+            if (active)
+                active = false
+            active = true
+            item.open()
+        }
     }
 }

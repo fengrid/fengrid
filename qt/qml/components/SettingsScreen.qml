@@ -50,6 +50,16 @@ Rectangle {
     function url2path(u) {
         return Icons.toLocalPath(u)   // single source of truth (#41)
     }
+    // #81 dialog telemetry: every browse-button click, retry and dialog
+    // resolution lands in crash.log via the prefs bridge, so a "the
+    // buttons do nothing" report can be discriminated (click line with
+    // no resolution line = the native dialog never mapped) instead of
+    // guessed at. name = dialog site id, event = click|retry-click|
+    // resolved-accepted|resolved-rejected, ms = open→resolution time.
+    function dialogEvent(name, event, ms) {
+        if (prefs !== null)
+            prefs.noteDialogEvent(name, event, ms || 0)
+    }
     // #51: every file/folder dialog opens in the last folder the user
     // visited (persisted in prefs.lastDialogDir, a plain local path —
     // encodeURI turns it into the file:// URL the dialogs bind to)
@@ -1469,6 +1479,7 @@ Rectangle {
                         Loader {
                             id: filesDialogLoader
                             active: false
+                            property int openStamp: 0
                             sourceComponent: FileDialog {
                                 id: filesDialog
                                 title: qsTr("Import files")
@@ -1476,6 +1487,9 @@ Rectangle {
                                 fileMode: FileDialog.OpenFiles
                                 nameFilters: [qsTr("Assets (*.png *.svg *.bmp *.ico *.webp *.gif *.jpg *.jpeg *.tiff *.ttf *.otf *.ttc)"), qsTr("All files (*)")]
                                 onAccepted: {
+                                    settingsRoot.dialogEvent(
+                                        "files", "resolved-accepted",
+                                        Date.now() - filesDialogLoader.openStamp)
                                     var paths = []
                                     for (var i = 0; i < selectedFiles.length; i++)
                                         paths.push(settingsRoot.url2path(selectedFiles[i]))
@@ -1485,18 +1499,27 @@ Rectangle {
                                     filesDialogLoader.active = false
                                 }
                                 onRejected: {
+                                    settingsRoot.dialogEvent(
+                                        "files", "resolved-rejected",
+                                        Date.now() - filesDialogLoader.openStamp)
                                     settingsRoot.rememberDialogDir(
                                         filesDialog.currentFolder)
                                     filesDialogLoader.active = false
                                 }
                             }
-                            // #81: item is null until the Loader finishes
-                            // instantiating, so calling item.open() right
-                            // after active=true threw TypeError and the
-                            // dialog never appeared. Defer the open to
-                            // onLoaded instead.
+                            // #81 dead-attempt recycle guard +
+                            // click/resolve telemetry — see zipDialogLoader
+                            // below for the full rationale (same class).
                             onLoaded: item.open()
-                            function open() { active = true }
+                            function open() {
+                                settingsRoot.dialogEvent(
+                                    "files", active ? "retry-click" : "click",
+                                    0)
+                                if (active)
+                                    active = false
+                                openStamp = Date.now()
+                                active = true
+                            }
                         }
                         // native dialogs load lazily: instantiating a
                         // QtQuick.Dialogs object on a real desktop session
@@ -1508,6 +1531,7 @@ Rectangle {
                         Loader {
                             id: zipDialogLoader
                             active: false
+                            property int openStamp: 0
                             sourceComponent: FileDialog {
                                 id: zipDialog
                                 title: qsTr("Import ZIP archive")
@@ -1515,6 +1539,9 @@ Rectangle {
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("ZIP archives (*.zip)")]
                                 onAccepted: {
+                                    settingsRoot.dialogEvent(
+                                        "zip", "resolved-accepted",
+                                        Date.now() - zipDialogLoader.openStamp)
                                     dataio.importZip(
                                         settingsRoot.url2path(selectedFile))
                                     settingsRoot.rememberDialogDir(
@@ -1522,22 +1549,44 @@ Rectangle {
                                     zipDialogLoader.active = false
                                 }
                                 onRejected: {
+                                    settingsRoot.dialogEvent(
+                                        "zip", "resolved-rejected",
+                                        Date.now() - zipDialogLoader.openStamp)
                                     settingsRoot.rememberDialogDir(
                                         zipDialog.currentFolder)
                                     zipDialogLoader.active = false
                                 }
                             }
-                            // #81: item is null until the Loader finishes
-                            // instantiating, so calling item.open() right
-                            // after active=true threw TypeError and the
-                            // dialog never appeared. Defer the open to
-                            // onLoaded instead.
+                            // #81: a native dialog that never maps (the
+                            // portal-hang / absent-dialog-backend class)
+                            // leaves the Loader active forever — every
+                            // later click then silently no-ops, so the
+                            // buttons look dead for the rest of the
+                            // session. A mapped native dialog is modal
+                            // and keeps these browse buttons
+                            // unreachable, so active==true at click time
+                            // can only mean the previous attempt died
+                            // silently: recycle the Loader and retry.
+                            // (The earlier "item null right after
+                            // active=true" diagnosis was disproven by an
+                            // offscreen test — a synchronous Loader has
+                            // its item immediately; onLoaded stays as
+                            // belt-and-braces only.)
                             onLoaded: item.open()
-                            function open() { active = true }
+                            function open() {
+                                settingsRoot.dialogEvent(
+                                    "zip", active ? "retry-click" : "click",
+                                    0)
+                                if (active)
+                                    active = false
+                                openStamp = Date.now()
+                                active = true
+                            }
                         }
                         Loader {
                             id: csvDialogLoader
                             active: false
+                            property int openStamp: 0
                             sourceComponent: FileDialog {
                                 id: csvDialog
                                 title: qsTr("CSV name list")
@@ -1545,6 +1594,9 @@ Rectangle {
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("CSV files (*.csv)")]
                                 onAccepted: {
+                                    settingsRoot.dialogEvent(
+                                        "csv", "resolved-accepted",
+                                        Date.now() - csvDialogLoader.openStamp)
                                     settingsRoot.csvPath =
                                         settingsRoot.url2path(selectedFile)
                                     settingsRoot.setImportOpt(
@@ -1554,27 +1606,41 @@ Rectangle {
                                     csvDialogLoader.active = false
                                 }
                                 onRejected: {
+                                    settingsRoot.dialogEvent(
+                                        "csv", "resolved-rejected",
+                                        Date.now() - csvDialogLoader.openStamp)
                                     settingsRoot.rememberDialogDir(
                                         csvDialog.currentFolder)
                                     csvDialogLoader.active = false
                                 }
                             }
-                            // #81: item is null until the Loader finishes
-                            // instantiating, so calling item.open() right
-                            // after active=true threw TypeError and the
-                            // dialog never appeared. Defer the open to
-                            // onLoaded instead.
+                            // #81 dead-attempt recycle guard +
+                            // click/resolve telemetry — see zipDialogLoader
+                            // for the full rationale (same class).
                             onLoaded: item.open()
-                            function open() { active = true }
+                            function open() {
+                                settingsRoot.dialogEvent(
+                                    "csv", active ? "retry-click" : "click",
+                                    0)
+                                if (active)
+                                    active = false
+                                openStamp = Date.now()
+                                active = true
+                            }
                         }
                         Loader {
                             id: folderImportLoader
                             active: false
+                            property int openStamp: 0
                             sourceComponent: FolderDialog {
                                 id: folderImportDialog
                                 title: qsTr("Import folder as source")
                                 currentFolder: settingsRoot.lastDialogUrl()
                                 onAccepted: {
+                                    settingsRoot.dialogEvent(
+                                        "folder", "resolved-accepted",
+                                        Date.now()
+                                        - folderImportLoader.openStamp)
                                     dataio.importFolder(
                                         settingsRoot.url2path(selectedFolder))
                                     settingsRoot.rememberDialogDir(
@@ -1582,18 +1648,28 @@ Rectangle {
                                     folderImportLoader.active = false
                                 }
                                 onRejected: {
+                                    settingsRoot.dialogEvent(
+                                        "folder", "resolved-rejected",
+                                        Date.now()
+                                        - folderImportLoader.openStamp)
                                     settingsRoot.rememberDialogDir(
                                         folderImportDialog.currentFolder)
                                     folderImportLoader.active = false
                                 }
                             }
-                            // #81: item is null until the Loader finishes
-                            // instantiating, so calling item.open() right
-                            // after active=true threw TypeError and the
-                            // dialog never appeared. Defer the open to
-                            // onLoaded instead.
+                            // #81 dead-attempt recycle guard +
+                            // click/resolve telemetry — see zipDialogLoader
+                            // for the full rationale (same class).
                             onLoaded: item.open()
-                            function open() { active = true }
+                            function open() {
+                                settingsRoot.dialogEvent(
+                                    "folder", active ? "retry-click" : "click",
+                                    0)
+                                if (active)
+                                    active = false
+                                openStamp = Date.now()
+                                active = true
+                            }
                         }
                     }
 
@@ -1792,11 +1868,16 @@ Rectangle {
                         Loader {
                             id: exportDestLoader
                             active: false
+                            property int openStamp: 0
                             sourceComponent: FolderDialog {
                                 id: exportDestDialog
                                 title: qsTr("Export library bundle to…")
                                 currentFolder: settingsRoot.lastDialogUrl()
                                 onAccepted: {
+                                    settingsRoot.dialogEvent(
+                                        "exportDest", "resolved-accepted",
+                                        Date.now()
+                                        - exportDestLoader.openStamp)
                                     dataio.exportBundle(
                                         "library",
                                         settingsRoot.url2path(selectedFolder),
@@ -1806,22 +1887,33 @@ Rectangle {
                                     exportDestLoader.active = false
                                 }
                                 onRejected: {
+                                    settingsRoot.dialogEvent(
+                                        "exportDest", "resolved-rejected",
+                                        Date.now()
+                                        - exportDestLoader.openStamp)
                                     settingsRoot.rememberDialogDir(
                                         exportDestDialog.currentFolder)
                                     exportDestLoader.active = false
                                 }
                             }
-                            // #81: item is null until the Loader finishes
-                            // instantiating, so calling item.open() right
-                            // after active=true threw TypeError and the
-                            // dialog never appeared. Defer the open to
-                            // onLoaded instead.
+                            // #81 dead-attempt recycle guard +
+                            // click/resolve telemetry — see zipDialogLoader
+                            // for the full rationale (same class).
                             onLoaded: item.open()
-                            function open() { active = true }
+                            function open() {
+                                settingsRoot.dialogEvent(
+                                    "exportDest",
+                                    active ? "retry-click" : "click", 0)
+                                if (active)
+                                    active = false
+                                openStamp = Date.now()
+                                active = true
+                            }
                         }
                         Loader {
                             id: bundleImportLoader
                             active: false
+                            property int openStamp: 0
                             sourceComponent: FileDialog {
                                 id: bundleImportDialog
                                 title: qsTr("Import fengrid bundle")
@@ -1829,6 +1921,10 @@ Rectangle {
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("Fengrid bundles (*.zip)")]
                                 onAccepted: {
+                                    settingsRoot.dialogEvent(
+                                        "bundleImport", "resolved-accepted",
+                                        Date.now()
+                                        - bundleImportLoader.openStamp)
                                     dataio.importBundle(
                                         settingsRoot.url2path(selectedFile), "copy")
                                     settingsRoot.rememberDialogDir(
@@ -1836,18 +1932,28 @@ Rectangle {
                                     bundleImportLoader.active = false
                                 }
                                 onRejected: {
+                                    settingsRoot.dialogEvent(
+                                        "bundleImport", "resolved-rejected",
+                                        Date.now()
+                                        - bundleImportLoader.openStamp)
                                     settingsRoot.rememberDialogDir(
                                         bundleImportDialog.currentFolder)
                                     bundleImportLoader.active = false
                                 }
                             }
-                            // #81: item is null until the Loader finishes
-                            // instantiating, so calling item.open() right
-                            // after active=true threw TypeError and the
-                            // dialog never appeared. Defer the open to
-                            // onLoaded instead.
+                            // #81 dead-attempt recycle guard +
+                            // click/resolve telemetry — see zipDialogLoader
+                            // for the full rationale (same class).
                             onLoaded: item.open()
-                            function open() { active = true }
+                            function open() {
+                                settingsRoot.dialogEvent(
+                                    "bundleImport",
+                                    active ? "retry-click" : "click", 0)
+                                if (active)
+                                    active = false
+                                openStamp = Date.now()
+                                active = true
+                            }
                         }
                     }
 
@@ -2378,10 +2484,14 @@ Rectangle {
     Loader {
         id: folderDialogLoader
         active: false
+        property int openStamp: 0
         property string kind: "folder"
         sourceComponent: FolderDialog {
             id: folderDialog
             onAccepted: {
+                settingsRoot.dialogEvent(
+                    "sources", "resolved-accepted",
+                    Date.now() - folderDialogLoader.openStamp)
                 var p = Icons.toLocalPath(selectedFolder)
                 library.add_folder(p, folderDialogLoader.kind)
                 if (folderDialogLoader.kind === "fontroot")
@@ -2390,12 +2500,23 @@ Rectangle {
                 folderDialogLoader.active = false
             }
             onRejected: {
+                settingsRoot.dialogEvent(
+                    "sources", "resolved-rejected",
+                    Date.now() - folderDialogLoader.openStamp)
                 settingsRoot.rememberDialogDir(folderDialog.currentFolder)
                 folderDialogLoader.active = false
             }
         }
+        // #81 dead-attempt recycle guard: a dialog that never maps
+        // leaves the Loader active and every later click no-ops —
+        // rationale on zipDialogLoader in the settings sections.
         function open(kind_) {
             kind = kind_ || "folder"
+            settingsRoot.dialogEvent(
+                "sources", active ? "retry-click" : "click", 0)
+            if (active)
+                active = false
+            openStamp = Date.now()
             active = true
             item.open()
         }
