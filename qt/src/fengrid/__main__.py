@@ -20,6 +20,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
 from fengrid import __version__
+from fengrid import dialogenv
 from fengrid.app import APP_NAME, ORG_NAME
 from fengrid.buildinfo import build_commit
 from fengrid.bridges.code import Code
@@ -322,6 +323,11 @@ def main(argv=None) -> int:
                 f"db {db_path} — journal "
                 f"{con.execute('PRAGMA journal_mode').fetchone()[0]}"
                 f" — fs {core_db.filesystem_type(db_path) or 'unknown'}\n")
+            # #81: name the native dialog backend in every future report
+            # too — a "browse button does nothing" report needs the
+            # platform/session/portal facts attached to the same log
+            # (see core/dialogenv.py for why every probe is bounded).
+            _crash_log.write(dialogenv.describe_environment() + "\n")
             _crash_log.flush()
         except (OSError, ValueError):
             pass

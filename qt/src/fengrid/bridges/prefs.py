@@ -11,7 +11,9 @@ key.
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
@@ -193,6 +195,24 @@ class Prefs(QObject):
             self._last_dialog_dir = p
             settings.set(self._con, "last_dialog_dir", p)
             self.lastDialogDirChanged.emit()
+
+    @Slot(str, str, int)
+    def noteDialogEvent(self, name: str, event: str, ms: int = 0) -> None:
+        """#81 measurement: every browse-button click and every dialog
+        resolution lands in crash.log — 'dialog click zip' with no
+        matching 'dialog resolved zip …ms' line is a discriminated
+        silent native-dialog failure (portal/absent-backend class)
+        instead of an unfalsifiable 'nothing happens'."""
+        try:
+            with open(os.path.join(os.path.dirname(self._db_path)
+                                   if self._db_path else ".",
+                                   "crash.log"), "a",
+                      encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} — "
+                        f"dialog {event} {name}"
+                        + (f" {int(ms)}ms" if ms else "") + "\n")
+        except OSError:
+            pass
 
     @Property("QVariantList", constant=True)
     def systemIconPaths(self):
