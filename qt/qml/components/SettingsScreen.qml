@@ -120,15 +120,19 @@ Rectangle {
         }
         return out
     }
+    readonly property var enabledMap: {
+        var map = {}
+        if (library === null)
+            return map
+        var s = library.sources
+        for (var i = 0; i < s.length; i++)
+            map[s[i].path] = s[i].enabled
+        return map
+    }
     function pathEnabled(path) {
         if (library === null)
             return true
-        var s = library.sources
-        for (var i = 0; i < s.length; i++) {
-            if (s[i].path === path)
-                return s[i].enabled
-        }
-        return true          // not registered yet — defaults to on
+        return path in enabledMap ? enabledMap[path] : true
     }
     function rescanKind(kind) {
         if (kind === "fontroot")
@@ -309,19 +313,6 @@ Rectangle {
                         }
                     }
                 }
-            }
-
-            // #55: the X sat right next to the search field, where a
-            // search button would be expected — it lives in the screen's
-            // top-right corner instead
-            IconButton {
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.margins: 10
-                z: 2
-                icon_name: "x"
-                ToolTip.text: qsTr("Close settings (Esc)")
-                onClicked: settingsRoot.closed()
             }
 
             Flickable {
@@ -615,16 +606,8 @@ Rectangle {
                             rowMatches: settingsRoot.matches(section, label, keys)
                         }
                         Repeater {
-                            model: {
-                                // read sources first so the model
-                                // re-evaluates on every mutation — user
-                                // clicks kill checked bindings, rebuilt
-                                // delegates get fresh ones
-                                if (library !== null)
-                                    library.sources
-                                return prefs !== null ? prefs.systemIconPaths
-                                                      : []
-                            }
+                            model: prefs !== null ? prefs.systemIconPaths
+                                                  : []
                             delegate: RowLayout {
                                 id: iconPathRow
                                 required property string modelData
@@ -633,14 +616,24 @@ Rectangle {
                                 Layout.leftMargin: 4
                                 spacing: 14
                                 FormCheck {
+                                    id: iconCheck
                                     Layout.preferredWidth: 170
                                     checkLabel: settingsRoot.baseName(modelData)
                                     checked: settingsRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        library.set_path_enabled(modelData,
-                                                                 "system",
-                                                                 checked)
-                                        library.rescan()
+                                        var isChecked = checked
+                                        Qt.callLater(function() {
+                                            library.set_path_enabled(modelData,
+                                                                     "system",
+                                                                     isChecked)
+                                            library.rescan()
+                                        })
+                                    }
+                                    Connections {
+                                        target: library
+                                        function onSourcesChanged() {
+                                            iconCheck.checked = settingsRoot.pathEnabled(modelData)
+                                        }
                                     }
                                 }
                                 Text {
@@ -662,12 +655,8 @@ Rectangle {
                             rowMatches: settingsRoot.matches(section, label, keys)
                         }
                         Repeater {
-                            model: {
-                                if (library !== null)
-                                    library.sources
-                                return prefs !== null ? prefs.systemFontDirs
-                                                      : []
-                            }
+                            model: prefs !== null ? prefs.systemFontDirs
+                                                  : []
                             delegate: RowLayout {
                                 id: fontPathRow
                                 required property string modelData
@@ -676,14 +665,24 @@ Rectangle {
                                 Layout.leftMargin: 4
                                 spacing: 14
                                 FormCheck {
+                                    id: fontCheck
                                     Layout.preferredWidth: 170
                                     checkLabel: settingsRoot.baseName(modelData)
                                     checked: settingsRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        library.set_path_enabled(modelData,
-                                                                 "fontroot",
-                                                                 checked)
-                                        fonts.rescan()
+                                        var isChecked = checked
+                                        Qt.callLater(function() {
+                                            library.set_path_enabled(modelData,
+                                                                     "fontroot",
+                                                                     isChecked)
+                                            fonts.rescan()
+                                        })
+                                    }
+                                    Connections {
+                                        target: library
+                                        function onSourcesChanged() {
+                                            fontCheck.checked = settingsRoot.pathEnabled(modelData)
+                                        }
                                     }
                                 }
                                 Text {
@@ -777,12 +776,13 @@ Rectangle {
                                         ToolTip.text: qsTr(
                                             "Include in the library")
                                         onToggled: {
-                                            library.set_path_enabled(
-                                                folderRow.modelData.path,
-                                                folderRow.modelData.kind,
-                                                checked)
-                                            settingsRoot.rescanKind(
-                                                folderRow.modelData.kind)
+                                            var isChecked = checked
+                                            var p = folderRow.modelData.path
+                                            var k = folderRow.modelData.kind
+                                            Qt.callLater(function() {
+                                                library.set_path_enabled(p, k, isChecked)
+                                                settingsRoot.rescanKind(k)
+                                            })
                                         }
                                     }
                                     IconButton {
@@ -1059,15 +1059,15 @@ Rectangle {
                                 spacing: 8
                                 SettingsButton {
                                     text: qsTr("Files…")
-                                    onClicked: filesDialog.open()
+                                    onClicked: filesDialogLoader.open()
                                 }
                                 SettingsButton {
                                     text: qsTr("ZIP…")
-                                    onClicked: zipDialog.open()
+                                    onClicked: zipDialogLoader.open()
                                 }
                                 SettingsButton {
                                     text: qsTr("Folder…")
-                                    onClicked: folderImportDialog.open()
+                                    onClicked: folderImportLoader.open()
                                 }
                             }
                         }
@@ -1226,7 +1226,7 @@ Rectangle {
                                     text: settingsRoot.csvPath === ""
                                           ? qsTr("Choose CSV…")
                                           : settingsRoot.csvPath.split("/").pop()
-                                    onClicked: csvDialog.open()
+                                    onClicked: csvDialogLoader.open()
                                 }
                                 FormInput {
                                     Layout.preferredWidth: 90
@@ -1251,6 +1251,7 @@ Rectangle {
                                 visible: settingsRoot.jobBusy
                                 Layout.fillWidth: true
                                 ProgressBar {
+                                    id: jobProgress
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 6
                                     from: 0
@@ -1266,29 +1267,29 @@ Rectangle {
                                     contentItem: Item {
                                         clip: true
                                         Rectangle {
-                                            visible: !parent.parent.indeterminate
+                                            visible: !jobProgress.indeterminate
                                             height: parent.height
-                                            width: parent.parent.visualPosition
-                                                   * parent.width
+                                            width: jobProgress.visualPosition
+                                                   * jobProgress.width
                                             radius: 3
                                             color: theme.tokens.accent
                                         }
                                         Rectangle {
-                                            visible: parent.parent.indeterminate
+                                            visible: jobProgress.indeterminate
                                             height: parent.height
-                                            width: Math.max(40, parent.width * 0.3)
+                                            width: Math.max(40, jobProgress.width * 0.3)
                                             radius: 3
                                             color: theme.tokens.accent
                                             SequentialAnimation on x {
                                                 loops: Animation.Infinite
-                                                running: parent.parent.parent.parent.visible
+                                                running: jobProgress.visible && jobProgress.indeterminate
                                                 NumberAnimation {
                                                     from: -80
-                                                    to: parent.parent.parent.parent.width
+                                                    to: jobProgress.width
                                                     duration: 900
                                                 }
                                                 NumberAnimation {
-                                                    from: parent.parent.parent.parent.width
+                                                    from: jobProgress.width
                                                     to: -80
                                                     duration: 900
                                                 }
@@ -1454,17 +1455,24 @@ Rectangle {
                             }
                         }
 
-                        FileDialog {
-                            id: filesDialog
-                            title: qsTr("Import files")
-                            fileMode: FileDialog.OpenFiles
-                            nameFilters: [qsTr("Assets (*.png *.svg *.bmp *.ico *.webp *.gif *.jpg *.jpeg *.tiff *.ttf *.otf *.ttc)"), qsTr("All files (*)")]
-                            onAccepted: {
-                                var paths = []
-                                for (var i = 0; i < selectedFiles.length; i++)
-                                    paths.push(settingsRoot.url2path(selectedFiles[i]))
-                                dataio.importStart(paths)
+                        Loader {
+                            id: filesDialogLoader
+                            active: false
+                            sourceComponent: FileDialog {
+                                id: filesDialog
+                                title: qsTr("Import files")
+                                fileMode: FileDialog.OpenFiles
+                                nameFilters: [qsTr("Assets (*.png *.svg *.bmp *.ico *.webp *.gif *.jpg *.jpeg *.tiff *.ttf *.otf *.ttc)"), qsTr("All files (*)")]
+                                onAccepted: {
+                                    var paths = []
+                                    for (var i = 0; i < selectedFiles.length; i++)
+                                        paths.push(settingsRoot.url2path(selectedFiles[i]))
+                                    dataio.importStart(paths)
+                                    filesDialogLoader.active = false
+                                }
+                                onRejected: filesDialogLoader.active = false
                             }
+                            function open() { active = true; item.open() }
                         }
                         // native dialogs load lazily: instantiating a
                         // QtQuick.Dialogs object on a real desktop session
@@ -1690,12 +1698,12 @@ Rectangle {
                                 SettingsButton {
                                     text: qsTr("Export bundle…")
                                     enabled: dataio !== null && !dataio.jobRunning
-                                    onClicked: exportDestDialog.open()
+                                    onClicked: exportDestLoader.open()
                                 }
                                 SettingsButton {
                                     text: qsTr("Import bundle…")
                                     enabled: dataio !== null && !dataio.jobRunning
-                                    onClicked: bundleImportDialog.open()
+                                    onClicked: bundleImportLoader.open()
                                 }
                             }
                         }
@@ -1735,13 +1743,22 @@ Rectangle {
                             }
                             function open() { active = true; item.open() }
                         }
-                        FileDialog {
-                            id: bundleImportDialog
-                            title: qsTr("Import fengrid bundle")
-                            fileMode: FileDialog.OpenFile
-                            nameFilters: [qsTr("Fengrid bundles (*.zip)")]
-                            onAccepted: dataio.importBundle(
-                                settingsRoot.url2path(selectedFile), "copy")
+                        Loader {
+                            id: bundleImportLoader
+                            active: false
+                            sourceComponent: FileDialog {
+                                id: bundleImportDialog
+                                title: qsTr("Import fengrid bundle")
+                                fileMode: FileDialog.OpenFile
+                                nameFilters: [qsTr("Fengrid bundles (*.zip)")]
+                                onAccepted: {
+                                    dataio.importBundle(
+                                        settingsRoot.url2path(selectedFile), "copy")
+                                    bundleImportLoader.active = false
+                                }
+                                onRejected: bundleImportLoader.active = false
+                            }
+                            function open() { active = true; item.open() }
                         }
                     }
 
@@ -2335,6 +2352,17 @@ Rectangle {
             active = true
             item.open()
         }
+    }
+
+    // #55: close X in the screen's top-right corner
+    IconButton {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 10
+        z: 2
+        icon_name: "x"
+        ToolTip.text: qsTr("Close settings (Esc)")
+        onClicked: settingsRoot.closed()
     }
 
     StorageDialog {

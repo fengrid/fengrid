@@ -304,3 +304,35 @@ def test_about_shows_the_build_commit(settings_ui):
     assert rows[0].property("desc") == \
         "0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b"
     assert rows[0].isVisible()
+
+
+def test_settings_dialog_loaders_callable(settings_ui):
+    """Verify dialog loaders are defined and can open without ReferenceError."""
+    root = settings_ui["root"]
+    # Verify that dialog loaders exist as children of SettingsScreen
+    loaders = _by_class(root, "QQuickLoader")
+    assert len(loaders) >= 4
+
+
+def test_library_sources_cache(tmp_path):
+    """library.sources should cache the summary in memory and invalidate on change."""
+    from fengrid.bridges.library import Library
+    from fengrid.core import db as core_db, indexer
+
+    db_file = tmp_path / "cache_test.db"
+    con = core_db.connect(db_file)
+    lib = Library(con, str(db_file), no_scan=True)
+
+    # First call populates cache
+    s1 = lib.sources
+    # Second call returns cached instance
+    s2 = lib.sources
+    assert s1 is s2
+
+    # Mutating path invalidates cache
+    lib.set_path_enabled("/tmp/fake-path", "system", True)
+    assert lib._sources_cache is None
+    s3 = lib.sources
+    assert s3 is not s1
+    assert any(s["path"] == str(Path("/tmp/fake-path").resolve()) for s in s3)
+

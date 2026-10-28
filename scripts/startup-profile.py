@@ -14,6 +14,7 @@ from the dumps).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -87,4 +88,10 @@ if __name__ == "__main__":
                    os.environ.get("XDG_DATA_HOME",
                                   os.path.expanduser("~/.local/share")),
                    "fengrid", "library.db"))
+    # match the app's behaviour (_user_data_dir): the data dir may not
+    # exist yet on a fresh machine, and sqlite3.connect does NOT create
+    # parent directories
+    parent = os.path.dirname(os.path.abspath(db_path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     profile(db_path)
