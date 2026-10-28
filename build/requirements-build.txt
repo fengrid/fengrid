@@ -1,0 +1,10 @@
+# Fengrid Qt build dependencies (production builds).
+# Used by build/scripts/* and the docker/ pipelines.
+# Pin to the Qt 6.8 LTS line per docs/architecture/0001-qt6-rewrite.md §2.
+pyside6>=6.8,<6.10
+pyinstaller>=6.10,<7
+pillow>=10.4
+fonttools>=4.55
+watchdog>=5.0
+platformdirs>=4.3
+defusedxml>=0.7

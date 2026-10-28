@@ -1,111 +1,101 @@
 # Fengrid
 
-[![Branch: dev](https://img.shields.io/badge/branch-dev-39B8C4)](https://github.com/fengrid/fengrid/tree/dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2a313b)](LICENSE.md)
 
-A single-file, dependency-free showcase for the icon themes and icon folders
-on your machine — on Linux, macOS or Windows. Point it at any folder of
-icons (or your installed system themes) and get a filterable, searchable,
-size-adjustable grid of every icon, with one-click copy of each icon's name,
-an import button that pulls sets from local folders, zip archives, git
-repositories, or a catalog of 200+ open-source icon sets, and an optional
-QR-code webshare for your phone.
-
-![fengrid screenshot — light and dark themes side by side](docs/assets/screenshot.png)
+A local-first **UI asset workbench** for Linux, macOS and Windows — a
+native Qt 6 (PySide6) desktop application that brings every asset in your
+design workflow into one searchable, inspectable, exportable workspace:
+icon sets, font families, color schemes, code snippets, and complete
+front-end projects.
 
 ## Why
 
-Icon sets are documented poorly. When you're building an app, a website or a
-custom icon theme, you mostly want to answer: *what's installed, what does it
-look like, and what is it called?* This answers that with one plain HTML
-page — no build step, no runtime, no server required.
+Design assets are scattered: icons live in system theme directories, fonts
+in a dozen folders, palettes in image files, snippets in editor storage.
+Fengrid scans, characterizes, and indexes all of it into one local library
+(SQLite, no cloud, no account), then gives every asset type a dedicated
+workspace with live previews, real export tooling, and revision control —
+so you stop wrestling file managers and image-conversion websites.
 
-## Features
+## The five panes
 
-- **Any icon source** — system theme directories (`/usr/share/icons` on
-  Linux, macOS CoreTypes) or any folder you choose; on Windows, point it at
-  any folder of `.png` / `.svg` / `.ico` files
-- **Common formats rendered** — SVG, PNG and ICO natively in the browser;
-  macOS `.icns` files are converted with the built-in `sips` tool; Linux
-  `.xpm` files convert via ImageMagick when available
-- **Size slider** — snaps to standard icon sizes (16 / 22 / 24 / 32 / 48 /
-  64 / 96 / 128 / 256)
-- **Search, filter, sort** — by name (and your tags), source folder/theme
-  (chips with counts), and context (`actions`, `devices`, `status`, …),
-  file type, color vs. monochrome, tags and custom collections
-- **Hover/tap inspector** — name, theme, context, all available size
-  variants, true pixel dimensions, file size, colorspace, color count, and
-  the full file path — plus per-icon tagging and export
-- **Export** — a download button on every icon preview opens a format/size
-  menu (PNG/JPEG/WebP/ICO directly; PDF, GIF, TIFF, BMP and the original
-  via "more…"); over the webshare the conversion runs through ImageMagick
-- **Incremental metadata** — `icon-meta.sh` fingerprints every icon
-  (size + mtime) so re-scans only re-identify new or changed files; all
-  scripts accept `--update-metadata enabled|disabled|force`, and a refresh
-  button in the UI triggers a re-scan (Shift-click forces a full pass)
-- **Copy button on every card** — copies the icon's name (filename minus
-  extension); `/` jumps to search
-- **Mobile-friendly layout** — responsive controls, swipeable filter chips,
-  44px touch targets, tap-to-select on phones, and a one-tap control
-  collapse for a full-page grid (phones start with it collapsed)
-- **Local web server by default** — `fengrid` starts a loopback-only server
-  and opens `http://127.0.0.1:8642/`, so the refresh button and
-  ImageMagick-powered export work without any setup in every browser;
-  `fengrid --file` opens the plain file when Python is unavailable
-- **QR webshare (optional)** — the same local webserver can be exposed to
-  your local network; open the connect page on any desktop and scan the
-  QR with a phone. Same-origin serving means no CORS issues, and directory
-  listings are disabled
-- **Light & dark modes** — persisted between visits
-- **Fully self-contained** — self-hosted subset fonts, no CDN, no JS
-  framework
+- **Icons** — filterable, searchable grid of every icon on your machine
+  (system themes + your folders); hover inspector with pixel dimensions,
+  color count and variants; export to PNG/WebP/ICO/PDF and more; batch
+  tint and resize on export.
+- **Fonts** — installed families with live specimens; CSS/`@font-face`
+  and zip export with weight/style filtering; woff2/woff packaging.
+- **Colors** — palette generator (WCAG readouts), terminal color themes,
+  5–7 color schemes, export as HEX/HSL/RGB/CMYK lists or board images.
+- **Code** — snippet library with a real syntax-highlighted editor
+  (HTML/CSS/JS/Markdown), live preview, import/export in bundle,
+  VS Code and massCode formats.
+- **Projects** — a multi-screen studio: a block-canvas **Design** screen
+  whose blocks bind Fengrid assets via `[[ slug ]]` references, the token
+  **Theme** configurator, **Templates** for tenant/multi-instance
+  variants, **Docker** packaging (build/run/inspect containers, browse
+  container storage), **Docs** auto-characterization, and git-backed
+  revisions (one repo per project, default branch `fengrid-main`,
+  batch operations on their own branches).
+
+Every tracked asset — including images, video, audio, documents,
+structured data, spatial and timeseries files — carries a generated
+GUID and an optional unique slug, linkable from snippets and project
+code as `[[ slug ]]`, `[[ GUID ]]` or `[[ kind/library/collection/name ]]`.
+
+## Also on board
+
+- **Import/ingest** — folders, zips, watch folders (local, rsync, scp,
+  sftp, ftp, http; S3 planned), copy-or-link semantics, automated format
+  conversion, regex/enumeration/GUID/CSV renaming.
+- **Export** — multi-format batches, per-type extended options
+  (icon tinting/resizing, webfont packaging, color-code lists), script
+  hooks, full round-trip bundles.
+- **Backup & restore** — one `*.tar.gz` per backup: manifest (version,
+  settings, environment, logs), full SQLite copies, and per-OS restore
+  scripts that refuse to run where Fengrid is installed or running.
+- **REST API** — `api/v1`: bearer-token HTTP API for ingest, inventory,
+  export, collections, projects, backups, watch folders and data-asset
+  CRUD (OpenAPI spec + Postman collection included).
+- **Undo/redo** with strict memory caps, disabled for bulk operations.
+- **Source control** — git (with LFS) per project/library, stash,
+  branches, batch ops with commit-or-discard review.
 
 ## Install
 
-**Linux / macOS**
+**From a release bundle** (recommended): download
+`fengrid-prod-linux-x64.tar.gz` (or arm64 / macOS / Windows artifacts)
+from the releases page, unpack, and run the `fengrid` binary.
+
+**From source:**
 
 ```bash
 git clone https://github.com/fengrid/fengrid.git
-cd fengrid
-bash install.sh
+cd fengrid/qt
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e .
+python -m fengrid
 ```
 
-**Windows (PowerShell)**
-
-```powershell
-git clone https://github.com/fengrid/fengrid.git
-cd fengrid
-powershell -ExecutionPolicy Bypass -File install.ps1
-```
-
-The installers ask before doing anything irreversible and never require
-admin rights. Default install is a visible `~/fengrid` (sandboxed
-browsers can't read hidden paths). Custom scan folders and install locations
-are supported — hidden or system-owned destinations get an extra
-confirmation.
-
-Uninstall any time:
+**Build a distributable bundle:**
 
 ```bash
-bash install.sh --uninstall                # Linux / macOS (alias: --remove)
-powershell -File install.ps1 -Uninstall    # Windows
+bash build/scripts/build-linux.sh linux-x64     # or linux-arm64
+# artifacts land in qt/dist/ — see build/scripts/ for macOS/Windows
 ```
 
-See [QUICKSTART.md](QUICKSTART.md) for the two-minute version.
+Requires Python ≥ 3.11. On Linux the bundles carry their own Qt; a source
+run needs PySide6 (installed by pip) and works on both X11 and Wayland.
 
 ## Documentation
 
 | Doc | Contents |
 |-----|----------|
-| [QUICKSTART.md](QUICKSTART.md) | install, launch, webshare, uninstall — the short path |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | project structure, technical details, versioning |
+| [QUICKSTART.md](QUICKSTART.md) | run it, first scan, the API, the five panes — the short path |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | architecture, structure, testing, packaging, versioning |
+| [docs/architecture/](docs/architecture/) | decision records (Qt6 rewrite, editor bindings) |
 | [LICENSE.md](LICENSE.md) | MIT license + bundled font licenses |
-
-## Status
-
-This is a casual side project: it does what it says, and there's no real
-plan to grow it beyond that. That said, contributions are welcome — see
-[DEVELOPMENT.md](DEVELOPMENT.md) for how the project is organized.
 
 ## License
 
