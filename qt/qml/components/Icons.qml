@@ -47,7 +47,7 @@ QtObject {
         "zap": "<path d='M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z' />"
     })
 
-    function url(name, color, fill) {
+    function url(name, color, fill, px) {
         var body = _paths[name] || "";
         // 1.25px hairline stroke on the 24px Lucide grid — the
         // technical, understated weight. The viewBox is padded to 28
@@ -55,11 +55,27 @@ QtObject {
         // the inset a "14px" icon drew ~11.6px of ink next to 12px
         // text (cap-height ~8.7px) and read as oversized. With the
         // 28-box, ink = 0.71 x px — the optical size matches the text
-        // beside it, Hermes-style. sourceSize is 2x in IconImage so
-        // every glyph stays crisp on any display
+        // beside it, Hermes-style.
+        //
+        // Stroke: 1.46 units in the 28-box keeps the approved
+        // 1.25px/24-box ratio — but at small icon sizes that ratio
+        // renders sub-pixel (0.54px at 12px), which rasterizes to gray
+        // fuzz. So small glyphs get the stroke boosted to the smallest
+        // value that still renders a full 1px: units = max(1.46, 28/px).
+        // At 48px tiles the spec ratio wins (proportional, thin); at
+        // 12-16px the floor guarantees a crisp single-pixel line.
+        var units = Math.max(1.46, 28 / (px || 24));
+        // half-pixel snap: for even px the glyph centers land on pixel
+        // boundaries and a 1px stroke straddles two columns at ~50%
+        // coverage each — the exact "fuzzy plus" fuzz. Shifting the
+        // viewBox by 0.5px (in 28-box units) puts the hairlines on
+        // pixel centers, measured 0.92-luminance single-pixel lines at
+        // 12px and 16px. Odd px are already pixel-centered.
+        var x0 = -2;
+        if ((px || 24) % 2 === 0) x0 = -2 - 0.5 * (28 / (px || 24));
         var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'" +
-                  " viewBox='-2 -2 28 28' fill='" + (fill || "none") + "' stroke='" + color + "'" +
-                  " stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'>" +
+                  " viewBox='" + x0 + " " + x0 + " 28 28' fill='" + (fill || "none") + "' stroke='" + color + "'" +
+                  " stroke-width='" + units + "' stroke-linecap='round' stroke-linejoin='round'>" +
                   body + "</svg>";
         return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
     }

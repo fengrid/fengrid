@@ -835,13 +835,14 @@ Rectangle {
                             anchors.centerIn: parent
                             width: 16
                             height: 16
-                            sourceSize.width: 32
-                            sourceSize.height: 32
+                            sourceSize.width: 16
+                            sourceSize.height: 16
                             source: Icons.url(
                                 "star",
                                 d && d.starred ? theme.tokens.litPane
                                                : theme.tokens.textMuted,
-                                d && d.starred ? theme.tokens.litPane : "none")
+                                d && d.starred ? theme.tokens.litPane : "none",
+                                16)
                         }
                     }
                 }
