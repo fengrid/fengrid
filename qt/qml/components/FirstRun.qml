@@ -39,17 +39,19 @@ Rectangle {
         }
         return out
     }
+    readonly property var enabledMap: {
+        var map = {}
+        if (library === null)
+            return map
+        var s = library.sources
+        for (var i = 0; i < s.length; i++)
+            map[s[i].path] = s[i].enabled
+        return map
+    }
     function pathEnabled(path) {
         if (library === null)
             return false
-        var s = library.sources
-        for (var i = 0; i < s.length; i++) {
-            if (s[i].path === path)
-                return s[i].enabled
-        }
-        // #61: detected system paths start UNCHECKED — nothing is
-        // scanned until the user selects it
-        return false
+        return path in enabledMap ? enabledMap[path] : false
     }
     function rescanKind(kind) {
         if (kind === "fontroot")
@@ -162,12 +164,8 @@ Rectangle {
                             wrapMode: Text.Wrap
                         }
                         Repeater {
-                            model: {
-                                if (library !== null)
-                                    library.sources
-                                return prefs !== null ? prefs.systemIconPaths
-                                                      : []
-                            }
+                            model: prefs !== null ? prefs.systemIconPaths
+                                                  : []
                             delegate: RowLayout {
                                 id: iconPathRow
                                 required property string modelData
@@ -175,14 +173,24 @@ Rectangle {
                                 Layout.topMargin: 8
                                 spacing: 14
                                 FormCheck {
+                                    id: iconCheck
                                     Layout.preferredWidth: 170
                                     checkLabel: setupRoot.baseName(modelData)
                                     checked: setupRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        library.set_path_enabled(modelData,
-                                                                 "system",
-                                                                 checked)
-                                        library.rescan()
+                                        var isChecked = checked
+                                        Qt.callLater(function() {
+                                            library.set_path_enabled(modelData,
+                                                                     "system",
+                                                                     isChecked)
+                                            library.rescan()
+                                        })
+                                    }
+                                    Connections {
+                                        target: library
+                                        function onSourcesChanged() {
+                                            iconCheck.checked = setupRoot.pathEnabled(modelData)
+                                        }
                                     }
                                 }
                                 Text {
@@ -196,12 +204,8 @@ Rectangle {
                             }
                         }
                         Repeater {
-                            model: {
-                                if (library !== null)
-                                    library.sources
-                                return prefs !== null ? prefs.systemFontDirs
-                                                      : []
-                            }
+                            model: prefs !== null ? prefs.systemFontDirs
+                                                  : []
                             delegate: RowLayout {
                                 id: fontPathRow
                                 required property string modelData
@@ -209,14 +213,24 @@ Rectangle {
                                 Layout.topMargin: 8
                                 spacing: 14
                                 FormCheck {
+                                    id: fontCheck
                                     Layout.preferredWidth: 170
                                     checkLabel: setupRoot.baseName(modelData)
                                     checked: setupRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        library.set_path_enabled(modelData,
-                                                                 "fontroot",
-                                                                 checked)
-                                        fonts.rescan()
+                                        var isChecked = checked
+                                        Qt.callLater(function() {
+                                            library.set_path_enabled(modelData,
+                                                                     "fontroot",
+                                                                     isChecked)
+                                            fonts.rescan()
+                                        })
+                                    }
+                                    Connections {
+                                        target: library
+                                        function onSourcesChanged() {
+                                            fontCheck.checked = setupRoot.pathEnabled(modelData)
+                                        }
                                     }
                                 }
                                 Text {
@@ -313,12 +327,13 @@ Rectangle {
                                         checkLabel: ""
                                         checked: folderRow.modelData.enabled
                                         onToggled: {
-                                            library.set_path_enabled(
-                                                folderRow.modelData.path,
-                                                folderRow.modelData.kind,
-                                                checked)
-                                            setupRoot.rescanKind(
-                                                folderRow.modelData.kind)
+                                            var isChecked = checked
+                                            var p = folderRow.modelData.path
+                                            var k = folderRow.modelData.kind
+                                            Qt.callLater(function() {
+                                                library.set_path_enabled(p, k, isChecked)
+                                                setupRoot.rescanKind(k)
+                                            })
                                         }
                                     }
                                     IconButton {
@@ -339,17 +354,11 @@ Rectangle {
                             spacing: 8
                             SettingsButton {
                                 text: qsTr("Add icon folder…")
-                                onClicked: {
-                                    folderDialog.kind = "folder"
-                                    folderDialog.open()
-                                }
+                                onClicked: folderDialogLoader.open("folder")
                             }
                             SettingsButton {
                                 text: qsTr("Add font folder…")
-                                onClicked: {
-                                    folderDialog.kind = "fontroot"
-                                    folderDialog.open()
-                                }
+                                onClicked: folderDialogLoader.open("fontroot")
                             }
                             Item { Layout.fillWidth: true }
                             SettingsButton {
@@ -729,14 +738,26 @@ Rectangle {
         }
     }
 
-    FolderDialog {
-        id: folderDialog
+    Loader {
+        id: folderDialogLoader
+        active: false
         property string kind: "folder"
-        onAccepted: {
-            var p = Icons.toLocalPath(selectedFolder)
-            library.add_folder(p, kind)
-            if (kind === "fontroot")
-                fonts.rescan()
+        sourceComponent: FolderDialog {
+            id: folderDialog
+            title: qsTr("Choose folder")
+            onAccepted: {
+                var p = Icons.toLocalPath(selectedFolder)
+                library.add_folder(p, folderDialogLoader.kind)
+                if (folderDialogLoader.kind === "fontroot")
+                    fonts.rescan()
+                folderDialogLoader.active = false
+            }
+            onRejected: folderDialogLoader.active = false
+        }
+        function open(kind_) {
+            kind = kind_ || "folder"
+            active = true
+            item.open()
         }
     }
 

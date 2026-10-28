@@ -48,9 +48,19 @@ class _Liveness(QObject):
 
 
 class FreezeWatchdog:
-    def __init__(self, data_dir: str, parent=None):
+    def __init__(self, data_dir: str, parent=None, autostart: bool = True):
         self._data_dir = str(data_dir)
         self._live = _Liveness(parent)
+        self._running = False
+        self._thread: threading.Thread | None = None
+        if autostart:
+            self.start()
+
+    def start(self) -> None:
+        """Arm and start the watchdog thread."""
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._live.last = time.monotonic()
         self._running = True
         self._thread = threading.Thread(
             target=self._loop, name="fengrid-freeze-watchdog", daemon=True)

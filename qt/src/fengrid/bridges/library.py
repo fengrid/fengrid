@@ -324,6 +324,7 @@ class Library(QObject):
 
         self._lists: dict[str, list] = {"themes": [], "contexts": [], "exts": [],
                                         "tags": [], "collections": []}
+        self._sources_cache: list[dict] | None = None
         # rail-list refresh coalescing: mutations mark dirty and ONE
         # debounced flush rebuilds the lists (at 1M assets the five
         # GROUP BY aggregates cost real time — paying them per mutation
@@ -929,6 +930,7 @@ class Library(QObject):
             return
         indexer.add_folder_source(self._con, p, kind=kind)
         self.message.emit(f"Added folder: {p}")
+        self._sources_cache = None
         self.sourcesChanged.emit()
         if kind == "fontroot":
             return
@@ -942,6 +944,7 @@ class Library(QObject):
             self.message.emit("Removed source")
         else:
             self.message.emit("Source not found")
+        self._sources_cache = None
         self.sourcesChanged.emit()
         self.refresh()
 
@@ -951,6 +954,7 @@ class Library(QObject):
         first-run). The flag is persisted immediately; the purge or
         re-index happens in the next scan, which the caller triggers."""
         indexer.set_path_enabled(self._con, path, kind, enabled)
+        self._sources_cache = None
         self.sourcesChanged.emit()
 
     @Slot()
@@ -964,12 +968,15 @@ class Library(QObject):
     def sources(self):
         """All registered sources with per-source asset counts — the
         Settings / first-run library section binds to this."""
+        if self._sources_cache is not None:
+            return self._sources_cache
         t0 = time.perf_counter()
         out = []
         for s in indexer.sources_summary(self._con):
             s = dict(s)
             s["enabled"] = bool(s["enabled"])
             out.append(s)
+        self._sources_cache = out
         dt = time.perf_counter() - t0
         if dt > _SLOW_SUMMARY_S:
             # #61: this read kept showing up in freeze dumps with

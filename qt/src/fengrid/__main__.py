@@ -347,8 +347,9 @@ def main(argv=None) -> int:
     # reproduced on a QA host) writes every thread's stack to the data
     # dir instead of dying unexplained
     from fengrid.freeze_watchdog import FreezeWatchdog
-    freeze_watchdog = FreezeWatchdog(data_dir)
+    freeze_watchdog = FreezeWatchdog(data_dir, autostart=False)
     app.aboutToQuit.connect(freeze_watchdog.stop)
+    QTimer.singleShot(0, freeze_watchdog.start)
 
     theme = Theme(con, _asset_dir("fonts"))
     if args.theme:
