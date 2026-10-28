@@ -103,3 +103,31 @@ def test_import_folder_allows_normal(tmp_path):
     (root / "a.png").write_bytes(b"x")
     desc = ingest.import_folder(str(root))
     assert desc["kind"] == "folder"
+
+
+# --------------------------------------------------------------- #82 regression
+def test_readding_preregistered_path_reenables(tmp_path):
+    """#82: first-run pre-registers detected system paths as DISABLED
+    rows. dataio.importFolder re-adding such a path must re-enable it —
+    the old code only INSERTed missing rows, so the disabled row stayed
+    disabled and the fonts scan skipped it ('0 new files')."""
+    from fengrid.core import db as core_db, indexer
+
+    con = core_db.connect(tmp_path / "library.db")
+    root = tmp_path / "fonts"
+    root.mkdir()
+    (root / "a.ttf").write_bytes(b"x")
+    # 1) first-run pre-registers the path DISABLED (the #61/#64 flow)
+    indexer.register_detected_paths(con, [(root, "fontroot")])
+    assert con.execute("SELECT enabled FROM source WHERE kind='fontroot'") \
+        .fetchone()[0] == 0
+    # 2) re-add through the dataio.importFolder upsert flow
+    desc = ingest.import_folder(str(root))
+    row = con.execute("SELECT id FROM source WHERE path = ?",
+                      (desc["path"],)).fetchone()
+    assert row is not None, "pre-registered row must exist"
+    con.execute("UPDATE source SET enabled = 1 WHERE id = ?", (row[0],))
+    con.commit()
+    # 3) the fonts scan must now see it
+    live = indexer._enabled_now(con, [(row[0], desc["path"])])
+    assert live == [(row[0], str(root))], "re-added path must be scannable"

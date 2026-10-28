@@ -320,7 +320,15 @@ class DataIO(QObject):
                         " VALUES(?, ?, ?, 1)",
                         (desc["kind"], desc["path"],
                          Path(desc["path"]).name))
-                    con.commit()
+                else:
+                    # #82: first-run pre-registers detected system paths as
+                    # DISABLED rows (#61/#64). Re-adding one of those through
+                    # this dialog is an explicit user opt-in — the old code
+                    # only INSERTed missing rows, so the existing disabled row
+                    # stayed disabled and scan_fonts skipped it ("0 new files").
+                    con.execute("UPDATE source SET enabled = 1 WHERE id = ?",
+                                (row[0],))
+                con.commit()
                 sources = [(row[0] if row else
                             con.execute("SELECT id FROM source"
                                         " WHERE path = ?",

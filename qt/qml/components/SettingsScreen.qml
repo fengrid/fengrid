@@ -1472,7 +1472,13 @@ Rectangle {
                                 }
                                 onRejected: filesDialogLoader.active = false
                             }
-                            function open() { active = true; item.open() }
+                            // #81: item is null until the Loader finishes
+                            // instantiating, so calling item.open() right
+                            // after active=true threw TypeError and the
+                            // dialog never appeared. Defer the open to
+                            // onLoaded instead.
+                            onLoaded: item.open()
+                            function open() { active = true }
                         }
                         // native dialogs load lazily: instantiating a
                         // QtQuick.Dialogs object on a real desktop session
@@ -1496,7 +1502,13 @@ Rectangle {
                                 }
                                 onRejected: zipDialogLoader.active = false
                             }
-                            function open() { active = true; item.open() }
+                            // #81: item is null until the Loader finishes
+                            // instantiating, so calling item.open() right
+                            // after active=true threw TypeError and the
+                            // dialog never appeared. Defer the open to
+                            // onLoaded instead.
+                            onLoaded: item.open()
+                            function open() { active = true }
                         }
                         Loader {
                             id: csvDialogLoader
@@ -1515,7 +1527,13 @@ Rectangle {
                                 }
                                 onRejected: csvDialogLoader.active = false
                             }
-                            function open() { active = true; item.open() }
+                            // #81: item is null until the Loader finishes
+                            // instantiating, so calling item.open() right
+                            // after active=true threw TypeError and the
+                            // dialog never appeared. Defer the open to
+                            // onLoaded instead.
+                            onLoaded: item.open()
+                            function open() { active = true }
                         }
                         Loader {
                             id: folderImportLoader
@@ -1530,7 +1548,13 @@ Rectangle {
                                 }
                                 onRejected: folderImportLoader.active = false
                             }
-                            function open() { active = true; item.open() }
+                            // #81: item is null until the Loader finishes
+                            // instantiating, so calling item.open() right
+                            // after active=true threw TypeError and the
+                            // dialog never appeared. Defer the open to
+                            // onLoaded instead.
+                            onLoaded: item.open()
+                            function open() { active = true }
                         }
                     }
 
@@ -1741,7 +1765,13 @@ Rectangle {
                                 }
                                 onRejected: exportDestLoader.active = false
                             }
-                            function open() { active = true; item.open() }
+                            // #81: item is null until the Loader finishes
+                            // instantiating, so calling item.open() right
+                            // after active=true threw TypeError and the
+                            // dialog never appeared. Defer the open to
+                            // onLoaded instead.
+                            onLoaded: item.open()
+                            function open() { active = true }
                         }
                         Loader {
                             id: bundleImportLoader
@@ -1758,7 +1788,13 @@ Rectangle {
                                 }
                                 onRejected: bundleImportLoader.active = false
                             }
-                            function open() { active = true; item.open() }
+                            // #81: item is null until the Loader finishes
+                            // instantiating, so calling item.open() right
+                            // after active=true threw TypeError and the
+                            // dialog never appeared. Defer the open to
+                            // onLoaded instead.
+                            onLoaded: item.open()
+                            function open() { active = true }
                         }
                     }
 
