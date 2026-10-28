@@ -14,6 +14,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from ..core import colors as core_colors
 from ..core import db as core_db
+from ..core import paths as core_paths
 from ..core import settings
 
 
@@ -368,6 +369,9 @@ class Colors(QObject):
 
     @Slot(str, str)
     def export(self, kind: str, dest_dir: str) -> None:
+        # #54: normalize any stray file:// URL to a plain local path
+        # (same contract as the other folder-accepting bridges).
+        dest_dir = core_paths.local_path(dest_dir or "")
         if not dest_dir:
             self.exportFailed.emit("choose a folder first")
             return
@@ -376,7 +380,7 @@ class Colors(QObject):
             out = core_colors.write_exports(self._name or "Untitled palette",
                                             hexes, dest_dir, kind)
         except (ValueError, OSError) as e:
-            self.exportFailed.emit(str(e))
+            self.exportFailed.emit(f"{e} (destination: {dest_dir})")
             return
         self.exportDone.emit(str(out))
 
