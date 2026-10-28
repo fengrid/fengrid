@@ -22,6 +22,7 @@ import zipfile
 from pathlib import Path
 
 from . import db, indexer, patterns
+from . import sandbox as core_sandbox
 
 _COPY_BUFSZ = 64 * 1024
 
@@ -92,6 +93,16 @@ def import_files(paths: list, data_dir: str, *,
         try:
             if not src.is_file():
                 report["skipped"] += 1
+                continue
+            # sandbox payloads (flatpak/snap per-app trees) are excluded
+            # from import — redundant/erroneous assets, see core/sandbox.py
+            if core_sandbox.is_sandbox_path(src):
+                report["skipped"] += 1
+                if len(report["errors"]) < 20:
+                    report["errors"].append(
+                        f"{src}: skipped — sandbox tree "
+                        f"({core_sandbox.sandbox_reason(src)}); set "
+                        "FENGRID_ALLOW_SANDBOX=1 to override")
                 continue
             if kind_for(src.name) is None:
                 report["skipped"] += 1
@@ -261,6 +272,11 @@ def import_folder(folder: str, mode: str = "link") -> dict:
     p = Path(folder)
     if not p.is_dir():
         raise IngestError(f"not a folder: {folder}")
+    if core_sandbox.is_sandbox_path(p):
+        raise IngestError(
+            f"refusing to index a sandbox tree ({core_sandbox.sandbox_reason(p)}): "
+            f"{folder} — per-app sandbox copies pollute the library with "
+            "redundant assets. Set FENGRID_ALLOW_SANDBOX=1 to override.")
     if not os.access(p, os.R_OK | os.X_OK):
         raise PermissionError(f"cannot read folder {folder}")
     kinds = {"icon": False, "font": False}

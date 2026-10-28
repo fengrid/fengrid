@@ -25,6 +25,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import sandbox as core_sandbox
+
 stat_S_ISREG = _stat.S_ISREG
 
 TRANSPORTS = [
@@ -120,7 +122,8 @@ def signature(path: str | Path) -> str:
     if not os.path.exists(str(path)):
         return "missing"
     try:
-        for dirpath, _dirs, files in os.walk(str(path), followlinks=False):
+        for dirpath, dirnames, files in os.walk(str(path), followlinks=False):
+            core_sandbox.prune_sandbox_dirs(dirnames)
             for fn in files:
                 try:
                     st = os.stat(os.path.join(dirpath, fn),

@@ -68,6 +68,27 @@ Watch folders (Settings → Import & Watch) keep directories — local or
 remote via rsync/scp/sftp/ftp/http — continuously synced into the
 library.
 
+### Sandbox and system folders excluded from scans
+
+Fengrid deliberately ignores Flatpak, Snap, and other sandbox payload
+trees when scanning for or importing assets — every installed sandboxed
+app bundles its own private copy of the theme icons (under
+`…/files/share/icons`), so indexing them floods the library with
+thousands of redundant, unreadable, or stale duplicates and can stall
+startup on busy systems. Excluded by default:
+
+- `/snap/…`, `/var/lib/flatpak/…`, `/var/lib/snapd/…`
+- `~/.local/share/flatpak/…`, `~/snap/…`, `~/.var/app/…`
+- any directory named `snap`, `flatpak`, `squashfs-root`, or `appdir`
+  found while walking a folder you add yourself
+
+Importing files or folders from one of these locations is refused with a
+clear error rather than silently indexed. If you genuinely need one of
+these trees (e.g. you develop snap packages and want their assets
+indexed for a project), set the environment variable
+`FENGRID_ALLOW_SANDBOX=1` before launching Fengrid to disable every
+sandbox exclusion.
+
 ## REST API
 
 ```bash

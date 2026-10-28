@@ -24,6 +24,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from . import sandbox as core_sandbox
+
 try:
     from fontTools.ttLib import TTFont
 except ImportError:  # pragma: no cover - fontTools is a build requirement
@@ -82,6 +84,7 @@ def iter_font_files(root: str | Path):
     root = str(root)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        core_sandbox.prune_sandbox_dirs(dirnames)
         for fn in filenames:
             ext = fn.rsplit(".", 1)[-1].lower() if "." in fn else ""
             if ext not in FONT_EXTS:

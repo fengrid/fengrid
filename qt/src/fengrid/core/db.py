@@ -328,7 +328,28 @@ def _migrate(con: sqlite3.Connection) -> None:
     _migrate_taxonomy_items(con)
     _migrate_grid_indexes(con)
     _migrate_source_index(con)
+    _migrate_prune_sandbox_sources(con)
     _migrate_fts_trigger_v2(con)
+
+
+def _migrate_prune_sandbox_sources(con: sqlite3.Connection) -> None:
+    """#61: drop disabled per-app sandbox icon roots left in the source
+    table by earlier builds.
+
+    platform_candidates() no longer returns the per-app flatpak/snap
+    trees (see scanner.py), but a DB created by the old code keeps the
+    rows — on one machine 118 of 121 sources — and the first-run
+    screen's per-row `pathEnabled()` → `library.sources` reads are
+    O(N²) in the source count (measured 20.7s engine.load, 26–31s per
+    setup toggle). Only DISABLED rows are removed: an enabled row is a
+    user choice and purge + re-add happens on disable anyway. The one
+    enabled sandbox row from the diag DB is left untouched.
+    """
+    con.execute(
+        "DELETE FROM source WHERE kind = 'system' AND enabled = 0 AND ("
+        "  path LIKE '%/flatpak/app/%/files/share/icons'"
+        "  OR path LIKE '/snap/%/usr/share/icons'"
+        ")")
 
 
 def _migrate_grid_indexes(con: sqlite3.Connection) -> None:

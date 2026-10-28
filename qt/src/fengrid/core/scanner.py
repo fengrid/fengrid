@@ -18,6 +18,8 @@ import re
 import sys
 from pathlib import Path
 
+from . import sandbox as core_sandbox  # noqa: F401 — walkers prune sandbox dirs
+
 ICON_EXTS = {"png", "svg", "ico", "jpg", "jpeg", "gif", "webp", "bmp", "xpm", "icns"}
 
 _SIZE_RE = re.compile(r"^(?P<w>\d+)(?:x(?P<h>\d+))?$")
@@ -30,6 +32,17 @@ def platform_candidates() -> list[Path]:
 
     Port of scan-icons.sh:59-77 (candidate roots) and its nesting fold
     (scan-icons.sh:23-24).
+
+    #61 (user-directed): ONLY the common, well-known icon locations are
+    candidates. Per-app sandbox trees (every installed flatpak/snap
+    bundles its own copy of the theme icons under
+    .../files/share/icons) were dropped: on a flatpak-heavy desktop they
+    exploded the source table to 118 rows for ONE user, and the
+    first-run screen's per-row `pathEnabled()` → `library.sources`
+    property reads are O(N²) in the source count — measured as 20.7s of
+    main-thread CPU for engine.load and 26–31s per setup checkbox toggle
+    (freeze dumps T+16.6s and T+78.6s, 2026-10-27 diag run). FENGRID_ALL_ICON_ROOTS=1
+    restores the sandbox roots for diagnosis.
     """
     found: list[Path] = []
 
@@ -46,7 +59,7 @@ def platform_candidates() -> list[Path]:
     if sys.platform == "darwin":
         add("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources")
         add(Path.home() / "Library/Icons")
-    else:
+    elif os.environ.get("FENGRID_ALL_ICON_ROOTS") == "1":
         for pattern in (
             "/snap/*/current/usr/share/icons",
             "/var/lib/flatpak/app/*/current/active/files/share/icons",
@@ -81,6 +94,7 @@ def iter_icon_files(root: str | Path):
     root = str(root)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        core_sandbox.prune_sandbox_dirs(dirnames)
         for fn in filenames:
             ext = fn.rsplit(".", 1)[-1].lower() if "." in fn else ""
             if ext not in ICON_EXTS:
@@ -101,6 +115,7 @@ def iter_asset_files(root: str | Path):
     root = str(root)
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        core_sandbox.prune_sandbox_dirs(dirnames)
         for fn in filenames:
             ext = fn.rsplit(".", 1)[-1].lower() if "." in fn else ""
             kind = core_kinds.kind_for_ext(ext)
