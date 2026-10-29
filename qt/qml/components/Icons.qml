@@ -78,7 +78,14 @@ QtObject {
         var delta = ((k / 2 - R / 2) % 1 + 1) % 1;
         if (delta > 0.5) delta -= 1;
         var x0 = -2 - delta * (28 / R);
-        var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'" +
+        // #97: the SVG must DECLARE its raster size (width/height = R),
+        // not the 24px Lucide grid. QML's Image loads data-URI SVGs at
+        // their declared intrinsic size and resamples to the item — a
+        // 24px raster drawn into an 11px item bilinear-downscales every
+        // stroke into fuzz (the "distorted lock/delete icons" report).
+        // With width/height = R the intrinsic raster IS the device-pixel
+        // grid the stroke snap above aligned to, so the draw is 1:1.
+        var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + R + "' height='" + R + "'" +
                   " viewBox='" + x0 + " " + x0 + " 28 28' fill='" + (fill || "none") + "' stroke='" + color + "'" +
                   " stroke-width='" + units + "' stroke-linecap='round' stroke-linejoin='round'>" +
                   body + "</svg>";
