@@ -28,7 +28,7 @@ Rectangle {
             IconImage { name: "git-branch"; px: 14
                         tint: theme.tokens.accentProject }
             Text {
-                text: scRoot.hasRepo ? scRoot.branch : qsTr("no repository")
+                text: scRoot.hasRepo ? scRoot.branch : qsTr("No Repository")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
@@ -47,12 +47,12 @@ Rectangle {
                 // redundant cue; the label already reads clean/dirty)
                 Accessible.role: Accessible.Indicator
                 Accessible.name: scRoot.st.clean
-                                 ? qsTr("repository state: clean")
-                                 : qsTr("repository state: dirty — uncommitted changes")
+                                 ? qsTr("Repository State: Clean")
+                                 : qsTr("Repository State: Dirty — Uncommitted Changes")
                 Text {
                     id: statusText
                     anchors.centerIn: parent
-                    text: scRoot.st.clean ? qsTr("clean") : qsTr("dirty")
+                    text: scRoot.st.clean ? qsTr("Clean") : qsTr("Dirty")
                     font.family: theme.monoFont
                     font.pixelSize: 9
                     color: "#101418"
@@ -146,7 +146,7 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 verticalAlignment: Text.AlignVCenter
-                text: qsTr("commit message…")
+                text: qsTr("Commit Message…")
                 font.family: theme.uiFont
                 font.pixelSize: 10
                 color: theme.tokens.textMuted
@@ -448,7 +448,7 @@ Rectangle {
             TextField {
                 id: remoteTokenField
                 echoMode: TextInput.Password
-                placeholderText: qsTr("access token (optional)")
+                placeholderText: qsTr("Access Token (Optional)")
                 Layout.fillWidth: true
             }
             Text {

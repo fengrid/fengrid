@@ -103,21 +103,21 @@ Rectangle {
     function fmtColors(s) {
         if (!s || s.avgColors === undefined)
             return "—"
-        return qsTr("avg %1").arg(s.avgColors)
+        return qsTr("Avg %1").arg(s.avgColors)
     }
 
     // aggregate property rows for the multi-selection summary
     readonly property var selRows: sel ? [
-        { l: qsTr("items"),   v: String(sel.count) },
-        { l: qsTr("size"),    v: fmtBytes(sel.bytes) },
-        { l: qsTr("formats"), v: fmtFormats(sel.formats) },
-        { l: qsTr("pixels"),  v: fmtPixels(sel) },
-        { l: qsTr("mode"),    v: fmtMode(sel) },
-        { l: qsTr("colors"),  v: fmtColors(sel) },
-        { l: qsTr("themes"),  v: fmtJoined(sel.themes, 2) },
-        { l: qsTr("starred"), v: sel.starred > 0
+        { l: qsTr("Items"),   v: String(sel.count) },
+        { l: qsTr("Size"),    v: fmtBytes(sel.bytes) },
+        { l: qsTr("Formats"), v: fmtFormats(sel.formats) },
+        { l: qsTr("Pixels"),  v: fmtPixels(sel) },
+        { l: qsTr("Mode"),    v: fmtMode(sel) },
+        { l: qsTr("Colors"),  v: fmtColors(sel) },
+        { l: qsTr("Themes"),  v: fmtJoined(sel.themes, 2) },
+        { l: qsTr("Starred"), v: sel.starred > 0
                                 ? qsTr("%1 of %2").arg(sel.starred)
-                                  .arg(sel.count) : qsTr("none") }
+                                  .arg(sel.count) : qsTr("None") }
     ] : []
 
     function fmtBytes(n) {
@@ -278,13 +278,13 @@ Rectangle {
             Layout.fillWidth: true
             Repeater {
                 model: panel.multi ? panel.selRows : (d ? [
-                    { l: qsTr("size"),   v: d.sizePx ? d.sizePx + "px" : "—" },
-                    { l: qsTr("pixels"), v: (d.width && d.height) ? d.width + "×" + d.height : "—" },
-                    { l: qsTr("type"),   v: d.ext ? d.ext.toUpperCase() : "—" },
-                    { l: qsTr("file"),   v: panel.fmtBytes(d.bytes) },
-                    { l: qsTr("mode"),   v: d.colorspace || "—" },
-                    { l: qsTr("colors"), v: (d.colorCount !== null && d.colorCount !== undefined) ? String(d.colorCount) : "—" },
-                    { l: qsTr("tone"),   v: d.mono === 1 ? qsTr("mono") : (d.mono === 0 ? qsTr("color") : "—") }
+                    { l: qsTr("Size"),   v: d.sizePx ? d.sizePx + "px" : "—" },
+                    { l: qsTr("Pixels"), v: (d.width && d.height) ? d.width + "×" + d.height : "—" },
+                    { l: qsTr("Type"),   v: d.ext ? d.ext.toUpperCase() : "—" },
+                    { l: qsTr("File"),   v: panel.fmtBytes(d.bytes) },
+                    { l: qsTr("Mode"),   v: d.colorspace || "—" },
+                    { l: qsTr("Colors"), v: (d.colorCount !== null && d.colorCount !== undefined) ? String(d.colorCount) : "—" },
+                    { l: qsTr("Tone"),   v: d.mono === 1 ? qsTr("Mono") : (d.mono === 0 ? qsTr("Color") : "—") }
                 ] : [])
                 RowLayout {
                     required property var modelData
@@ -392,7 +392,7 @@ Rectangle {
             }
             Text {
                 visible: slugField.text !== ""
-                text: qsTr("link with [[ %1 ]]").arg(slugField.text)
+                text: qsTr("Link with [[ %1 ]]").arg(slugField.text)
                 font.family: theme.monoFont
                 font.pixelSize: 9
                 color: theme.tokens.textMuted
@@ -622,6 +622,8 @@ Rectangle {
                         checked: fieldRow.modelData.value === "1"
                         // #105: single selection writes this asset's
                         // value; multi-select writes every selected asset
+                        // (contentItem deliberately NOT overridden —
+                        // FormCheck renders the label itself)
                         onClicked: panel.writeField(
                             fieldRow.modelData.id, checked ? "1" : "0")
                     }
@@ -719,7 +721,7 @@ Rectangle {
                                    && taxonomy.remove_link(linkRow.modelData.id)
                     }
                     ToolTip.visible: containsMouse
-                    ToolTip.text: qsTr("click to remove this link")
+                    ToolTip.text: qsTr("Click to Remove This Link")
                     HoverHandler { cursorShape: Qt.PointingHandCursor }
                 }
             }
@@ -796,7 +798,7 @@ Rectangle {
                     Layout.bottomMargin: 2
                 }
                 Text {
-                    text: qsTr("field")
+                    text: qsTr("Field")
                     font.family: theme.monoFont; font.pixelSize: 10
                     font.letterSpacing: 0.8
                     font.capitalization: Font.AllUppercase
@@ -822,7 +824,7 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: qsTr("type")
+                    text: qsTr("Type")
                     font.family: theme.monoFont; font.pixelSize: 10
                     font.letterSpacing: 0.8
                     font.capitalization: Font.AllUppercase
@@ -882,7 +884,7 @@ Rectangle {
                 }
                 Text {
                     visible: fType.currentIndex === 4
-                    text: qsTr("choices (comma-separated)")
+                    text: qsTr("Choices (Comma-Separated)")
                     font.family: theme.monoFont; font.pixelSize: 10
                     font.letterSpacing: 0.8
                     font.capitalization: Font.AllUppercase
@@ -915,7 +917,7 @@ Rectangle {
                         spacing: 3
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("id prefix")
+                            text: qsTr("ID Prefix")
                             font.family: theme.monoFont; font.pixelSize: 10
                             font.letterSpacing: 0.8
                             font.capitalization: Font.AllUppercase
@@ -945,7 +947,7 @@ Rectangle {
                         spacing: 3
                         Layout.preferredWidth: 76
                         Text {
-                            text: qsTr("padding")
+                            text: qsTr("Padding")
                             font.family: theme.monoFont; font.pixelSize: 10
                             font.letterSpacing: 0.8
                             font.capitalization: Font.AllUppercase
@@ -1183,7 +1185,7 @@ Rectangle {
             TextField {
                 id: collNameInput
                 Layout.fillWidth: true
-                placeholderText: qsTr("collection name")
+                placeholderText: qsTr("Collection Name")
             }
         }
     }
@@ -1266,7 +1268,7 @@ Rectangle {
                 Layout.fillWidth: true
                 text: panel.exportTint
                 onTextEdited: panel.exportTint = text
-                placeholderText: qsTr("recolor through alpha…")
+                placeholderText: qsTr("Recolor Through Alpha…")
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: theme.tokens.text

@@ -640,7 +640,7 @@ Item {
                 Layout.fillWidth: true
                 spacing: 8
                 Text {
-                    text: qsTr("size")
+                    text: qsTr("Size")
                     font.family: theme.monoFont; font.pixelSize: 10
                     color: theme.tokens.textMuted
                     Layout.preferredWidth: 40
@@ -698,7 +698,7 @@ Item {
                 Layout.fillWidth: true
                 spacing: 8
                 Text {
-                    text: qsTr("size")
+                    text: qsTr("Size")
                     font.family: theme.monoFont; font.pixelSize: 10
                     color: theme.tokens.textMuted
                     Layout.preferredWidth: 40
@@ -772,7 +772,7 @@ Item {
         Text {
             id: pagerRow
             anchors.centerIn: parent
-            text: qsTr("showing %1 of %2 · scroll to load more")
+            text: qsTr("Showing %1 of %2 · Scroll to Load More")
                   .arg(grid.count).arg(library.gridTotal)
             font.family: theme.monoFont
             font.pixelSize: 10

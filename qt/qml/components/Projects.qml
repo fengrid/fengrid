@@ -149,12 +149,12 @@ Item {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 10
+            anchors.margins: 12
             spacing: 6
 
             Button {
                 Layout.fillWidth: true
-                text: qsTr("+ New project")
+                text: qsTr("+ New Project")
                 onClicked: projects !== null && projects.new_project()
                 background: Rectangle {
                     radius: 6
@@ -194,7 +194,7 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     verticalAlignment: Text.AlignVCenter
-                    text: qsTr("search projects…")
+                    text: qsTr("Search Projects…")
                     font.family: theme.uiFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted
@@ -415,7 +415,7 @@ Item {
                     font.family: theme.uiFont
                     font.pixelSize: 12
                     color: theme.tokens.text
-                    placeholderText: qsTr("project name")
+                    placeholderText: qsTr("Project Name")
                     background: Rectangle {
                         radius: 6
                         color: theme.tokens.surface2
@@ -541,6 +541,7 @@ Item {
                 spacing: 0
             // ---- studio screen rail + screen area
             ColumnLayout {
+                Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 360
                 // minimums must SUM below the available width at the
@@ -674,7 +675,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("radius")
+                            text: qsTr("Radius")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
@@ -698,7 +699,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("prefix")
+                            text: qsTr("Prefix")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
@@ -735,7 +736,7 @@ Item {
                             }
                         }
                         FgButton {
-                            text: qsTr("apply")
+                            text: qsTr("Apply")
                             onClicked: {
                                 if (palApply.currentIndex < 0) return
                                 var pal = projectsRoot.paletteOpts[
@@ -754,7 +755,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("body")
+                            text: qsTr("Body")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                             Layout.preferredWidth: 56
@@ -786,7 +787,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("heading")
+                            text: qsTr("Heading")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                             Layout.preferredWidth: 56
@@ -818,7 +819,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("base / scale")
+                            text: qsTr("Base / Scale")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
@@ -859,7 +860,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("size")
+                            text: qsTr("Size")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
@@ -879,7 +880,7 @@ Item {
                         }
                     }
                     AddAssetRow {
-                        label: qsTr("add icon")
+                        label: qsTr("Add Icon")
                         opts: projectsRoot.iconOpts
                         onPicked: function (id, label) {
                             projects.add_asset("icon", id, label)
@@ -889,21 +890,21 @@ Item {
                     // FONTS / SNIPPETS / PALETTES ----------------------------
                     SectionLabel { text: qsTr("Assets") }
                     AddAssetRow {
-                        label: qsTr("add font")
+                        label: qsTr("Add Font")
                         opts: projectsRoot.fontOpts
                         onPicked: function (id, label) {
                             projects.add_asset("font", id, label)
                         }
                     }
                     AddAssetRow {
-                        label: qsTr("add snippet")
+                        label: qsTr("Add Snippet")
                         opts: projectsRoot.snippetOpts
                         onPicked: function (id, label) {
                             projects.add_asset("snippet", id, label)
                         }
                     }
                     AddAssetRow {
-                        label: qsTr("add palette")
+                        label: qsTr("Add Palette")
                         opts: projectsRoot.paletteOpts
                         onPicked: function (id, label) {
                             projects.add_asset("palette", id, label)
@@ -947,7 +948,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
-                            text: qsTr("source")
+                            text: qsTr("Source")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
@@ -1027,7 +1028,7 @@ Item {
                 color: theme.tokens.surface
                 ColumnLayout {
                     anchors.fill: parent
-                    anchors.margins: 10
+                    anchors.margins: 14
                     spacing: 8
                     clip: true
 
@@ -1040,7 +1041,7 @@ Item {
                         color: theme.tokens.textMuted
                     }
 
-                    Text { text: qsTr("Selected element")
+                    Text { text: qsTr("Selected Element")
                            font.family: theme.uiFont; font.pixelSize: 12
                            font.weight: Font.DemiBold
                            color: theme.tokens.text }
@@ -1048,7 +1049,7 @@ Item {
                         Layout.fillWidth: true
                         text: projectsRoot.selInfo && projectsRoot.selInfo.tag
                               ? projectsRoot.selInfo.tag
-                              : qsTr("click an element in the preview…")
+                              : qsTr("Click an Element in the Preview…")
                         font.family: theme.monoFont; font.pixelSize: 11
                         color: projectsRoot.selInfo
                                && projectsRoot.selInfo.tag
@@ -1073,7 +1074,7 @@ Item {
                         id: selTextEdit
                         Layout.fillWidth: true
                         Layout.preferredHeight: 26
-                        placeholderText: qsTr("edit element text…")
+                        placeholderText: qsTr("Edit Element Text…")
                         enabled: projectsRoot.selInfo
                                  && projectsRoot.selInfo.tag !== undefined
                         font.family: theme.monoFont; font.pixelSize: 11
@@ -1091,7 +1092,7 @@ Item {
                             id: styleKey
                             Layout.preferredWidth: 70
                             Layout.preferredHeight: 24
-                            placeholderText: "css"
+                            placeholderText: "CSS"
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.text
                             background: Rectangle {
@@ -1103,7 +1104,7 @@ Item {
                             id: styleVal
                             Layout.fillWidth: true
                             Layout.preferredHeight: 24
-                            placeholderText: qsTr("value")
+                            placeholderText: qsTr("Value")
                             font.family: theme.monoFont; font.pixelSize: 10
                             color: theme.tokens.text
                             background: Rectangle {
@@ -1137,7 +1138,7 @@ Item {
                                  + (projects.current.description || "—")
                                  + "\nprefix: "
                                  + ((projects.settings || {}).prefix || "—"))
-                              : qsTr("no project open")
+                              : qsTr("No Project Open")
                         font.family: theme.monoFont; font.pixelSize: 10
                         color: theme.tokens.text
                     }
@@ -1195,7 +1196,7 @@ Item {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: Math.min(pvArea.width - 40, 420)
-                                text: qsTr("Live preview renders automatically — tweak any parameter above")
+                                text: qsTr("Live Preview Renders Automatically — Tweak Any Parameter Above")
                                 font.family: theme.uiFont; font.pixelSize: 12
                                 color: theme.tokens.textMuted
                                 wrapMode: Text.Wrap
@@ -1220,8 +1221,8 @@ Item {
                             property bool expanded: true
                             anchors { top: parent.top; left: parent.left
                                      right: parent.right }
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
                             height: 28
                             spacing: 2
                             Repeater {
@@ -1271,7 +1272,7 @@ Item {
                         Item {
                             anchors { top: dockHead.bottom; left: parent.left
                                      right: parent.right; bottom: parent.bottom }
-                            anchors.margins: 8
+                            anchors.margins: 12
                             visible: dockHead.expanded
                             clip: true
 
@@ -1284,12 +1285,13 @@ Item {
                                 font.family: theme.monoFont
                                 font.pixelSize: 11
                                 color: theme.tokens.text
+                                padding: 8
                                 background: Rectangle {
                                     color: theme.tokens.bg
                                     radius: 6
                                     border.color: theme.tokens.border
                                 }
-                                placeholderText: qsTr("console output from the live preview (console.log / errors)…")
+                                placeholderText: qsTr("Console Output from the Live Preview (console.log / Errors)…")
                                 placeholderTextColor: theme.tokens.inkFaint
                             }
                             TextArea {
@@ -1318,7 +1320,7 @@ Item {
                                         id: revLabel
                                         Layout.preferredWidth: 180
                                         Layout.preferredHeight: 26
-                                        placeholderText: qsTr("revision label…")
+                                        placeholderText: qsTr("Revision Label…")
                                         font.family: theme.monoFont
                                         font.pixelSize: 11
                                         color: theme.tokens.text
@@ -1451,7 +1453,7 @@ Item {
                                         id: askIn
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 26
-                                        placeholderText: qsTr("ask a local helper (fengrid-llm / llm CLI) about this project…")
+                                        placeholderText: qsTr("Ask a Local Helper (fengrid-llm / llm CLI) About This Project…")
                                         font.family: theme.monoFont
                                         font.pixelSize: 11
                                         color: theme.tokens.text
@@ -1510,15 +1512,15 @@ Item {
                         }
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 12
                             spacing: 10
                             Text {
                                 text: projects !== null
                                       && projects.currentId >= 0
                                       ? (projects.current.name || "")
                                         + "  ·  " + projects.assets.length
-                                        + " attached" : qsTr("no project open")
+                                        + " attached" : qsTr("No Project Open")
                                 font.family: theme.monoFont
                                 font.pixelSize: 10
                                 color: theme.tokens.textMuted
@@ -1535,7 +1537,7 @@ Item {
                             }
                             Text {
                                 text: projectsRoot.live
-                                      ? qsTr("● live") : qsTr("○ manual")
+                                      ? qsTr("● Live") : qsTr("○ Manual")
                                 font.family: theme.monoFont
                                 font.pixelSize: 10
                                 color: projectsRoot.live

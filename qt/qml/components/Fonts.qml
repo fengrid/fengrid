@@ -75,7 +75,7 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     verticalAlignment: Text.AlignVCenter
-                    text: qsTr("filter families…")
+                    text: qsTr("Filter Families…")
                     font.family: theme.uiFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted
@@ -85,8 +85,8 @@ Item {
             Text {
                 text: fonts !== null
                       ? (fonts.scanning
-                         ? qsTr("indexing… %1").arg(fonts.scanCount)
-                         : qsTr("%1 families · %2 files")
+                         ? qsTr("Indexing… %1").arg(fonts.scanCount)
+                         : qsTr("%1 Families · %2 Files")
                              .arg(fonts.totalFamilies).arg(fonts.totalFonts))
                       : ""
                 font.family: theme.monoFont

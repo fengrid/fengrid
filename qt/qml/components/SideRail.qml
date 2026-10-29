@@ -238,8 +238,8 @@ Rectangle {
         Accessible.role: Accessible.Button
         Accessible.name: sectHdr.label
         Accessible.description: sectHdr.open
-                                ? qsTr("expanded — press to collapse")
-                                : qsTr("collapsed — press to expand")
+                                ? qsTr("Expanded — Press to Collapse")
+                                : qsTr("Collapsed — Press to Expand")
     }
 
     // ------------------------------------------------------------- pane tabs
@@ -746,7 +746,7 @@ Rectangle {
                     }
                     Text {
                         visible: subDialog.tagMode
-                        text: qsTr("comma-separated")
+                        text: qsTr("Comma-Separated")
                         font.family: theme.monoFont; font.pixelSize: 10
                         color: theme.tokens.textMuted
                     }
@@ -832,7 +832,7 @@ Rectangle {
                     Text {
                         visible: collInput.text === ""
                         Layout.fillWidth: true
-                        text: qsTr("new collection…")
+                        text: qsTr("New Collection…")
                         font.family: theme.uiFont
                         font.pixelSize: 10
                         color: theme.tokens.textMuted
@@ -1220,15 +1220,15 @@ Rectangle {
                 fields: [
                     FormInput {
                         id: libName
-                        label: qsTr("name")
+                        label: qsTr("Name")
                     },
                     FormInput {
                         id: libTags
-                        label: qsTr("tags (comma-separated)")
+                        label: qsTr("Tags (Comma-Separated)")
                     },
                     FormCheck {
                         id: libAll
-                        checkLabel: qsTr("match ALL tags (else any)")
+                        checkLabel: qsTr("Match ALL Tags (Else Any)")
                     }
                 ]
                 onOpened: {
@@ -1264,19 +1264,19 @@ Rectangle {
                 fields: [
                     FormInput {
                         id: smartName
-                        label: qsTr("name")
+                        label: qsTr("Name")
                     },
                     FormInput {
                         id: smartTags
-                        label: qsTr("tags (comma-separated)")
+                        label: qsTr("Tags (Comma-Separated)")
                     },
                     FormInput {
                         id: smartQ
-                        label: qsTr("name contains…")
+                        label: qsTr("Name Contains…")
                     },
                     FormCheck {
                         id: smartAll
-                        checkLabel: qsTr("match ALL tags (else any)")
+                        checkLabel: qsTr("Match ALL Tags (Else Any)")
                     }
                 ]
                 onApply: {
@@ -1310,7 +1310,7 @@ Rectangle {
                 fields: [
                     FormInput {
                         id: renameInput
-                        label: qsTr("new name")
+                        label: qsTr("New Name")
                     }
                 ]
                 onOpened: {

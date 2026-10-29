@@ -377,7 +377,7 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         // the tip for the slash-menu hotkey rides in
                         // the placeholder and follows the user's binding
-                        placeholderText: qsTr("search assets  ( / )  ·  %1")
+                        placeholderText: qsTr("Search Assets  ( / )  ·  %1")
                             .arg(prefs !== null ? prefs.formattedShortcut
                                                  : "Alt + /")
                         color: theme.tokens.text
@@ -698,7 +698,7 @@ ApplicationWindow {
                 text: {
                     if (root.pane === 0 && library !== null)
                         return library.scanning
-                               ? qsTr("indexing… %1").arg(library.scanCount)
+                               ? qsTr("Indexing… %1").arg(library.scanCount)
                                : qsTr("%1 assets%2").arg(library.totalAssets)
                                  .arg(library.lastScan !== ""
                                       ? qsTr(" · indexed ")
@@ -777,8 +777,8 @@ ApplicationWindow {
                 // background release probe finds something newer — click
                 // either state to re-check / open the releases page
                 text: updater !== null && updater.updateAvailable
-                      ? qsTr("update available: ") + updater.latestVersion
-                      + " — click to open"
+                      ? qsTr("Update Available: ") + updater.latestVersion
+                      + " — Click to Open"
                       : "fengrid " + appVersion
                 font.family: theme.monoFont
                 font.pixelSize: 11
@@ -1125,7 +1125,7 @@ ApplicationWindow {
             TextField {
                 id: closeMsg
                 Layout.fillWidth: true
-                placeholderText: qsTr("commit message…")
+                placeholderText: qsTr("Commit Message…")
                 font.family: theme.monoFont; font.pixelSize: 11
             }
         }

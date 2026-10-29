@@ -70,7 +70,7 @@ Item {
             FormInput {
                 id: newName
                 Layout.preferredWidth: 150
-                label: qsTr("new variable")
+                label: qsTr("New Variable")
             }
             FgButton {
                 text: qsTr("Add")
@@ -89,10 +89,10 @@ Item {
             acceptEnabled: instName.text.trim() !== ""
             property var stashVars: ({})
             fields: [
-                FormInput { id: instName; label: qsTr("instance name") },
+                FormInput { id: instName; label: qsTr("Instance Name") },
                 FormInput {
                     id: instOverrides
-                    label: qsTr("overrides — name=value, comma-separated")
+                    label: qsTr("Overrides — Name=Value, Comma-Separated")
                 }
             ]
             onOpened: {

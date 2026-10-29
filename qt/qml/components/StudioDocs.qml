@@ -35,7 +35,7 @@ Item {
                 text: docsRoot.u.pages !== undefined
                       ? qsTr("%1 pages · %2 blocks").arg(docsRoot.u.pages)
                         .arg(docsRoot.u.blocks)
-                      : qsTr("no project open")
+                      : qsTr("No Project Open")
                 font.family: theme.monoFont; font.pixelSize: 11
                 color: theme.tokens.text
             }
@@ -126,7 +126,7 @@ Item {
                 var r = docsRoot.u.refs || {}
                 var out = []
                 for (var k in r) out.push("[[ " + k + " ]] ×" + r[k])
-                return out.join("\n") || qsTr("none yet")
+                return out.join("\n") || qsTr("None Yet")
             }
         }
         Item { Layout.fillHeight: true }

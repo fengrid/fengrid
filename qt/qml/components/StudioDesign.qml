@@ -165,7 +165,7 @@ Item {
                 Text {
                     visible: designRoot.st
                              && designRoot.canvasRows.length === 0
-                    text: qsTr("Empty page — insert blocks above")
+                    text: qsTr("Empty Page — Insert Blocks Above")
                     color: theme.tokens.textMuted
                     font.family: theme.uiFont; font.pixelSize: 10
                 }
@@ -245,7 +245,7 @@ Item {
                         text: designRoot.sel.type === "section"
                               || designRoot.sel.type === "grid"
                               ? qsTr("↳ inserts nest inside")
-                              : qsTr("selected")
+                              : qsTr("Selected")
                         font.family: theme.uiFont; font.pixelSize: 9
                         color: theme.tokens.textMuted
                     }
@@ -365,7 +365,7 @@ Item {
         fields: [
             FormInput {
                 id: newPageName
-                label: qsTr("page name")
+                label: qsTr("Page Name")
             }
         ]
         onOpened: {

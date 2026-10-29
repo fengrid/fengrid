@@ -31,8 +31,8 @@ Item {
             Layout.fillWidth: true
             Text {
                 text: st && st.dockerOk
-                      ? qsTr("docker %1 — connected").arg(dockerVersion())
-                      : qsTr("docker daemon not reachable")
+                      ? qsTr("Docker %1 — Connected").arg(dockerVersion())
+                      : qsTr("Docker Daemon Not Reachable")
                 font.family: theme.monoFont; font.pixelSize: 10
                 color: st && st.dockerOk ? theme.tokens.success
                                          : theme.tokens.litPane
@@ -45,7 +45,7 @@ Item {
                          ? qsTr("● %1 running — %2").arg(state.status)
                            .arg(state.ports.join(" "))
                          : qsTr("○ %1 stopped").arg(state.status))
-                      : qsTr("no container yet")
+                      : qsTr("No Container Yet")
                 font.family: theme.monoFont; font.pixelSize: 10
                 color: state.exists && state.running
                        ? theme.tokens.success : theme.tokens.textMuted
@@ -58,25 +58,25 @@ Item {
             rowSpacing: 6
             Layout.fillWidth: true
 
-            Text { text: qsTr("image (tag)"); font.family: theme.uiFont
+            Text { text: qsTr("Image (Tag)"); font.family: theme.uiFont
                    font.pixelSize: 10; color: theme.tokens.textMuted }
             FormInput { id: cfgImage; Layout.fillWidth: true }
-            Text { text: qsTr("container name"); font.family: theme.uiFont
+            Text { text: qsTr("Container Name"); font.family: theme.uiFont
                    font.pixelSize: 10; color: theme.tokens.textMuted }
             FormInput { id: cfgName; Layout.fillWidth: true }
-            Text { text: qsTr("ports (host:cont, …)")
+            Text { text: qsTr("Ports (Host:Cont, …)")
                    font.family: theme.uiFont; font.pixelSize: 10
                    color: theme.tokens.textMuted }
             FormInput { id: cfgPorts; Layout.fillWidth: true }
-            Text { text: qsTr("volumes (/host:/cont, …)")
+            Text { text: qsTr("Volumes (/Host:/Cont, …)")
                    font.family: theme.uiFont; font.pixelSize: 10
                    color: theme.tokens.textMuted }
             FormInput { id: cfgVolumes; Layout.fillWidth: true }
-            Text { text: qsTr("env (NAME=value, …)")
+            Text { text: qsTr("Env (NAME=Value, …)")
                    font.family: theme.uiFont; font.pixelSize: 10
                    color: theme.tokens.textMuted }
             FormInput { id: cfgEnv; Layout.fillWidth: true }
-            Text { text: qsTr("build context (dir with Dockerfile)")
+            Text { text: qsTr("Build Context (Dir with Dockerfile)")
                    font.family: theme.uiFont; font.pixelSize: 10
                    color: theme.tokens.textMuted }
             RowLayout {

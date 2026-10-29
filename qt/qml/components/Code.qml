@@ -367,14 +367,14 @@ Item {
                 Layout.fillWidth: true
                 spacing: 8
                 Text {
-                    text: qsTr("scope")
+                    text: qsTr("Scope")
                     font.family: theme.monoFont; font.pixelSize: 10
                     color: theme.tokens.textMuted
                     Layout.preferredWidth: 40
                 }
                 ComboBox {
                     id: scopeBox
-                    model: [qsTr("current snippet"), qsTr("all listed snippets")]
+                    model: [qsTr("Current Snippet"), qsTr("All Listed Snippets")]
                     currentIndex: 0
                     background: Rectangle {
                         radius: 4; color: theme.tokens.surface2
@@ -879,7 +879,7 @@ Item {
                             anchors.fill: parent
                             anchors.leftMargin: 8
                             verticalAlignment: Text.AlignVCenter
-                            text: qsTr("snippet title…")
+                            text: qsTr("Snippet Title…")
                             font.family: theme.uiFont
                             font.pixelSize: 11
                             color: theme.tokens.textMuted
@@ -941,7 +941,7 @@ Item {
                             anchors.fill: parent
                             anchors.leftMargin: 8
                             verticalAlignment: Text.AlignVCenter
-                            text: qsTr("tags (comma-separated)")
+                            text: qsTr("Tags (Comma-Separated)")
                             font.family: theme.uiFont
                             font.pixelSize: 11
                             color: theme.tokens.textMuted
@@ -1006,7 +1006,7 @@ Item {
                                            "destination and scope")
                         onClicked: codeExport.openWith(
                             [{ id: "html", label: qsTr("HTML page") },
-                             { id: "bundle", label: qsTr("fengrid bundle") },
+                             { id: "bundle", label: qsTr("Fengrid Bundle") },
                              { id: "vscode", label: "VS Code" },
                              { id: "masscode", label: "massCode" },
                              { id: "files", label: qsTr("Plain files") }],
@@ -1136,7 +1136,7 @@ Item {
                         wrapMode: TextArea.NoWrap
                         padding: 8
                         background: null
-                        placeholderText: qsTr("write %1 here…").arg(currentPane)
+                        placeholderText: qsTr("Write %1 Here…").arg(currentPane)
                         placeholderTextColor: theme.tokens.inkFaint
                         onTextChanged: {
                             editors[currentPane] = text
