@@ -620,17 +620,12 @@ Rectangle {
                         font.family: theme.monoFont
                         font.pixelSize: 10
                         checked: fieldRow.modelData.value === "1"
+                        // #105: single selection writes this asset's
+                        // value; multi-select writes every selected asset
+                        // (contentItem deliberately NOT overridden —
+                        // FormCheck renders the label itself)
                         onClicked: panel.writeField(
                             fieldRow.modelData.id, checked ? "1" : "0")
-                        contentItem: Text {
-                            text: qsTr("Yes")
-                            font.family: theme.monoFont; font.pixelSize: 10
-                            color: theme.tokens.textMuted
-                            leftPadding: parent.indicator.width + 6
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: taxonomy !== null && taxonomy.set_field_value(
-                            d.id, fieldRow.modelData.id, checked ? "1" : "0")
                     }
                 }
                 Component {

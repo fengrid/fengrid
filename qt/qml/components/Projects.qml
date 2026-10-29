@@ -154,7 +154,7 @@ Item {
 
             Button {
                 Layout.fillWidth: true
-                text: qsTr("+ New project")
+                text: qsTr("+ New Project")
                 onClicked: projects !== null && projects.new_project()
                 background: Rectangle {
                     radius: 6
