@@ -383,22 +383,22 @@ Rectangle {
                             Layout.topMargin: 12
                             spacing: 8
                             SettingsButton {
-                                text: qsTr("Add icon folder…")
+                                text: qsTr("Add Icon Folder…")
                                 onClicked: folderDialogLoader.open("folder")
                             }
                             SettingsButton {
-                                text: qsTr("Add font folder…")
+                                text: qsTr("Add Font Folder…")
                                 onClicked: folderDialogLoader.open("fontroot")
                             }
                             Item { Layout.fillWidth: true }
                             SettingsButton {
-                                text: qsTr("Re-scan icons")
+                                text: qsTr("Re-Scan Icons")
                                 enabled: library !== null
                                          && !library.scanning
                                 onClicked: library.rescan()
                             }
                             SettingsButton {
-                                text: qsTr("Re-scan fonts")
+                                text: qsTr("Re-Scan Fonts")
                                 enabled: fonts !== null && !fonts.scanning
                                 onClicked: fonts.rescan()
                             }
