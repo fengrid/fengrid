@@ -598,17 +598,15 @@ Rectangle {
                 }
                 Component {
                     id: boolEditor
-                    CheckBox {
+                    // #102: shared compact checkbox — the raw default-style
+                    // CheckBox rendered a ~26px indicator next to 10px text
+                    FormCheck {
+                        checkLabel: qsTr("yes")
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
                         checked: fieldRow.modelData.value === "1"
                         onClicked: taxonomy !== null && taxonomy.set_field_value(
                             d.id, fieldRow.modelData.id, checked ? "1" : "0")
-                        contentItem: Text {
-                            text: qsTr("yes")
-                            font.family: theme.monoFont; font.pixelSize: 10
-                            color: theme.tokens.textMuted
-                            leftPadding: parent.indicator.width + 6
-                            verticalAlignment: Text.AlignVCenter
-                        }
                     }
                 }
                 Component {
