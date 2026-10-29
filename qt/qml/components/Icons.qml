@@ -47,7 +47,7 @@ QtObject {
         "zap": "<path d='M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z' />"
     })
 
-    function url(name, color, fill, px, dpr) {
+    function url(name, color, fill, px, dpr, minStroke) {
         var body = _paths[name] || "";
         // 1.25px hairline stroke on the 24px Lucide grid — the
         // technical, understated weight. The viewBox is padded to 28
@@ -70,10 +70,28 @@ QtObject {
         // unit floor is dropped: it produced non-integer strokes at
         // 24px tiles and re-introduced the exact fuzz it guarded
         // against. qt/tests/test_icon_raster.py pins the crispness.
+        //
+        // STROKE-CORE RULE (#97, round 2 — the declared-raster fix of
+        // round 1 measured no pixel delta: a simulated 24->16 smooth
+        // resample scored 23.8% soft-edge px vs the 1:1 raster's
+        // 25.4% — the round-1 "resampling artifact" theory was not
+        // the mechanism). The real mechanism: below ~19 device px,
+        // round(1.25*R/24) = 1, and a 1-device-px ARC stroke (lock
+        // shackle, unlock gap, X crossing) cannot keep a SOLID core —
+        // every curved pixel is a partial-coverage pixel (measured:
+        // the 16px lock had 6 solid pixels of 256 and 25.4% soft-
+        // edge; the 11px chip 7 of 121). Chrome glyph sites that
+        // render below 24 device px pass minStroke (device px, usually
+        // 2): the stroke becomes a 2-px core with thin edge bands
+        // (16px lock: 58 solid px, 19.5% soft — the shape reads as a
+        // solid glyph instead of a halo). Glyphs at >=24 device px
+        // and every non-opt-in site keep the hairline cadence
+        // unchanged.
         var P = px || 24;
         var D = dpr || 1;
         var R = Math.round(P * D);              // raster size, device px
         var k = Math.max(1, Math.round(1.25 * P * D / 24));  // stroke, device px
+        if (minStroke) k = Math.max(k, Math.round(minStroke));
         var units = k * 28 / R;
         var delta = ((k / 2 - R / 2) % 1 + 1) % 1;
         if (delta > 0.5) delta -= 1;

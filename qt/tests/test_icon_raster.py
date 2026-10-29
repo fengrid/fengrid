@@ -33,8 +33,8 @@ sys.path.insert(0, str(SRC))
 _PROBE = """import QtQuick
 import "{QMCDIR}"
 QtObject {
-    function icon(name, color, fill, px, dpr) {
-        return Icons.url(name, color, fill, px, dpr)
+    function icon(name, color, fill, px, dpr, minStroke) {
+        return Icons.url(name, color, fill, px, dpr, minStroke)
     }
 }
 """
@@ -103,7 +103,7 @@ def _vertical_stroke_profile(svg_text, dev_px):
 def test_plus_stroke_columns_are_crisp(icons, px, dpr):
     """Every pixel column of the plus's vertical stroke is ~full or
     ~empty — no partial-coverage edges at any display scale."""
-    data_url = icons.icon("plus", "#ffffff", "none", px, dpr)
+    data_url = icons.icon("plus", "#ffffff", "none", px, dpr, 0)
     assert data_url.startswith("data:image/svg+xml;utf8,")
     svg = urllib.parse.unquote(data_url.split(",", 1)[1])
 
@@ -120,8 +120,74 @@ def test_plus_stroke_columns_are_crisp(icons, px, dpr):
 def test_plus_stroke_occupies_expected_columns(icons, px):
     """Sanity: at dpr=1 the stroke is a single full column, on the
     pixel-centered phase the snap chose."""
-    data_url = icons.icon("plus", "#ffffff", "none", px, 1.0)
+    data_url = icons.icon("plus", "#ffffff", "none", px, 1.0, 0)
     svg = urllib.parse.unquote(data_url.split(",", 1)[1])
     prof = _vertical_stroke_profile(svg, px)
     full = [i for i, v in enumerate(prof) if v >= 0.9]
     assert len(full) == 1, f"expected exactly one full column, got {prof}"
+
+
+def _ink_counts(img):
+    """(solid pixels, soft-edge %, partial-coverage columns).
+
+    'Solid' = alphaF >= 0.85 — pixels that fully carry the stroke.
+    An arc stroke at 1 device px has NO solid core: every curved
+    pixel is a partial-coverage pixel (#97 round 2's measured
+    mechanism — the lock chip scored 6 solid px of 256).
+    """
+    w = img.width()
+    solid = soft = 0
+    col = [0.0] * w
+    for x in range(w):
+        s = 0
+        for y in range(w):
+            a = img.pixelColor(x, y).alphaF()
+            s += a
+            if a >= 0.85:
+                solid += 1
+            elif a > 0.15:
+                soft += 1
+        col[x] = s / w
+    pcols = sum(1 for c in col if 0.1 < c < 0.9)
+    return solid, 100.0 * soft / (w * w), pcols
+
+
+@pytest.mark.parametrize("name,px,solid_min", [
+    ("lock", 16, 40),      # hairline: 6 — fails pre-fix
+    ("unlock", 16, 40),    # hairline: 5
+    ("x", 16, 15),         # hairline: 0 (pure diagonals)
+    ("trash", 12, 40),     # hairline: 17
+])
+def test_chip_glyphs_keep_a_solid_stroke_core(icons, name, px, solid_min):
+    """#97: chrome glyph sites that render below 24 device px opt into
+    a 2-device-px stroke floor (IconImage.minStroke) — a 1-px arc
+    cannot hold a solid core (1.25*R/24 rounds to 1 below ~19 device
+    px), which IS the fuzz the reporter kept seeing after the
+    declared-raster fix: that fix measured no soft-edge delta
+    (23.8% simulated resample vs 25.4% 1:1 raster)."""
+    data_url = icons.icon(name, "#E7EDF2", "none", px, 1.0, 2)
+    svg = urllib.parse.unquote(data_url.split(",", 1)[1])
+    R = round(px * 1.0)
+    # the floor must NOT alter the declared raster (1:1 draw invariant)
+    m = re.search(r"width='(\d+)' height='(\d+)'", svg)
+    assert m, svg[:80]
+    assert m.groups() == (str(R), str(R)), svg[:80]
+    solid, soft_pct, pcols = _ink_counts(_raster(svg, R))
+    assert solid >= solid_min, (
+        f"{name}@{px}px min-stroke 2 kept only {solid} solid px "
+        f"(need {solid_min}) — the stroke has no core, chips render "
+        f"as halos (soft-edge {soft_pct:.1f}%)")
+    assert soft_pct <= 22.0, f"{name}@{px}px still {soft_pct:.1f}% soft-edge (pre-fix hairline scored 24.6-29.8%)"
+
+
+@pytest.mark.parametrize("name,px,solid_max", [("lock", 24, 20), ("x", 24, 10)])
+def test_hairline_cadence_unchanged_at_full_size(icons, name, px, solid_max):
+    """Guard rail: glyphs at >=24 device px WITHOUT minStroke keep the
+    1.25px/24 hairline (k=1) — the floor must not leak into the
+    default look of larger icons/tiles."""
+    data_url = icons.icon(name, "#E7EDF2", "none", px, 1.0, 0)
+    svg = urllib.parse.unquote(data_url.split(",", 1)[1])
+    solid, _, _ = _ink_counts(_raster(svg, px))
+    assert solid <= solid_max, (
+        f"{name}@{px}px gained {solid} solid px without an opt-in — "
+        f"the stroke-core floor leaked into the hairline cadence")

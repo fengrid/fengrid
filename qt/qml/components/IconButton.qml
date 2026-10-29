@@ -8,6 +8,9 @@ ToolButton {
     id: btn
     property string icon_name: ""
     property int icon_px: 16
+    // #97: device-px stroke floor for small glyphs (see IconImage) —
+    // toolbar sites stay hairline unless they opt in
+    property int icon_minStroke: 0
     // active = a persistent on-state (e.g. the star toggle) — renders in the
     // lit-pane amber, which the palette reserves for selection states
     property bool active: false
@@ -24,6 +27,7 @@ ToolButton {
         // "flicker" when the mouse sweeps across a toolbar
         Behavior on tint { ColorAnimation { duration: 90 } }
         px: btn.icon_px
+        minStroke: btn.icon_minStroke
         anchors.centerIn: parent
     }
     background: Rectangle {
