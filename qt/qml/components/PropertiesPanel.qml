@@ -371,7 +371,12 @@ Rectangle {
                             }
                             Component {
                                 id: boolEd
-                                CheckBox {
+                                // #102: shared compact checkbox (raw
+                                // default-style CheckBox was ~26px next
+                                // to 10px row text)
+                                FormCheck {
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
                                     checked:
                                         propRow.modelData.value === "1"
                                     onClicked: taxonomy !== null
@@ -1479,6 +1484,40 @@ Rectangle {
                 }
             }
             ComboBox {
+                id: pfKind
+                Layout.fillWidth: true
+                implicitHeight: 30
+                textRole: "label"
+                valueRole: "kind"
+                // #105: default the scope to the panel's asset class
+                model: [
+                    { label: qsTr("Icons"), kind: "icon" },
+                    { label: qsTr("Fonts"), kind: "font" },
+                    { label: qsTr("Images"), kind: "image" },
+                    { label: qsTr("Palettes"), kind: "palette" },
+                    { label: qsTr("Snippets"), kind: "snippet" },
+                    { label: qsTr("Projects"), kind: "project" },
+                    { label: qsTr("All Asset Types"), kind: "" }
+                ]
+                currentIndex: {
+                    var k = ["icon", "font", "image", "palette",
+                             "snippet", "project"].indexOf(
+                                 panel.itemKind || "icon")
+                    return k >= 0 ? k : 6
+                }
+                background: Rectangle {
+                    radius: 6; color: theme.tokens.surface2
+                    border.color: theme.tokens.border
+                }
+                contentItem: Text {
+                    text: pfKind.displayText
+                    font.family: theme.monoFont; font.pixelSize: 12
+                    color: theme.tokens.text
+                    verticalAlignment: Text.AlignVCenter
+                    leftPadding: 9
+                }
+            }
+            ComboBox {
                 id: pfType
                 Layout.fillWidth: true
                 implicitHeight: 30
@@ -1533,7 +1572,8 @@ Rectangle {
                         function (s) { return s !== "" })
                 taxonomy.create_field(pfName.text.trim(),
                                       pfType.currentText,
-                                      JSON.stringify(opts))
+                                      JSON.stringify(opts),
+                                      pfKind.currentValue || "")
                 pfName.text = ""
                 pfChoices.text = ""
                 panelFieldDialog.accept()

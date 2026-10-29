@@ -1816,10 +1816,12 @@ Item {
             }
             Repeater {
                 model: demo !== null ? demo.kinds() : []
-                CheckBox {
+                // #102: shared compact checkbox — consistent with the
+                // rest of the forms (raw default indicator was oversized)
+                FormCheck {
                     id: kindBox
                     required property var modelData
-                    text: modelData.label
+                    checkLabel: modelData.label
                     checked: demoDialog.checkedKinds.indexOf(modelData.id) >= 0
                     font.family: theme.uiFont
                     font.pixelSize: 12
@@ -1831,14 +1833,6 @@ Item {
                         else if (!checked && i >= 0)
                             set.splice(i, 1)
                         demoDialog.checkedKinds = set
-                    }
-                    contentItem: Text {
-                        text: kindBox.text
-                        font.family: theme.uiFont
-                        font.pixelSize: 12
-                        color: theme.tokens.text
-                        verticalAlignment: Text.AlignVCenter
-                        leftPadding: 4
                     }
                 }
             }
