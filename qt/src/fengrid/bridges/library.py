@@ -746,6 +746,135 @@ class Library(QObject):
     def row_of_asset(self, asset_id: int) -> int:
         return self._index_by_id.get(int(asset_id), -1)
 
+    # ------------------------------------------------- multi-selection
+    def _clean_ids(self, ids) -> list[int]:
+        """Checkbox multi-selection ids → deduped positive ints."""
+        out = []
+        for v in ids or []:
+            try:
+                i = int(v)
+            except (TypeError, ValueError):
+                continue
+            if i > 0:
+                out.append(i)
+        return list(dict.fromkeys(out))
+
+    @Slot("QVariantList", result="QVariantMap")
+    def selection_details(self, ids) -> dict:
+        """Aggregate properties over the checkbox multi-selection — the
+        inspector's multi-select summary. One read-only query over the
+        id list (clamped to kind='icon': the grid selection is icons
+        only); ids outside the current filter still count, unknown ids
+        silently drop. Returns {} for an empty selection."""
+        id_list = self._clean_ids(ids)
+        if not id_list:
+            return {}
+        marks = ",".join("?" * len(id_list))
+        rows = self._con.execute(
+            f"SELECT id, name, path, ext, bytes, width, height, size_px,"
+            f" mono, color_count, theme, context FROM asset"
+            f" WHERE kind = 'icon' AND id IN ({marks})", id_list).fetchall()
+        if not rows:
+            return {}
+        n = len(rows)
+        total_bytes = 0
+        fmts: dict[str, int] = {}
+        widths: list[int] = []
+        heights: list[int] = []
+        sizes: set[int] = set()
+        mono = color = 0
+        color_counts: list[int] = []
+        themes: set[str] = set()
+        contexts: set[str] = set()
+        paths: list[str] = []
+        names: list[str] = []
+        for r in rows:
+            total_bytes += r["bytes"] or 0
+            ext = (r["ext"] or "").lower()
+            if ext:
+                fmts[ext] = fmts.get(ext, 0) + 1
+            if r["width"]:
+                widths.append(r["width"])
+            if r["height"]:
+                heights.append(r["height"])
+            if r["size_px"]:
+                sizes.add(r["size_px"])
+            if r["mono"] == 1:
+                mono += 1
+            elif r["mono"] == 0:
+                color += 1
+            if r["color_count"] is not None:
+                color_counts.append(r["color_count"])
+            if r["theme"]:
+                themes.add(r["theme"])
+            if r["context"]:
+                contexts.add(r["context"])
+            paths.append(r["path"])
+            names.append(r["name"])
+        # tags over the selection: 'starred' counted separately, tags
+        # applied to EVERY selected asset surface as "shared tags"
+        per_tag: dict[str, set] = {}
+        starred = 0
+        for r in self._con.execute(
+                f"SELECT it.item_id, t.name FROM item_tag it"
+                f" JOIN tag t ON t.id = it.tag_id"
+                f" WHERE it.item_kind = 'icon' AND it.item_id IN ({marks})",
+                id_list).fetchall():
+            if r["name"] == "starred":
+                starred += 1
+                continue
+            per_tag.setdefault(r["name"], set()).add(r["item_id"])
+        shared = sorted(t for t, members in per_tag.items()
+                        if len(members) == n)
+        d: dict = {
+            "count": n,
+            "names": names,
+            "paths": paths,
+            "bytes": total_bytes,
+            "formats": [{"ext": e, "n": c} for e, c in
+                        sorted(fmts.items(), key=lambda kv: (-kv[1], kv[0]))],
+            "mono": mono,
+            "color": color,
+            "starred": starred,
+            "sharedTags": shared,
+            "themes": sorted(themes),
+            "contexts": sorted(contexts),
+        }
+        if widths:
+            d["minW"] = min(widths)
+            d["maxW"] = max(widths)
+        if heights:
+            d["minH"] = min(heights)
+            d["maxH"] = max(heights)
+        if sizes:
+            d["sizes"] = sorted(sizes)
+        if color_counts:
+            d["avgColors"] = round(sum(color_counts) / len(color_counts), 1)
+        return d
+
+    @Slot("QVariantList", result="QVariantList")
+    def selection_paths(self, ids) -> list:
+        """Filesystem paths of the checkbox selection, in selection
+        order — the bulk-export job's input list."""
+        id_list = self._clean_ids(ids)
+        if not id_list:
+            return []
+        rows = self._con.execute(
+            "SELECT id, path FROM asset WHERE kind = 'icon'"
+            f" AND id IN ({','.join('?' * len(id_list))})", id_list).fetchall()
+        by_id = {r["id"]: r["path"] for r in rows}
+        # selection order, not database order
+        return [by_id[i] for i in id_list if i in by_id]
+
+    @Slot("QVariantList")
+    def copy_names(self, ids) -> None:
+        """Clipboard: one name per line for the whole selection."""
+        names = self.selection_details(ids).get("names") or []
+        if not names:
+            return
+        QGuiApplication.clipboard().setText("\n".join(str(x) for x in names))
+        self.message.emit(f"Copied {len(names)} names")
+
     # ------------------------------------------------------------ starring
     @Slot(int, result=bool)
     def is_starred(self, index: int) -> bool:

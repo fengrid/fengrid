@@ -508,6 +508,15 @@ def main(argv=None) -> int:
     ctx.setContextProperty(
         "qaInspectorScroll",
         int(os.environ.get("FENGRID_QA_INSPECTOR_SCROLL", "0") or 0))
+    # QA affordance: FENGRID_QA_SELECT_IDS="1,2,3" pre-checks grid
+    # checkboxes — the inspector renders its aggregate multi-selection
+    # view in screenshots (ids are asset rowids; unknown ids drop out)
+    _qa_select_ids = []
+    for _tok in (os.environ.get("FENGRID_QA_SELECT_IDS", "") or "").split(","):
+        _tok = _tok.strip()
+        if _tok.isdigit():
+            _qa_select_ids.append(int(_tok))
+    ctx.setContextProperty("qaSelectIds", _qa_select_ids)
     # false on hardware-GL displays; true after the software fallback —
     # QML gates its shader effects on this (crash guard). Must precede
     # engine.load: Main.qml reads it in a root binding.

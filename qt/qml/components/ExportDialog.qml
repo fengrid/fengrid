@@ -17,6 +17,10 @@ Dialog {
     property var selectedFormats: []
     property string dest: ""
     property string lastDestPref: ""     // per-pane remembered path
+    // raster size applied by the calling pane (AssetGrid sends it in the
+    // dataio export opts); declared here because the size combo binds to
+    // the dialog id, not to the pane root
+    property string exportSize: "orig"
     // multi-select: allow checking several formats at once
     property bool multi: true
     signal doExport(var formats, string dest)

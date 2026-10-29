@@ -571,7 +571,10 @@ ApplicationWindow {
             Layout.fillHeight: true
             gridView: grid
             index: grid.currentIndex
-            visible: root.pane === 0 && grid.currentIndex >= 0
+            // checkbox multi-selection → aggregate summary + bulk export
+            selectedIds: grid.selectedIds
+            visible: root.pane === 0
+                     && (grid.currentIndex >= 0 || grid.selectedIds.length > 0)
         }
         // universal Properties panel for the other asset kinds (fonts,
         // color schemes, code snippets) — tags, custom fields, links
@@ -1003,6 +1006,18 @@ ApplicationWindow {
         id: scrollTimer
         interval: 400
         onTriggered: inspectorPanel.bodyFlick.contentY = qaInspectorScroll
+    }
+    // QA: FENGRID_QA_SELECT_IDS="1,2,3" pre-checks grid checkboxes so the
+    // inspector's aggregate multi-selection view renders in screenshots
+    Timer {
+        interval: 500
+        running: typeof qaSelectIds !== "undefined" && qaSelectIds.length > 0
+        onTriggered: {
+            grid.selectedIds = qaSelectIds
+            var r = library.row_of_asset(qaSelectIds[0])
+            if (r >= 0)
+                grid.currentIndex = r
+        }
     }
 
     Shortcut {

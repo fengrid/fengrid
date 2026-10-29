@@ -19,6 +19,11 @@ Rectangle {
     property var exportFormats: []
     property string exportTint: ""
     property var d: null
+    // multi-selection (grid checkboxes): aggregate summary instead of the
+    // single-asset detail — Main binds this to the grid's selectedIds
+    property var selectedIds: []
+    property var sel: null                 // library.selection_details map
+    readonly property bool multi: sel !== null
     // QA modal registry (--dialog <name>)
     readonly property var qaModals: ({ "fieldDialog": fieldDialog })
     // taxonomy rows for the selected asset, snapshotted at reload time
@@ -26,14 +31,76 @@ Rectangle {
     property var linksModel: []
 
     onIndexChanged: reload()
+    onSelectedIdsChanged: reload()
     onVisibleChanged: if (visible) reload()
 
     function reload() {
         d = (index >= 0 && library !== null) ? library.get_details(index) : null
+        // ≥2 checked boxes → aggregate view; the bridge clamps unknown
+        // ids away, so a stale selection (rescan purged a row) falls
+        // back to the single view instead of an empty panel
+        sel = (selectedIds.length > 1 && library !== null)
+              ? library.selection_details(selectedIds) : null
         fieldsModel = taxonomy !== null ? taxonomy.fields : []
-        linksModel = (taxonomy !== null && d) ? taxonomy.links_for("icon", d.id)
-                                              : []
+        linksModel = (taxonomy !== null && d && !multi)
+                     ? taxonomy.links_for("icon", d.id) : []
     }
+
+    // multi-select helpers
+    function fmtFormats(fmts) {
+        if (!fmts || fmts.length === 0)
+            return "—"
+        var out = []
+        for (var i = 0; i < fmts.length && i < 3; i++)
+            out.push(fmts[i].ext + " ×" + fmts[i].n)
+        var rest = fmts.length - out.length
+        if (rest > 0)
+            out.push("+" + rest)
+        return out.join(" · ")
+    }
+    function fmtPixels(s) {
+        if (!s || s.minW === undefined)
+            return "—"
+        if (s.minH !== undefined && (s.minW !== s.minH || s.maxW !== s.maxH))
+            return s.minW + "×" + s.minH + " – " + s.maxW + "×" + s.maxH
+        return s.minW === s.maxW ? s.minW + " px" : s.minW + "–" + s.maxW + " px"
+    }
+    function fmtMode(s) {
+        if (!s)
+            return "—"
+        var out = []
+        if (s.mono > 0)
+            out.push(s.mono + " mono")
+        if (s.color > 0)
+            out.push(s.color + " color")
+        return out.length ? out.join(" · ") : "—"
+    }
+    function fmtJoined(list, max) {
+        if (!list || list.length === 0)
+            return "—"
+        var out = list.slice(0, max || 2).join(", ")
+        var rest = list.length - Math.min(list.length, max || 2)
+        return rest > 0 ? out + " (+" + rest + ")" : out
+    }
+    function fmtColors(s) {
+        if (!s || s.avgColors === undefined)
+            return "—"
+        return qsTr("avg %1").arg(s.avgColors)
+    }
+
+    // aggregate property rows for the multi-selection summary
+    readonly property var selRows: sel ? [
+        { l: qsTr("items"),   v: String(sel.count) },
+        { l: qsTr("size"),    v: fmtBytes(sel.bytes) },
+        { l: qsTr("formats"), v: fmtFormats(sel.formats) },
+        { l: qsTr("pixels"),  v: fmtPixels(sel) },
+        { l: qsTr("mode"),    v: fmtMode(sel) },
+        { l: qsTr("colors"),  v: fmtColors(sel) },
+        { l: qsTr("themes"),  v: fmtJoined(sel.themes, 2) },
+        { l: qsTr("starred"), v: sel.starred > 0
+                                ? qsTr("%1 of %2").arg(sel.starred)
+                                  .arg(sel.count) : qsTr("none") }
+    ] : []
 
     function fmtBytes(n) {
         if (n === null || n === undefined)
@@ -98,9 +165,12 @@ Rectangle {
             width: bodyFlick.width - 28
             spacing: 10
 
+        // preview: single asset = large tile; multi-selection = a flow
+        // of small thumbnails (first 12, "+N" chip beyond)
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 112
+            visible: !panel.multi
             Rectangle {
                 anchors.centerIn: parent
                 width: 108
@@ -120,19 +190,64 @@ Rectangle {
                 }
             }
         }
+        Flow {
+            visible: panel.multi
+            spacing: 6
+            Layout.fillWidth: true
+            Repeater {
+                model: panel.sel ? panel.sel.paths.slice(0, 12) : []
+                Rectangle {
+                    required property var modelData
+                    width: 34
+                    height: 34
+                    radius: 6
+                    color: theme.tokens.bg
+                    border.color: theme.tokens.border
+                    Image {
+                        anchors.centerIn: parent
+                        width: 26
+                        height: 26
+                        source: Icons.fileUrl(modelData)
+                        asynchronous: true
+                        sourceSize.width: 64
+                        sourceSize.height: 64
+                        fillMode: Image.PreserveAspectFit
+                    }
+                }
+            }
+            Rectangle {
+                visible: panel.sel && panel.sel.paths.length > 12
+                width: 34
+                height: 34
+                radius: 6
+                color: theme.tokens.surface2
+                border.color: theme.tokens.border
+                Text {
+                    anchors.centerIn: parent
+                    text: "+" + (panel.sel ? panel.sel.paths.length - 12 : 0)
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
+                    color: theme.tokens.textMuted
+                }
+            }
+        }
 
         Text {
             Layout.fillWidth: true
-            text: d ? d.name : ""
+            text: panel.multi ? qsTr("%1 selected").arg(panel.sel.count)
+                              : (d ? d.name : "")
             font.family: theme.headingFont
-            font.pixelSize: 22
+            font.pixelSize: panel.multi ? 18 : 22
             font.letterSpacing: 1
             color: theme.tokens.text
             elide: Text.ElideRight
         }
         Text {
             Layout.fillWidth: true
-            text: d ? ((d.theme || "—") + (d.context ? " · " + d.context : "")) : ""
+            visible: panel.multi || d !== null
+            text: panel.multi
+                  ? panel.fmtFormats(panel.sel.formats)
+                  : (d ? ((d.theme || "—") + (d.context ? " · " + d.context : "")) : "")
             font.family: theme.monoFont
             font.pixelSize: 11
             color: theme.tokens.accent
@@ -144,7 +259,7 @@ Rectangle {
             rowSpacing: 4
             Layout.fillWidth: true
             Repeater {
-                model: d ? [
+                model: panel.multi ? panel.selRows : (d ? [
                     { l: qsTr("size"),   v: d.sizePx ? d.sizePx + "px" : "—" },
                     { l: qsTr("pixels"), v: (d.width && d.height) ? d.width + "×" + d.height : "—" },
                     { l: qsTr("type"),   v: d.ext ? d.ext.toUpperCase() : "—" },
@@ -152,7 +267,7 @@ Rectangle {
                     { l: qsTr("mode"),   v: d.colorspace || "—" },
                     { l: qsTr("colors"), v: (d.colorCount !== null && d.colorCount !== undefined) ? String(d.colorCount) : "—" },
                     { l: qsTr("tone"),   v: d.mono === 1 ? qsTr("mono") : (d.mono === 0 ? qsTr("color") : "—") }
-                ] : []
+                ] : [])
                 RowLayout {
                     required property var modelData
                     Layout.fillWidth: true
@@ -176,9 +291,13 @@ Rectangle {
         }
 
         // ── IDENTITY: the generated GUID + the user slug ([[ … ]] links) ──
-        SectionHeader { text: qsTr("Identity"); Layout.fillWidth: true }
+        SectionHeader {
+            text: qsTr("Identity")
+            visible: !panel.multi
+            Layout.fillWidth: true
+        }
         ColumnLayout {
-            visible: d !== null
+            visible: d !== null && !panel.multi
             spacing: 4
             Layout.fillWidth: true
             RowLayout {
@@ -264,11 +383,11 @@ Rectangle {
 
         SectionHeader {
             text: qsTr("Variants")
-            visible: d && d.variants.length > 0
+            visible: !panel.multi && d && d.variants.length > 0
             Layout.fillWidth: true
         }
         Flow {
-            visible: d && d.variants.length > 0
+            visible: !panel.multi && d && d.variants.length > 0
             spacing: 6
             Layout.fillWidth: true
             Repeater {
@@ -285,8 +404,13 @@ Rectangle {
             }
         }
 
-        SectionHeader { text: qsTr("Tags"); Layout.fillWidth: true }
+        SectionHeader {
+            text: qsTr("Tags")
+            visible: !panel.multi
+            Layout.fillWidth: true
+        }
         Flow {
+            visible: !panel.multi
             spacing: 6
             Layout.fillWidth: true
             Repeater {
@@ -324,6 +448,7 @@ Rectangle {
             }
         }
         RowLayout {
+            visible: !panel.multi
             spacing: 6
             Layout.fillWidth: true
             Rectangle {
@@ -365,13 +490,59 @@ Rectangle {
             }
         }
 
+        // multi-selection: tags applied to EVERY selected asset
+        // (read-only summary — bulk tag edits stay in the context menu)
+        SectionHeader {
+            text: qsTr("Shared tags")
+            visible: panel.multi
+            Layout.fillWidth: true
+        }
+        Flow {
+            visible: panel.multi
+            spacing: 6
+            Layout.fillWidth: true
+            Repeater {
+                model: panel.sel ? panel.sel.sharedTags : []
+                Rectangle {
+                    required property var modelData
+                    width: sharedTagText.implicitWidth + 18
+                    height: 22
+                    radius: 11
+                    color: theme.tokens.surface2
+                    border.color: theme.tokens.border
+                    Text {
+                        id: sharedTagText
+                        anchors.centerIn: parent
+                        text: "#" + modelData
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
+                        color: theme.tokens.text
+                    }
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: panel.multi && panel.sel
+                     && panel.sel.sharedTags.length === 0
+            text: qsTr("No tag is applied to every selected asset")
+            font.family: theme.uiFont
+            font.pixelSize: 10
+            color: theme.tokens.textMuted
+            wrapMode: Text.Wrap
+        }
+
         // CUSTOM FIELDS (taxonomy layer): every defined field with this
         // asset's value, edited in place — text/number/date/id as text
         // inputs, bool as a checkbox, select as a choice combo; id fields
         // gain a Generate button. "+ Field" defines a new global field.
-        SectionHeader { text: qsTr("FIELDS") }
+        SectionHeader {
+            text: qsTr("FIELDS")
+            visible: !panel.multi
+        }
         Repeater {
             model: fieldsModel
+            visible: !panel.multi
             RowLayout {
                 id: fieldRow
                 required property var modelData
@@ -480,6 +651,7 @@ Rectangle {
             }
         }
         RowLayout {
+            visible: !panel.multi
             spacing: 6
             Layout.fillWidth: true
             IconImage {
@@ -500,9 +672,13 @@ Rectangle {
         }
 
         // LINKS (taxonomy layer): typed links in and out of this asset
-        SectionHeader { text: qsTr("LINKS") }
+        SectionHeader {
+            text: qsTr("LINKS")
+            visible: !panel.multi
+        }
         Repeater {
             model: linksModel
+            visible: !panel.multi
             RowLayout {
                 id: linkRow
                 required property var modelData
@@ -533,7 +709,7 @@ Rectangle {
         }
         Text {
             Layout.fillWidth: true
-            visible: taxonomy !== null && taxonomy.links_for(
+            visible: !panel.multi && taxonomy !== null && taxonomy.links_for(
                          "icon", d ? d.id : -1).length === 0
             text: qsTr("Link to collections, libraries or projects from the"
                        + " asset's right-click menu")
@@ -773,6 +949,7 @@ Rectangle {
 
         Text {
             Layout.fillWidth: true
+            visible: !panel.multi
             text: d ? d.path : ""
             font.family: theme.monoFont
             font.pixelSize: 10
@@ -816,6 +993,7 @@ Rectangle {
                     id: starBtn
                     implicitWidth: 36
                     implicitHeight: 30
+                    visible: !panel.multi
                     enabled: panel.index >= 0
                     onClicked: library.set_starred(
                         panel.index, !(d && d.starred))
@@ -850,8 +1028,10 @@ Rectangle {
                     id: copyBtn
                     Layout.fillWidth: true
                     implicitHeight: 30
-                    text: qsTr("Copy name")
-                    onClicked: library.copy_name(panel.index)
+                    text: panel.multi ? qsTr("Copy names") : qsTr("Copy name")
+                    onClicked: panel.multi
+                               ? library.copy_names(panel.selectedIds)
+                               : library.copy_name(panel.index)
                     background: Rectangle {
                         radius: 6
                         color: copyBtn.hovered ? Qt.lighter(theme.tokens.accent, 1.08)
@@ -870,6 +1050,7 @@ Rectangle {
                     id: collBtn
                     Layout.fillWidth: true
                     implicitHeight: 30
+                    visible: !panel.multi
                     text: qsTr("To collection")
                     background: Rectangle {
                         radius: 6
@@ -890,8 +1071,10 @@ Rectangle {
                 id: exportBtn
                 Layout.fillWidth: true
                 implicitHeight: 30
-                enabled: index >= 0
-                text: qsTr("Export…")
+                enabled: panel.multi || index >= 0
+                text: panel.multi
+                      ? qsTr("Export %1 selected…").arg(panel.sel.count)
+                      : qsTr("Export…")
                 onClicked: exportPopup.open()
                 background: Rectangle {
                     radius: 6
@@ -974,12 +1157,22 @@ Rectangle {
         ColumnLayout {
             spacing: 8
             Text {
-                text: qsTr("Export")
+                text: panel.multi
+                      ? qsTr("Export %1 selected").arg(
+                            panel.sel ? panel.sel.count : 0)
+                      : qsTr("Export")
                 font.family: theme.headingFont
                 font.pixelSize: 16
                 font.letterSpacing: 1.2
                 font.capitalization: Font.AllUppercase
                 color: theme.tokens.text
+            }
+            Text {
+                visible: panel.multi
+                text: qsTr("every selected asset, one folder")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
             }
             Text {
                 text: qsTr("Formats (multi-select)")
@@ -1074,7 +1267,9 @@ Rectangle {
                 id: doExportBtn
                 Layout.fillWidth: true
                 implicitHeight: 30
-                enabled: panel.exportDir !== "" && panel.index >= 0
+                enabled: panel.exportDir !== ""
+                         && (panel.multi ? panel.sel !== null
+                                         : panel.index >= 0)
                 text: qsTr("Export")
                 onClicked: {
                     if (panel.exportFormats.length === 0)
@@ -1086,9 +1281,13 @@ Rectangle {
                         script: "",
                         script_enabled: false
                     }
-                    var path = panel.d ? panel.d.path : ""
-                    if (path !== "")
-                        dataio.exportIcons([path], panel.exportDir,
+                    // multi-selection: export the package (all selected
+                    // assets into one folder) in a single dataio job
+                    var paths = panel.multi
+                                ? (panel.sel ? panel.sel.paths : [])
+                                : (panel.d ? [panel.d.path] : [])
+                    if (paths.length)
+                        dataio.exportIcons(paths, panel.exportDir,
                                            JSON.stringify(opts))
                     exportPopup.close()
                 }
