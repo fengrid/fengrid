@@ -9,7 +9,7 @@ Image {
 
     width: px
     height: px
-    source: Icons.url(name, tint, "none", px)
+    source: Icons.url(name, tint, "none", px, Screen.devicePixelRatio || 1)
     // rasterize at the EXACT device-pixel size. The old px*2 raster +
     // bilinear downscale halved the hairline stroke into sub-pixel
     // fuzz (the "fuzzy plus icon" report). Screen.devicePixelRatio is
