@@ -101,7 +101,7 @@ Dialog {
         if (typeof css === "string" && css !== "") {
             cssEdit.text = css
         } else {
-            previewError = qsTr("could not build the stylesheet — the " +
+            previewError = qsTr("Could not build the stylesheet — the " +
                                 "reason is shown in the toast")
             cssEdit.text = "/* preview unavailable */"
         }
@@ -151,9 +151,9 @@ Dialog {
             font.family: theme.monoFont; font.pixelSize: 10
             color: theme.tokens.text
             text: chosen.length === 0
-                  ? qsTr("no families — check families in the grid first")
+                  ? qsTr("No Families — Check Families in the Grid First")
                   : (chosen.length === 1
-                     ? qsTr("family: %1").arg(chosen[0])
+                     ? qsTr("Family: %1").arg(chosen[0])
                      : qsTr("%1 families: %2")
                            .arg(chosen.length).arg(chosen.join(", ")))
         }
@@ -163,7 +163,7 @@ Dialog {
             Layout.fillWidth: true
             spacing: 8
             Text {
-                text: qsTr("convert to")
+                text: qsTr("Convert To")
                 font.family: theme.monoFont; font.pixelSize: 9
                 font.letterSpacing: 1.2
                 font.capitalization: Font.AllUppercase
@@ -185,7 +185,7 @@ Dialog {
                 }
             }
             FormCheck {
-                checkLabel: qsTr("also include original files")
+                checkLabel: qsTr("Also Include Original Files")
                 checked: cssRoot.includeOriginal
                 onToggled: cssRoot.includeOriginal = checked
             }
@@ -225,7 +225,7 @@ Dialog {
                 anchors { right: parent.right; bottom: parent.bottom
                           margins: 6 }
                 visible: cssRoot.userEdited
-                text: qsTr("edited — family/format changes regenerate it")
+                text: qsTr("Edited — Family/Format Changes Regenerate It")
                 font.family: theme.uiFont; font.pixelSize: 9
                 color: theme.tokens.litPane
             }
@@ -246,7 +246,7 @@ Dialog {
             FormInput {
                 id: destField
                 Layout.fillWidth: true
-                label: qsTr("destination folder")
+                label: qsTr("Destination Folder")
                 text: cssRoot.dest
                 onEditingFinished: cssRoot.dest = text
             }

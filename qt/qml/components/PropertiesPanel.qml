@@ -246,7 +246,7 @@ Rectangle {
                         Text {
                             visible: !panel.props
                                      || panel.props.tags.length === 0
-                            text: qsTr("no tags yet")
+                            text: qsTr("No Tags Yet")
                             font.family: theme.uiFont
                             font.pixelSize: 10
                             color: theme.tokens.textMuted
@@ -288,7 +288,7 @@ Rectangle {
                                 anchors.fill: parent
                                 anchors.leftMargin: 8
                                 verticalAlignment: Text.AlignVCenter
-                                text: qsTr("add tag…")
+                                text: qsTr("Add Tag…")
                                 font.family: theme.uiFont
                                 font.pixelSize: 10
                                 color: theme.tokens.textMuted
@@ -511,8 +511,8 @@ Rectangle {
                                             linkRow.modelData.id)
                                 }
                                 ToolTip.visible: containsMouse
-                                ToolTip.text: qsTr("click to remove this"
-                                                   + " link")
+                                ToolTip.text: qsTr("Click to Remove This"
+                                                   + " Link")
                                 HoverHandler {
                                     cursorShape: Qt.PointingHandCursor
                                 }
@@ -900,7 +900,7 @@ Rectangle {
                         id: srcMsg
                         Layout.fillWidth: true
                         visible: panel.srcSum && panel.srcSum.exists
-                        placeholderText: qsTr("commit message…")
+                        placeholderText: qsTr("Commit Message…")
                         font.family: theme.uiFont
                         font.pixelSize: 11
                     }
@@ -1012,7 +1012,7 @@ Rectangle {
                     Layout.fillWidth: true
                     spacing: 8
                     Text {
-                        text: qsTr("size")
+                        text: qsTr("Size")
                         font.family: theme.monoFont; font.pixelSize: 10
                         color: theme.tokens.textMuted
                     }
@@ -1040,8 +1040,8 @@ Rectangle {
                             border.color: theme.tokens.border
                         }
                         contentItem: Text {
-                            text: parent.checked ? qsTr("dark bg")
-                                                  : qsTr("light bg")
+                            text: parent.checked ? qsTr("Dark BG")
+                                                  : qsTr("Light BG")
                             color: parent.checked ? "#F5C25C" : "#16202B"
                             font.family: theme.monoFont; font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
@@ -1059,7 +1059,7 @@ Rectangle {
                             fonts.set_sample_custom(true)
                         panel.sample = text
                     }
-                    placeholderText: qsTr("type your own sample…")
+                    placeholderText: qsTr("Type Your Own Sample…")
                     font.family: theme.monoFont; font.pixelSize: 11
                     color: theme.tokens.text
                     background: Rectangle {
@@ -1075,8 +1075,8 @@ Rectangle {
                     spacing: 6
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("custom preview text — curated "
-                                   + "passages disabled")
+                        text: qsTr("Custom Preview Text — Curated "
+                                   + "Passages Disabled")
                         font.family: theme.monoFont
                         font.pixelSize: 9
                         color: theme.tokens.textMuted
@@ -1516,7 +1516,7 @@ Rectangle {
             }
             Text {
                 visible: pfType.currentIndex === 4
-                text: qsTr("choices (comma-separated)")
+                text: qsTr("Choices (Comma-Separated)")
                 font.family: theme.monoFont; font.pixelSize: 9
                 color: theme.tokens.textMuted
             }

@@ -65,7 +65,7 @@ Item {
             }
         }
         FgButton {
-            text: qsTr("attach")
+            text: qsTr("Attach")
             enabled: pickBox.currentIndex >= 0
             onClicked: {
                 var o = pickRow.opts[pickBox.currentIndex]
@@ -80,10 +80,10 @@ Item {
         spacing: 10
 
         SectionLabel { text: qsTr("Attach from the library") }
-        PickerRow { kindLabel: qsTr("icon"); kind: "icon"; opts: assetsRoot.iconOpts }
-        PickerRow { kindLabel: qsTr("font"); kind: "font"; opts: assetsRoot.fontOpts }
-        PickerRow { kindLabel: qsTr("snippet"); kind: "snippet"; opts: assetsRoot.snipOpts }
-        PickerRow { kindLabel: qsTr("palette"); kind: "palette"; opts: assetsRoot.palOpts }
+        PickerRow { kindLabel: qsTr("Icon"); kind: "icon"; opts: assetsRoot.iconOpts }
+        PickerRow { kindLabel: qsTr("Font"); kind: "font"; opts: assetsRoot.fontOpts }
+        PickerRow { kindLabel: qsTr("Snippet"); kind: "snippet"; opts: assetsRoot.snipOpts }
+        PickerRow { kindLabel: qsTr("Palette"); kind: "palette"; opts: assetsRoot.palOpts }
 
         SectionLabel { text: qsTr("Attached to this project") }
         ListView {

@@ -150,7 +150,7 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     verticalAlignment: Text.AlignVCenter
-                    text: qsTr("palette name…")
+                    text: qsTr("Palette Name…")
                     font.family: theme.uiFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted
@@ -181,7 +181,7 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     verticalAlignment: Text.AlignVCenter
-                    text: qsTr("tags (comma-separated)")
+                    text: qsTr("Tags (Comma-Separated)")
                     font.family: theme.uiFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted
@@ -217,7 +217,7 @@ Item {
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     verticalAlignment: Text.AlignVCenter
-                    text: qsTr("theme name…")
+                    text: qsTr("Theme Name…")
                     font.family: theme.uiFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted

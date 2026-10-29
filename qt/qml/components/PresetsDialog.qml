@@ -139,7 +139,7 @@ Dialog {
             TextField {
                 id: searchField
                 Layout.preferredWidth: 220
-                placeholderText: qsTr("filter entries…")
+                placeholderText: qsTr("Filter Entries…")
                 font.family: theme.uiFont
                 font.pixelSize: 11
                 color: theme.tokens.text
@@ -319,8 +319,8 @@ Dialog {
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: entryCard.modelData.busy
-                                          ? qsTr("cloning…")
-                                          : qsTr("remote — not downloaded")
+                                          ? qsTr("Cloning…")
+                                          : qsTr("Remote — Not Downloaded")
                                     font.family: theme.monoFont
                                     font.pixelSize: 9
                                     color: theme.tokens.textMuted

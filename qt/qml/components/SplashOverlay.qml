@@ -97,11 +97,11 @@ Item {
                 Layout.topMargin: 8
                 visible: splash.shown
                 text: splash.force
-                      ? qsTr("scanning /usr/share/icons/hicolor/48x48/…")
+                      ? qsTr("Scanning /usr/share/icons/hicolor/48x48/…")
                       : (library !== null && library.scanning
                          && library.scanPath !== ""
                          ? library.scanPath
-                         : qsTr("discovering asset folders…"))
+                         : qsTr("Discovering Asset Folders…"))
                 font.family: theme.monoFont
                 font.pixelSize: 10
                 color: theme.tokens.textMuted

@@ -243,12 +243,12 @@ def test_panel_multi_selection_summary(panel_ui):
 
     rows = _var(panel.property("selRows"))
     by_label = {r["l"]: r["v"] for r in rows}
-    assert by_label["items"] == "3"
-    assert by_label["size"] == "3.8 KB"
-    assert "png ×2" in by_label["formats"]
-    assert "svg ×1" in by_label["formats"]
-    assert by_label["pixels"] == "16–64 px"
-    assert "1 mono" in by_label["mode"]
+    assert by_label["Items"] == "3"
+    assert by_label["Size"] == "3.8 KB"
+    assert "png ×2" in by_label["Formats"]
+    assert "svg ×1" in by_label["Formats"]
+    assert by_label["Pixels"] == "16–64 px"
+    assert "1 mono" in by_label["Mode"]
 
     # header text carries the count; the export button names the package
     texts = [o.property("text") for o in _walk(panel)

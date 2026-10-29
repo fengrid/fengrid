@@ -57,7 +57,7 @@ Rectangle {
         anchors.centerIn: parent
         visible: box.capturing
         text: box.invalidHint !== "" ? box.invalidHint
-              : qsTr("press shortcut…")
+              : qsTr("Press Shortcut…")
         font.family: theme.uiFont
         font.pixelSize: 11
         font.italic: box.invalidHint === ""
@@ -108,7 +108,7 @@ Rectangle {
         if (!ctrl && !alt && !meta && !isFunctionKey) {
             // bare letters would hijack typing app-wide (the reason "/"
             // and friends gate on focus) — demand a real modifier
-            box.invalidHint = qsTr("needs Ctrl / Alt / Meta or F-key")
+            box.invalidHint = qsTr("Needs Ctrl / Alt / Meta or F-Key")
             return
         }
 

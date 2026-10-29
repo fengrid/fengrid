@@ -84,7 +84,7 @@ Item {
                 Layout.fillWidth: true
                 text: t().name || ""
                 onEditingFinished: terms.set_name(text)
-                placeholderText: qsTr("theme name")
+                placeholderText: qsTr("Theme Name")
                 font.family: theme.monoFont; font.pixelSize: 11
                 color: theme.tokens.text
                 background: Rectangle {
@@ -99,7 +99,7 @@ Item {
             Layout.fillWidth: true
             spacing: 8
             Text {
-                text: qsTr("derive from")
+                text: qsTr("Derive From")
                 font.family: theme.monoFont; font.pixelSize: 10
                 color: theme.tokens.textMuted
             }
@@ -128,7 +128,7 @@ Item {
             TextField {
                 id: dAcc; text: t().normal ? (t().normal.cyan || "") : ""
                 Layout.preferredWidth: 92
-                placeholderText: qsTr("accent")
+                placeholderText: qsTr("Accent")
                 font.family: theme.monoFont; font.pixelSize: 11
                 color: theme.tokens.text
                 background: Rectangle {
@@ -444,7 +444,7 @@ Item {
         id: termExportDialog
         fileMode: FileDialog.SaveFile
         nameFilters: fmtBox.currentText === "iterm2"
-                     ? [qsTr("iTerm2 colors (*.itermcolors)")]
+                     ? [qsTr("iTerm2 Colors (*.itermcolors)")]
                      : fmtBox.currentText === "windows"
                        ? [qsTr("Windows Terminal (*.json)")]
                        : [qsTr("Theme files (*)")]

@@ -100,7 +100,7 @@ Item {
                     continue
                 resultsModel.append({
                     group: qsTr("Databases"), title: r.label,
-                    sub: r.exists ? r.when : qsTr("missing"),
+                    sub: r.exists ? r.when : qsTr("Missing"),
                     kind: "db",
                     value: JSON.stringify({ path: r.path }) })
             }

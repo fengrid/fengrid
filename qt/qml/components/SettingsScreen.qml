@@ -323,7 +323,7 @@ Rectangle {
                         TextField {
                             id: queryField
                             Layout.fillWidth: true
-                            placeholderText: qsTr("search settings")
+                            placeholderText: qsTr("Search Settings")
                             background: null
                             color: theme.tokens.text
                             placeholderTextColor: theme.tokens.textMuted
@@ -1077,8 +1077,8 @@ Rectangle {
                                     }
                                     Text {
                                         text: mountRow.modelData.healthy
-                                              ? qsTr("mounted")
-                                              : qsTr("not mounted")
+                                              ? qsTr("Mounted")
+                                              : qsTr("Not Mounted")
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
                                         color: mountRow.modelData.healthy
@@ -1143,12 +1143,12 @@ Rectangle {
                             RowLayout {
                                 spacing: 6
                                 Chip {
-                                    label: "copy"
+                                    label: "Copy"
                                     on: dataio !== null && dataio.importOpts.mode === "copy"
                                     onPicked: settingsRoot.setImportOpt("mode", "copy")
                                 }
                                 Chip {
-                                    label: "link"
+                                    label: "Link"
                                     on: dataio !== null && dataio.importOpts.mode === "link"
                                     onPicked: settingsRoot.setImportOpt("mode", "link")
                                 }
@@ -1183,7 +1183,7 @@ Rectangle {
                             keys: "rename template naming pattern tokens guid random enumeration"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             FormInput {
-                                label: qsTr("template")
+                                label: qsTr("Template")
                                 text: dataio !== null ? (dataio.importOpts.template || "") : ""
                                 onTextChanged: settingsRoot.setImportOpt("template", text)
                             }
@@ -1199,13 +1199,13 @@ Rectangle {
                                 spacing: 8
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("prefix")
+                                    label: qsTr("Prefix")
                                     text: dataio !== null ? (dataio.importOpts.prefix || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("prefix", text)
                                 }
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("suffix")
+                                    label: qsTr("Suffix")
                                     text: dataio !== null ? (dataio.importOpts.suffix || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("suffix", text)
                                 }
@@ -1222,13 +1222,13 @@ Rectangle {
                                 spacing: 8
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("find")
+                                    label: qsTr("Find")
                                     text: dataio !== null ? (dataio.importOpts.find || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("find", text)
                                 }
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("replace")
+                                    label: qsTr("Replace")
                                     text: dataio !== null ? (dataio.importOpts.repl || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("repl", text)
                                 }
@@ -1260,14 +1260,14 @@ Rectangle {
                                     spacing: 8
                                     FormInput {
                                         Layout.preferredWidth: 90
-                                        label: qsTr("start")
+                                        label: qsTr("Start")
                                         text: dataio !== null
                                               ? String(dataio.importOpts.start || 1) : "1"
                                         onTextChanged: settingsRoot.setImportOpt("start", parseInt(text) || 1)
                                     }
                                     FormInput {
                                         Layout.preferredWidth: 90
-                                        label: qsTr("pad")
+                                        label: qsTr("Pad")
                                         text: dataio !== null
                                               ? String(dataio.importOpts.pad || 2) : "2"
                                         onTextChanged: settingsRoot.setImportOpt("pad", Math.max(0, parseInt(text) || 0))
@@ -1292,7 +1292,7 @@ Rectangle {
                                 }
                                 FormInput {
                                     Layout.preferredWidth: 90
-                                    label: qsTr("column")
+                                    label: qsTr("Column")
                                     text: settingsRoot.csvColumn
                                     onTextChanged: {
                                         settingsRoot.csvColumn = text
@@ -1362,7 +1362,7 @@ Rectangle {
                                 Text {
                                     text: settingsRoot.jobTotal > 0
                                           ? settingsRoot.jobDone + " / " + settingsRoot.jobTotal
-                                          : qsTr("working…")
+                                          : qsTr("Working…")
                                     font.family: theme.monoFont
                                     font.pixelSize: 10
                                     color: theme.tokens.textMuted
@@ -1385,7 +1385,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     FormInput {
                                         Layout.fillWidth: true
-                                        label: qsTr("path or remote spec")
+                                        label: qsTr("Path or Remote Spec")
                                         text: settingsRoot.addWatchPath
                                         onTextChanged: settingsRoot.addWatchPath = text
                                     }
@@ -1421,7 +1421,7 @@ Rectangle {
                                 RowLayout {
                                     spacing: 6
                                     Text {
-                                        text: qsTr("every")
+                                        text: qsTr("Every")
                                         font.family: theme.uiFont
                                         font.pixelSize: 11
                                         color: theme.tokens.textMuted
@@ -1472,7 +1472,7 @@ Rectangle {
                                             }
                                         }
                                         FormCheck {
-                                            checkLabel: qsTr("on")
+                                            checkLabel: qsTr("On")
                                             checked: modelData.enabled
                                             onToggled: dataio.watchToggle(modelData.id, checked)
                                         }
@@ -1770,7 +1770,7 @@ Rectangle {
                             keys: "tint color filter recolor mono paint hue photoshop filter overlay"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             FormInput {
-                                label: qsTr("hex (e.g. #39B8C4)")
+                                label: qsTr("Hex (e.g. #39B8C4)")
                                 text: dataio !== null ? (dataio.exportOpts.tint || "") : ""
                                 onTextChanged: settingsRoot.setExportOpt("tint", text)
                             }
@@ -1786,7 +1786,7 @@ Rectangle {
                                 spacing: 6
                                 Layout.fillWidth: true
                                 FormCheck {
-                                    checkLabel: qsTr("run a script on each exported file")
+                                    checkLabel: qsTr("Run a Script on Each Exported File")
                                     checked: dataio !== null
                                              && !!dataio.exportOpts.script_enabled
                                     onToggled: settingsRoot.setExportOpt("script_enabled", checked)
@@ -1795,7 +1795,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     visible: dataio !== null
                                              && !!dataio.exportOpts.script_enabled
-                                    label: qsTr("command (argv)")
+                                    label: qsTr("Command (argv)")
                                     text: dataio !== null ? (dataio.exportOpts.script || "") : ""
                                     onTextChanged: settingsRoot.setExportOpt("script", text)
                                 }
@@ -2023,7 +2023,7 @@ Rectangle {
                             keys: "auto backup quit exit automatic schedule safety"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             FormCheck {
-                                checkLabel: qsTr("back up when the app closes")
+                                checkLabel: qsTr("Back Up When the App Closes")
                                 checked: dataio !== null && dataio.autoBackup
                                 onToggled: dataio.setAutoBackup(checked)
                             }
@@ -2132,9 +2132,9 @@ Rectangle {
                                     Layout.fillWidth: true
                                     text: sc !== null && sc.gitAvailable()
                                           ? (sc.lfsAvailable()
-                                             ? qsTr("git + git-lfs detected")
-                                             : qsTr("git detected (git-lfs not found — large files commit directly)"))
-                                          : qsTr("git not installed — install it to enable version control")
+                                             ? qsTr("Git + Git-LFS Detected")
+                                             : qsTr("Git Detected (Git-LFS Not Found — Large Files Commit Directly)"))
+                                          : qsTr("Git Not Installed — Install It to Enable Version Control")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
                                     color: theme.tokens.textMuted
@@ -2155,7 +2155,7 @@ Rectangle {
                                     id: scTokenField
                                     Layout.fillWidth: true
                                     echoMode: TextInput.Password
-                                    placeholderText: qsTr("ghp_… / token")
+                                    placeholderText: qsTr("GHP_… / Token")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
                                 }
@@ -2426,7 +2426,7 @@ Rectangle {
                                    : updater.updateAvailable
                                      ? qsTr("Update available: %1")
                                            .arg(updater.latestVersion)
-                                     : qsTr("fengrid %1 — no newer release seen.")
+                                     : qsTr("Fengrid %1 — No Newer Release Seen.")
                                            .arg(appVersion)
                             keys: "release status version update check now open"
                             rowMatches: settingsRoot.matches(section, label, keys)
