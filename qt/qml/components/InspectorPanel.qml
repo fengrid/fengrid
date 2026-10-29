@@ -41,9 +41,27 @@ Rectangle {
         // back to the single view instead of an empty panel
         sel = (selectedIds.length > 1 && library !== null)
               ? library.selection_details(selectedIds) : null
-        fieldsModel = taxonomy !== null ? taxonomy.fields : []
+        // #105: per-asset field VALUES — single selection binds the
+        // detail payload's joined list (definition + this asset's
+        // value); multi-select binds the class definitions with empty
+        // editors and writes the value to every selected asset.
+        fieldsModel = (d && !multi) ? d.fields
+                      : (taxonomy !== null
+                         ? taxonomy.fields_for("icon") : [])
         linksModel = (taxonomy !== null && d && !multi)
                      ? taxonomy.links_for("icon", d.id) : []
+    }
+
+    // #105: single selection writes this asset's value; multi-select
+    // defines the field on EVERY selected asset of the class
+    function writeField(fieldId, value) {
+        if (taxonomy === null)
+            return
+        if (multi)
+            taxonomy.set_field_values_bulk(selectedIds, fieldId, value,
+                                           "icon")
+        else if (d)
+            taxonomy.set_field_value(d.id, fieldId, value, "icon")
     }
 
     // multi-select helpers
@@ -538,11 +556,9 @@ Rectangle {
         // gain a Generate button. "+ Field" defines a new global field.
         SectionHeader {
             text: qsTr("FIELDS")
-            visible: !panel.multi
         }
         Repeater {
             model: fieldsModel
-            visible: !panel.multi
             RowLayout {
                 id: fieldRow
                 required property var modelData
@@ -590,9 +606,8 @@ Rectangle {
                             color: theme.tokens.text
                             clip: true
                             text: fieldRow.modelData.value
-                            onEditingFinished: taxonomy !== null
-                                && taxonomy.set_field_value(
-                                    d.id, fieldRow.modelData.id, text)
+                            onEditingFinished: panel.writeField(
+                                fieldRow.modelData.id, text)
                         }
                     }
                 }
@@ -605,6 +620,15 @@ Rectangle {
                         font.family: theme.monoFont
                         font.pixelSize: 10
                         checked: fieldRow.modelData.value === "1"
+                        onClicked: panel.writeField(
+                            fieldRow.modelData.id, checked ? "1" : "0")
+                        contentItem: Text {
+                            text: qsTr("yes")
+                            font.family: theme.monoFont; font.pixelSize: 10
+                            color: theme.tokens.textMuted
+                            leftPadding: parent.indicator.width + 6
+                            verticalAlignment: Text.AlignVCenter
+                        }
                         onClicked: taxonomy !== null && taxonomy.set_field_value(
                             d.id, fieldRow.modelData.id, checked ? "1" : "0")
                     }
@@ -619,9 +643,8 @@ Rectangle {
                             return ch.indexOf(fieldRow.modelData.value)
                         }
                         onActivated: function (idx) {
-                            taxonomy !== null && taxonomy.set_field_value(
-                                d.id, fieldRow.modelData.id,
-                                model[idx])
+                            panel.writeField(fieldRow.modelData.id,
+                                             model[idx])
                         }
                         background: Rectangle {
                             radius: 5; color: theme.tokens.surface2
@@ -637,7 +660,10 @@ Rectangle {
                     }
                 }
                 IconButton {
+                    // id generation mints a per-asset sequence — single
+                    // selection only (#105)
                     visible: fieldRow.modelData.type === "id"
+                             && !panel.multi
                     icon_name: "zap"
                     icon_px: 11
                     implicitWidth: 22
@@ -810,6 +836,41 @@ Rectangle {
                     color: theme.tokens.textMuted
                 }
                 ComboBox {
+                    id: fKind
+                    Layout.fillWidth: true
+                    implicitHeight: 30
+                    textRole: "label"
+                    valueRole: "kind"
+                    // #105: a definition belongs to an asset class
+                    model: [
+                        { label: qsTr("Icons"), kind: "icon" },
+                        { label: qsTr("Fonts"), kind: "font" },
+                        { label: qsTr("Images"), kind: "image" },
+                        { label: qsTr("Palettes"), kind: "palette" },
+                        { label: qsTr("Snippets"), kind: "snippet" },
+                        { label: qsTr("Projects"), kind: "project" },
+                        { label: qsTr("All Asset Types"), kind: "" }
+                    ]
+                    background: Rectangle {
+                        radius: 6; color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: fKind.displayText
+                        font.family: theme.monoFont; font.pixelSize: 12
+                        color: theme.tokens.text
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 9
+                    }
+                }
+                Text {
+                    text: qsTr("type")
+                    font.family: theme.monoFont; font.pixelSize: 10
+                    font.letterSpacing: 0.8
+                    font.capitalization: Font.AllUppercase
+                    color: theme.tokens.textMuted
+                }
+                ComboBox {
                     id: fType
                     Layout.fillWidth: true
                     implicitHeight: 30
@@ -935,7 +996,8 @@ Rectangle {
                         opts.pad = parseInt(fPad.text) || 4
                     }
                     taxonomy.create_field(fName.text, fType.currentText,
-                                          JSON.stringify(opts))
+                                          JSON.stringify(opts),
+                                          fKind.currentValue || "")
                     fName.text = ""
                     fChoices.text = ""
                     fieldDialog.accept()
