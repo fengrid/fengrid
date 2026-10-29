@@ -715,7 +715,13 @@ Item {
                         width: 24; height: 24
                         contentItem: IconImage {
                             name: st.icon_name
-                            px: 11
+                            // #97: 16px is the legibility floor for
+                            // detailed glyphs (lock shackle) on a 24px
+                            // chip — 11px collapsed the padlock into
+                            // mush (measured: 28 partial-shade px vs 2
+                            // for an X at 14). Lucide's 24-grid needs
+                            // ≥16px for stroke-based detail.
+                            px: 16
                             tint: st.tint
                             anchors.centerIn: parent
                         }
