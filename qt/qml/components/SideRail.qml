@@ -292,9 +292,10 @@ Rectangle {
                     // the tinted glyph + underline carry the state (the
                     // 0.16-opacity wash read as a 3D-shaded chip)
 
-                    // accent glow underline for the active tab — layered
-                    // translucent fills, no MultiEffect (software-renderer
-                    // friendly)
+                    // accent glow underline for the active tab — realistic
+                    // light emission with smooth radial falloff via Canvas
+                    // (software-renderer friendly, no GraphicalEffects /
+                    // MultiEffect dependency)
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.bottom: parent.bottom
@@ -305,13 +306,52 @@ Rectangle {
                         opacity: tab.checked ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: 160 } }
                         color: tab.accent
-                        Rectangle {
+                        // #96 round 3: realistic glow — the flat halo
+                        // (round 1) and the 3-step rings (round 2) both
+                        // showed geometric boundaries that broke the
+                        // light-emission illusion. A Canvas-drawn radial
+                        // gradient provides continuous falloff from
+                        // bright at the line to fully transparent, the
+                        // way a real indicator light diffuses.
+                        Canvas {
+                            id: glowCanvas
                             anchors.centerIn: parent
-                            width: parent.width + 12
-                            height: parent.height + 8
-                            radius: 6
-                            color: tab.accent
-                            opacity: 0.25
+                            width: parent.width + 28
+                            height: parent.height + 28
+
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                var cx = width / 2
+                                var cy = height / 2
+                                var r = Math.max(width, height) / 2
+                                var acc = tab.accent
+                                var rgb = Math.round(acc.r * 255) + "," +
+                                          Math.round(acc.g * 255) + "," +
+                                          Math.round(acc.b * 255)
+                                var g = ctx.createRadialGradient(
+                                    cx, cy, 0, cx, cy, r)
+                                g.addColorStop(0.0,
+                                    "rgba(" + rgb + ", 0.42)")
+                                g.addColorStop(0.2,
+                                    "rgba(" + rgb + ", 0.16)")
+                                g.addColorStop(0.5,
+                                    "rgba(" + rgb + ", 0.06)")
+                                g.addColorStop(1.0,
+                                    "rgba(" + rgb + ", 0)")
+                                ctx.fillStyle = g
+                                ctx.fillRect(0, 0, width, height)
+                            }
+
+                            Component.onCompleted: requestPaint()
+                            onWidthChanged: requestPaint()
+                            onHeightChanged: requestPaint()
+                            Connections {
+                                target: tab
+                                function onAccentChanged() {
+                                    glowCanvas.requestPaint()
+                                }
+                            }
                         }
                     }
                 }
