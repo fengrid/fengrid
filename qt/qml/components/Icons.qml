@@ -47,7 +47,7 @@ QtObject {
         "zap": "<path d='M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z' />"
     })
 
-    function url(name, color, fill) {
+    function url(name, color, fill, px, dpr) {
         var body = _paths[name] || "";
         // 1.25px hairline stroke on the 24px Lucide grid — the
         // technical, understated weight. The viewBox is padded to 28
@@ -55,11 +55,32 @@ QtObject {
         // the inset a "14px" icon drew ~11.6px of ink next to 12px
         // text (cap-height ~8.7px) and read as oversized. With the
         // 28-box, ink = 0.71 x px — the optical size matches the text
-        // beside it, Hermes-style. sourceSize is 2x in IconImage so
-        // every glyph stays crisp on any display
+        // beside it, Hermes-style.
+        //
+        // Crisp rasterization at ANY display scale (#89): the raster
+        // is 1:1 with device pixels (IconImage sets sourceSize =
+        // px*dpr), so the only remaining fuzz source is the stroke
+        // itself. A stroke of k = round(1.25*px*dpr/24) WHOLE device
+        // pixels — the closest integer to the approved 1.25px/24-box
+        // weight — never resamples. The viewBox is then snapped so
+        // the stroke center lands at j + k/2 device pixels: axis-
+        // aligned strokes cover whole pixel columns at ~100% instead
+        // of straddling two at ~50% each (the measured 0.67/0.67
+        // "fuzzy plus" pair on 125%-200% scaled desktops). The 1.46
+        // unit floor is dropped: it produced non-integer strokes at
+        // 24px tiles and re-introduced the exact fuzz it guarded
+        // against. qt/tests/test_icon_raster.py pins the crispness.
+        var P = px || 24;
+        var D = dpr || 1;
+        var R = Math.round(P * D);              // raster size, device px
+        var k = Math.max(1, Math.round(1.25 * P * D / 24));  // stroke, device px
+        var units = k * 28 / R;
+        var delta = ((k / 2 - R / 2) % 1 + 1) % 1;
+        if (delta > 0.5) delta -= 1;
+        var x0 = -2 - delta * (28 / R);
         var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'" +
-                  " viewBox='-2 -2 28 28' fill='" + (fill || "none") + "' stroke='" + color + "'" +
-                  " stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'>" +
+                  " viewBox='" + x0 + " " + x0 + " 28 28' fill='" + (fill || "none") + "' stroke='" + color + "'" +
+                  " stroke-width='" + units + "' stroke-linecap='round' stroke-linejoin='round'>" +
                   body + "</svg>";
         return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
     }

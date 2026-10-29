@@ -123,10 +123,10 @@ Item {
                     anchors.margins: 5
                     width: 13
                     height: 13
-                    sourceSize.width: 26
-                    sourceSize.height: 26
+                    sourceSize.width: 13
+                    sourceSize.height: 13
                     source: Icons.url("star", theme.tokens.litPane,
-                                      theme.tokens.litPane)
+                                      theme.tokens.litPane, 13)
                 }
                 Text {
                     id: cardLabel
