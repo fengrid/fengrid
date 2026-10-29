@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS asset_field (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     name    TEXT NOT NULL UNIQUE,
     type    TEXT NOT NULL,                  -- text|number|bool|date|select|id
+    kind    TEXT,                           -- NULL = every asset class (#105)
     options TEXT NOT NULL DEFAULT '',       -- JSON: select choices / id prefix+pad
     created REAL NOT NULL
 );
@@ -329,7 +330,17 @@ def _migrate(con: sqlite3.Connection) -> None:
     _migrate_grid_indexes(con)
     _migrate_source_index(con)
     _migrate_prune_sandbox_sources(con)
+    _migrate_field_kind(con)
     _migrate_fts_trigger_v2(con)
+
+    # #105: custom fields must be definable per asset class — the column
+    # is missing on pre-#105 databases; NULL means "every class".
+def _migrate_field_kind(con: sqlite3.Connection) -> None:
+    try:
+        con.execute("ALTER TABLE asset_field ADD COLUMN kind TEXT")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e).lower():
+            raise
 
 
 def _migrate_prune_sandbox_sources(con: sqlite3.Connection) -> None:

@@ -332,7 +332,7 @@ Item {
                     if (!hovered || taxonomy === null)
                         return
                     var out = []
-                    var all = taxonomy.fields
+                    var all = taxonomy.fields_for("icon")
                     for (var i = 0; i < all.length; i++)
                         if (all[i].type === "id")
                             out.push(all[i])

@@ -225,11 +225,24 @@ def _smart_icon_ids(con: sqlite3.Connection, crit: dict,
 
 FIELD_TYPES = ("text", "number", "bool", "date", "select", "id")
 
+# #105: field definitions are scoped per asset class. NULL kind = the
+# field applies to every class (back-compat with pre-#105 definitions).
+FIELD_KINDS = ("icon", "font", "image", "snippet", "palette", "project")
 
-def list_fields(con: sqlite3.Connection) -> list[dict]:
-    rows = con.execute(
-        "SELECT id, name, type, options, created FROM asset_field"
-        " ORDER BY name COLLATE NOCASE").fetchall()
+
+def list_fields(con: sqlite3.Connection,
+                kind: str | None = None) -> list[dict]:
+    """Field definitions, optionally scoped to one asset class. A
+    definition with kind IS NULL applies to every class (#105)."""
+    if kind is not None:
+        rows = con.execute(
+            "SELECT id, name, type, kind, options, created FROM asset_field"
+            " WHERE kind IS NULL OR kind = ?"
+            " ORDER BY name COLLATE NOCASE", (kind,)).fetchall()
+    else:
+        rows = con.execute(
+            "SELECT id, name, type, kind, options, created FROM asset_field"
+            " ORDER BY name COLLATE NOCASE").fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -242,16 +255,19 @@ def list_fields(con: sqlite3.Connection) -> list[dict]:
 
 
 def create_field(con: sqlite3.Connection, name: str, ftype: str,
-                 options: dict | None = None) -> int:
+                 options: dict | None = None,
+                 kind: str | None = None) -> int:
     if ftype not in FIELD_TYPES:
         raise ValueError(f"unknown field type: {ftype}")
+    if kind is not None and kind not in FIELD_KINDS:
+        raise ValueError(f"unknown field class: {kind}")
     name = (name or "").strip()
     if not name:
         raise ValueError("field needs a name")
     cur = con.execute(
-        "INSERT INTO asset_field(name, type, options, created)"
-        " VALUES (?, ?, ?, ?)", (name, ftype, json.dumps(options or {}),
-                                 time.time()))
+        "INSERT INTO asset_field(name, type, kind, options, created)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (name, ftype, kind, json.dumps(options or {}), time.time()))
     con.commit()
     return int(cur.lastrowid or 0)
 
@@ -325,9 +341,13 @@ def set_field_value(con: sqlite3.Connection, item_id: int, field_id: int,
                     value: str, kind: str = "icon") -> None:
     if not _item_exists(con, kind, item_id):
         raise ValueError(f"unknown {kind}: {item_id}")
-    if con.execute("SELECT 1 FROM asset_field WHERE id = ?",
-                   (field_id,)).fetchone() is None:
+    row = con.execute("SELECT kind FROM asset_field WHERE id = ?",
+                      (field_id,)).fetchone()
+    if row is None:
         raise ValueError(f"unknown field: {field_id}")
+    if row["kind"] is not None and row["kind"] != kind:
+        raise ValueError(
+            f"field is scoped to {row['kind']}, not {kind}")
     con.execute(
         "INSERT INTO item_field_value(item_id, item_kind, field_id, value)"
         " VALUES (?, ?, ?, ?) ON CONFLICT(item_id, item_kind, field_id)"
@@ -336,15 +356,48 @@ def set_field_value(con: sqlite3.Connection, item_id: int, field_id: int,
     con.commit()
 
 
+def set_field_values_bulk(con: sqlite3.Connection, item_ids,
+                          field_id: int, value: str,
+                          kind: str = "icon") -> int:
+    """Set one field on many items of the same class (#105): the
+    multi-select inspector defines/edits a field for every selected
+    asset at once. Unknown ids are skipped; returns the count written."""
+    row = con.execute("SELECT kind FROM asset_field WHERE id = ?",
+                      (field_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"unknown field: {field_id}")
+    if row["kind"] is not None and row["kind"] != kind:
+        raise ValueError(
+            f"field is scoped to {row['kind']}, not {kind}")
+    n = 0
+    for item_id in item_ids or []:
+        try:
+            iid = int(item_id)
+        except (TypeError, ValueError):
+            continue
+        if not _item_exists(con, kind, iid):
+            continue
+        con.execute(
+            "INSERT INTO item_field_value(item_id, item_kind, field_id,"
+            " value) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT(item_id, item_kind, field_id)"
+            " DO UPDATE SET value = excluded.value",
+            (iid, kind, field_id, value))
+        n += 1
+    con.commit()
+    return n
+
+
 def asset_field_values(con: sqlite3.Connection, item_id: int,
                        kind: str = "icon") -> list[dict]:
     """Every defined field joined with this item's value (missing = '')."""
     rows = con.execute(
-        "SELECT f.id, f.name, f.type, f.options,"
+        "SELECT f.id, f.name, f.type, f.kind, f.options,"
         " COALESCE(v.value, '') AS value"
         " FROM asset_field f LEFT JOIN item_field_value v"
         " ON v.field_id = f.id AND v.item_id = ? AND v.item_kind = ?"
-        " ORDER BY f.name COLLATE NOCASE", (item_id, kind)).fetchall()
+        " WHERE f.kind IS NULL OR f.kind = ?"
+        " ORDER BY f.name COLLATE NOCASE", (item_id, kind, kind)).fetchall()
     out = []
     for r in rows:
         d = dict(r)

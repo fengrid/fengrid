@@ -73,6 +73,11 @@ class Taxonomy(QObject):
     def fields(self) -> list:
         return self._fields
 
+    @Slot(str, result="QVariantList")
+    def fields_for(self, kind: str) -> list:
+        """Definitions scoped to one asset class (NULL = all classes)."""
+        return core_tax.list_fields(self._con, kind or None)
+
     # ------------------------------------------------------ saved libraries
     @Slot(str, str, bool)
     def create_library_view(self, name: str, tags: str,
@@ -147,11 +152,13 @@ class Taxonomy(QObject):
         return core_tax.smart_asset_ids(self._con, item_kind, crit)
 
     # -------------------------------------------------------- custom fields
-    @Slot(str, str, str, result=int)
-    def create_field(self, name: str, ftype: str, options_json: str) -> int:
+    @Slot(str, str, str, str, result=int)
+    def create_field(self, name: str, ftype: str, options_json: str,
+                     kind: str = "") -> int:
         try:
             opts = json.loads(options_json or "{}")
-            fid = core_tax.create_field(self._con, name, ftype, opts)
+            fid = core_tax.create_field(self._con, name, ftype, opts,
+                                        kind or None)
         except (ValueError, json.JSONDecodeError) as e:
             self.message.emit(str(e))
             return -1
@@ -166,6 +173,17 @@ class Taxonomy(QObject):
         self._refresh()
         self.fieldsChanged.emit()
         self.message.emit("Field deleted")
+
+    @Slot("QVariantList", int, str, str)
+    def set_field_values_bulk(self, item_ids, field_id: int,
+                              value: str, kind: str = "icon") -> None:
+        try:
+            core_tax.set_field_values_bulk(self._con, item_ids, field_id,
+                                           value, kind)
+        except ValueError as e:
+            self.message.emit(str(e))
+            return
+        self.fieldsChanged.emit()
 
     @Slot(int, int, str, str)
     def set_field_value(self, item_id: int, field_id: int,
