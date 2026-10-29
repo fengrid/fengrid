@@ -135,13 +135,18 @@ Rectangle {
                     wrapMode: Text.Wrap
                 }
                 // heads-up: the initial ingest is the one heavy pass —
-                // set expectations before it starts rather than after
+                // set expectations before it starts rather than after.
+                // #92: a Rectangle never derives height from anchored
+                // children — without implicitHeight the box was 0 tall
+                // and the wrapped text drew straight through it
                 Rectangle {
                     Layout.fillWidth: true
                     radius: 6
                     color: theme.tokens.surface
                     border.color: theme.tokens.litPane
+                    implicitHeight: warnRow.implicitHeight + 16
                     RowLayout {
+                        id: warnRow
                         anchors.fill: parent
                         anchors.leftMargin: 12
                         anchors.rightMargin: 12
