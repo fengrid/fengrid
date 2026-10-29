@@ -288,14 +288,9 @@ Rectangle {
                     radius: 7
                     color: "transparent"
 
-                    // hover/active wash in the pane's accent
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 7
-                        color: tab.accent
-                        opacity: tab.checked ? 0.16 : (tab.hovered ? 0.10 : 0)
-                        Behavior on opacity { NumberAnimation { duration: 120 } }
-                    }
+                    // #96: NO accent wash box behind the active tab —
+                    // the tinted glyph + underline carry the state (the
+                    // 0.16-opacity wash read as a 3D-shaded chip)
 
                     // accent glow underline for the active tab — layered
                     // translucent fills, no MultiEffect (software-renderer

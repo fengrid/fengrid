@@ -371,7 +371,12 @@ Rectangle {
                             }
                             Component {
                                 id: boolEd
-                                CheckBox {
+                                // #102: shared compact checkbox (raw
+                                // default-style CheckBox was ~26px next
+                                // to 10px row text)
+                                FormCheck {
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
                                     checked:
                                         propRow.modelData.value === "1"
                                     onClicked: taxonomy !== null

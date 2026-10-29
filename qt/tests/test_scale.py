@@ -419,3 +419,57 @@ def test_identify_workers_env_knob(monkeypatch):
     assert indexer.identify_workers() == 4
     monkeypatch.setenv("FENGRID_SCAN_WORKERS", "-3")
     assert indexer.identify_workers() == 1
+
+
+# ------------------------------------------------- palette-bytes warning
+def test_palette_bytes_transparency_no_warning(tmp_path):
+    """#95: P-mode PNGs whose transparency is palette-BYTE indices used
+    to emit PIL's 'should be converted to RGBA' UserWarning on every
+    identify (and on jpeg/pdf/bmp/gif export). working_rgba resolves
+    them silently, per PIL's own advice."""
+    import io as _io
+    import warnings
+    from PIL import Image
+    from fengrid.core import export as core_export
+
+    img = Image.new("P", (8, 8))
+    img.putpalette([i % 256 for i in range(768)])
+    px = img.load()
+    for y in range(8):
+        for x in range(8):
+            px[x, y] = (x + y) % 4
+    img.info["transparency"] = bytes([0, 0, 255, 255])
+    path = tmp_path / "pal.png"
+    img.save(path, format="PNG")
+
+    # the round-trip must keep BYTE transparency (the warning condition)
+    im = Image.open(path)
+    assert im.mode == "P"
+    assert isinstance(im.info.get("transparency"), bytes)
+
+    # fixture sanity: a DIRECT convert warns (the class is real)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        im.convert("RGB")
+    assert any("converted to RGBA" in str(x.message) for x in w)
+
+    # the helper: no warning, RGBA result
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        rgba = core_export.working_rgba(im)
+    assert rgba.mode == "RGBA"
+    assert not [x for x in w if "converted to RGBA" in str(x.message)]
+
+    # identify on the same file: no warning, metadata intact
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        info = indexer.identify(str(path))
+    assert info["width"] == 8 and info["colorspace"] == "P"
+    assert not [x for x in w if "converted to RGBA" in str(x.message)]
+
+    # export through _convert_for: no warning
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        out = core_export.export(str(path), tmp_path, "pal", "jpeg", 8)
+    assert out.exists()
+    assert not [x for x in w if "converted to RGBA" in str(x.message)]
