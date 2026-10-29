@@ -82,7 +82,22 @@ def export(src: str | Path, dest_dir: str | Path, stem: str, fmt: str,
     return out
 
 
+def working_rgba(im: Image.Image) -> Image.Image:
+    """Resolve palette-BYTE transparency the way PIL advises (#95).
+
+    A P-mode image whose transparency is expressed as palette-byte
+    indices warns — and composites wrong — on any direct convert() to a
+    non-RGBA mode (identify's color counting, jpeg/pdf/bmp/gif export).
+    Going through RGBA first resolves the palette transparency into real
+    alpha; every later conversion is then warning-free and correct.
+    """
+    if im.mode == "P" and isinstance(im.info.get("transparency"), bytes):
+        return im.convert("RGBA")
+    return im
+
+
 def _convert_for(fmt: str, im: Image.Image) -> Image.Image:
+    im = working_rgba(im)
     if fmt in ("jpeg", "pdf", "bmp"):
         return im.convert("RGB")
     if fmt == "gif":
