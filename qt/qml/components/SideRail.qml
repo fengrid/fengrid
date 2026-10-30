@@ -301,8 +301,8 @@ Rectangle {
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: -1
                         width: parent.width - 12
-                        height: 2.5
-                        radius: 1.25
+                        height: 1.25
+                        radius: 0.75
                         opacity: tab.checked ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: 160 } }
                         color: tab.accent
@@ -323,7 +323,7 @@ Rectangle {
                                 var ctx = getContext("2d")
                                 ctx.clearRect(0, 0, width, height)
                                 var cx = width / 2
-                                var cy = height / 1
+                                var cy = height / 2
                                 var r = Math.max(width, height) / 2
                                 var acc = tab.accent
                                 var rgb = Math.round(acc.r * 255) + "," +
