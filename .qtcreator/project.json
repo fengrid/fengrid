@@ -1,0 +1,33 @@
+{
+    "$schema": "https://download.qt.io/official_releases/qtcreator/latest/installer_source/jsonschemas/project.json",
+    "files": {
+        "include": [
+            "qt/src/fengrid/**/*.py",
+            "qt/qml/**/*.qml",
+            "qt/qml/**/*.js",
+            "qt/pyproject.toml",
+            "qt/README.md",
+            "api/**/*.py",
+            "api/**/*.yaml",
+            "api/**/*.json"
+        ],
+        "exclude": [
+            ".qtcreator/project.json.user",
+            ".venv/",
+            "qt/build/",
+            "qt/dist/",
+            "__pycache__/",
+            "*.pyc",
+            "*.spec"
+        ]
+    },
+    "name": "fengrid",
+    "projectFilePath": ".qtcreator/project.json",
+    "settings": {
+        "qtCreator": {
+            "projectExplorer": {
+                "pythonInterpreter": "/home/native/dev/projects/fengrid/qt/.venv/bin/python"
+            }
+        }
+    }
+}
