@@ -323,7 +323,7 @@ Rectangle {
                                 var ctx = getContext("2d")
                                 ctx.clearRect(0, 0, width, height)
                                 var cx = width / 2
-                                var cy = height / 2
+                                var cy = height / 1
                                 var r = Math.max(width, height) / 2
                                 var acc = tab.accent
                                 var rgb = Math.round(acc.r * 255) + "," +
@@ -359,7 +359,7 @@ Rectangle {
                 contentItem: Item {
                     IconImage {
                         name: tab.iconName
-                        px: 15
+                        px: 16
                         anchors.centerIn: parent
                         tint: tab.checked ? tab.accent
                               : theme.tokens.textMuted

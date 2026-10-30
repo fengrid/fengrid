@@ -35,3 +35,6 @@ qt/build/
 
 # pytest cache
 .pytest_cache/
+list.txt
+meta-state.tsv.new
+working.md~
