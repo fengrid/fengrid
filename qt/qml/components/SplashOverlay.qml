@@ -282,18 +282,6 @@ Item {
                     }
                 }
             }
-
-            Text {
-                Layout.fillWidth: true
-                Layout.topMargin: 14
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Assets appear as they are indexed — you can start browsing now. Next launch is instant.")
-                font.family: theme.uiFont
-                font.pixelSize: 11
-                color: theme.tokens.textMuted
-                wrapMode: Text.Wrap
-                horizontalAlignment: Text.AlignHCenter
-            }
         }
     }
 }

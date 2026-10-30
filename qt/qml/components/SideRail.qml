@@ -317,7 +317,7 @@ Rectangle {
                             id: glowCanvas
                             anchors.centerIn: parent
                             width: parent.width + 28
-                            height: parent.height + 28
+                            height: parent.height + 14
 
                             onPaint: {
                                 var ctx = getContext("2d")
