@@ -250,8 +250,14 @@ Dialog {
                 text: cssRoot.dest
                 onEditingFinished: cssRoot.dest = text
             }
+            // #113: pin the trailing button to the row bottom —
+            // FormInput stacks label-above-field (~47px), so the
+            // default VCenter alignment floated Browse beside the
+            // LABEL, 8px above the field (both controls are 30px tall,
+            // so bottom-flush alignment makes the tops flush too)
             FgButton {
                 text: qsTr("Browse…")
+                Layout.alignment: Qt.AlignBottom
                 onClicked: cssDestLoader.open()
             }
         }
