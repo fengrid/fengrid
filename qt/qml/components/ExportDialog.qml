@@ -118,8 +118,12 @@ Dialog {
                 text: exportRoot.dest
                 onEditingFinished: exportRoot.dest = text
             }
+            // #113: AlignBottom, not the default VCenter — the empty
+            // FormInput label still occupies a line, so VCenter floated
+            // Browse beside it (see FontsCssDialog for the full story)
             FgButton {
                 text: qsTr("Browse…")
+                Layout.alignment: Qt.AlignBottom
                 onClicked: exportDestLoader.open()
             }
         }

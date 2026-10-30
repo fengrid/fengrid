@@ -82,8 +82,11 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 FormInput { id: cfgCtx; Layout.fillWidth: true }
+                // #113: AlignBottom — VCenter floated Browse beside the
+                // FormInput's (empty) label line, above the field
                 FgButton {
                     text: qsTr("Browse…")
+                    Layout.alignment: Qt.AlignBottom
                     onClicked: ctxDialog.open()
                 }
             }

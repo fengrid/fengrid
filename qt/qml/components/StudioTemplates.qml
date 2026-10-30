@@ -72,8 +72,11 @@ Item {
                 Layout.preferredWidth: 150
                 label: qsTr("New Variable")
             }
+            // #113: AlignBottom — VCenter floated Add beside the
+            // FormInput's label line, above the field
             FgButton {
                 text: qsTr("Add")
+                Layout.alignment: Qt.AlignBottom
                 enabled: newName.text.trim() !== ""
                 onClicked: {
                     tplRoot.st.setVar(newName.text.trim(), "")
