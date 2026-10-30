@@ -301,7 +301,7 @@ Rectangle {
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: -1
                         width: parent.width - 12
-                        height: 1.25
+                        height: 1.5
                         radius: 0.75
                         opacity: tab.checked ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: 160 } }
@@ -317,14 +317,14 @@ Rectangle {
                             id: glowCanvas
                             anchors.centerIn: parent
                             width: parent.width + 28
-                            height: parent.height + 14
+                            height: parent.height + 28
 
                             onPaint: {
                                 var ctx = getContext("2d")
                                 ctx.clearRect(0, 0, width, height)
                                 var cx = width / 2
                                 var cy = height / 2
-                                var r = Math.max(width, height) / 2
+                                var r = Math.max(width, height) / 2.5
                                 var acc = tab.accent
                                 var rgb = Math.round(acc.r * 255) + "," +
                                           Math.round(acc.g * 255) + "," +
