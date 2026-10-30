@@ -470,10 +470,8 @@ Item {
                 anchors.rightMargin: 6
                 icon_name: "trash"
                 icon_px: 12
-                // #97: same stroke-core floor as the swatch chips — the
-                // delete glyph renders at 12 device px (hairline = 1-px
-                // stroke, no solid core: 17 of 144 solid, 27.8% soft)
-                icon_minStroke: 2
+                // stroke uses the app-wide hairline cadence (no
+                // icon_minStroke opt-in) to match every other glyph
                 implicitWidth: 22
                 implicitHeight: 22
                 ToolTip.text: qsTr("Delete palette")
@@ -716,26 +714,16 @@ Item {
                         id: st
                         property string icon_name
                         property color tint: "#FFFFFF"
-                        width: 24; height: 24
+                        width: 20; height: 20
                         contentItem: IconImage {
                             name: st.icon_name
-                            // #97 round 2: the chip glyph renders at the
-                            // pane's default icon size (16px = IconButton
-                            // icon_px), and opts into a 2-device-px
-                            // STROKE floor. Round 1 declared the SVG's
-                            // raster size and moved 11->16px — measured
-                            // no pixel delta (soft-edge 25.4% either way:
-                            // the 1.25 hairline rounds to a 1-px stroke,
-                            // and a 1-px ARC (shackle, X crossing) has
-                            // no solid core — 6 of 256 pixels fully inked).
-                            // minStroke: 2 gives the stroke a solid core
-                            // (58 solid px, 19.5% soft) so the glyph reads
-                            // as a shape, not a halo, at any icon-size
-                            // setting — dpr>=2 already lands at 2px
-                            // through the hairline cadence and is
-                            // unchanged.
+                            // #97: glyph stays at its native 16px render
+                            // (no scaling either way); the chip shrinks
+                            // to 20px — 2px breathing room per side.
+                            // Stroke uses the app-wide hairline cadence
+                            // (no minStroke opt-in) to match every other
+                            // interface glyph.
                             px: 16
-                            minStroke: 2
                             tint: st.tint
                             anchors.centerIn: parent
                         }

@@ -99,15 +99,15 @@ def _window_move(win, scene_pos):
 
 
 def _sw_tool_buttons(root):
-    """The 24x24 swatch tool buttons (lock / remove), scene-sorted."""
+    """The 20x20 swatch tool buttons (lock / remove), scene-sorted."""
     hits = []
     stack = [root]
     while stack:
         o = stack.pop()
         cls = o.metaObject().className()
         # inline-component buttons report as "SwTool_QMLTYPE_n", not Button
-        if cls.startswith("SwTool") and abs(o.width() - 24) < 0.5 \
-                and abs(o.height() - 24) < 0.5:
+        if cls.startswith("SwTool") and abs(o.width() - 20) < 0.5 \
+                and abs(o.height() - 20) < 0.5:
             hits.append(o)
         stack.extend(o.childItems())
     hits.sort(key=lambda b: (b.mapToScene(QPointF(0, 0)).y(),
