@@ -65,10 +65,14 @@ CREATE TABLE IF NOT EXISTS asset_tag (
 );
 CREATE TABLE IF NOT EXISTS collection (
     id   INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    kind TEXT,                          -- asset type this collection holds
+                                        -- (#141: single-type collections;
+                                        --  NULL = legacy/untyped)
     query TEXT,
     guid TEXT,
-    slug TEXT
+    slug TEXT,
+    UNIQUE(name, kind)
 );
 CREATE TABLE IF NOT EXISTS collection_item (
     collection_id INTEGER NOT NULL REFERENCES collection(id) ON DELETE CASCADE,
@@ -326,6 +330,7 @@ def _migrate(con: sqlite3.Connection) -> None:
     con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
     _migrate_guid_slug(con)
     _migrate_collections(con)
+    _migrate_collection_kinds(con)
     _migrate_taxonomy_items(con)
     _migrate_grid_indexes(con)
     _migrate_source_index(con)
@@ -642,17 +647,98 @@ def _migrate_collections(con: sqlite3.Connection) -> None:
     con.commit()
 
 
+def _migrate_collection_kinds(con: sqlite3.Connection) -> None:
+    """#141: collections become asset-TYPE specific. Adds the kind
+    column, backfills it from existing membership (a collection whose
+    refs are all one kind adopts that kind; mixed/empty stay NULL =
+    untyped legacy), and relaxes name uniqueness to per-kind so the
+    default 'Downloaded' collection can exist once per asset type.
+    sqlite cannot drop the implicit UNIQUE(name) index, so the table is
+    rebuilt in place when an old-schema DB is opened."""
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(collection)")}
+    if "kind" not in cols:
+        con.execute("ALTER TABLE collection ADD COLUMN kind TEXT")
+    uniques = [
+        [c["name"] for c in con.execute(f"PRAGMA index_info({r['name']})")]
+        for r in con.execute("PRAGMA index_list(collection)")
+        if r["unique"] and r["origin"] == "u"
+    ]
+    if not any(cols_set == ["name", "kind"] for cols_set in uniques):
+        # old schema: UNIQUE(name) — rebuild with UNIQUE(name, kind).
+        # FK references to collection(id) keep working: the new table is
+        # created under a temp name, populated, the old one dropped
+        # (foreign_keys off), and the temp renamed onto the original
+        # name — ids are copied verbatim, so collection_ref rows and
+        # the self-referencing parent_id all stay valid.
+        con.execute("PRAGMA foreign_keys=OFF")
+        con.execute("BEGIN")
+        con.execute("""
+            CREATE TABLE collection_new (
+                id   INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT,
+                query TEXT,
+                guid TEXT,
+                slug TEXT,
+                parent_id INTEGER REFERENCES collection_new(id)
+                          ON DELETE CASCADE,
+                tags TEXT,
+                UNIQUE(name, kind)
+            )""")
+        con.execute(
+            "INSERT INTO collection_new(id, name, kind, query, guid,"
+            " slug, parent_id, tags)"
+            " SELECT id, name, kind, query, guid, slug, parent_id, tags"
+            " FROM collection")
+        con.execute("DROP TABLE collection")
+        con.execute("ALTER TABLE collection_new RENAME TO collection")
+        con.commit()
+        con.execute("PRAGMA foreign_keys=ON")
+    # backfill: single-kind collections adopt their type
+    for row in con.execute("SELECT id FROM collection").fetchall():
+        kinds = [r[0] for r in con.execute(
+            "SELECT DISTINCT item_kind FROM collection_ref"
+            " WHERE collection_id = ?", (row["id"],))]
+        if len(kinds) == 1:
+            con.execute("UPDATE collection SET kind = ? WHERE id = ?"
+                        " AND kind IS NULL", (kinds[0], row["id"]))
+    # heal duplicate NULL-kind rows (NULLs are distinct under
+    # UNIQUE(name, kind): a pre-fix ensure_defaults stacked one
+    # 'Starred Assets' per launch). Keep the oldest of each group.
+    con.execute(
+        "DELETE FROM collection_ref WHERE collection_id IN ("
+        "  SELECT id FROM ("
+        "    SELECT c.id FROM collection c JOIN collection m"
+        "      ON m.name = c.name AND m.kind IS c.kind"
+        "     WHERE c.id > m.id))")
+    con.execute(
+        "DELETE FROM collection WHERE id IN ("
+        "  SELECT id FROM ("
+        "    SELECT c.id FROM collection c JOIN collection m"
+        "      ON m.name = c.name AND m.kind IS c.kind"
+        "     WHERE c.id > m.id))")
+    con.commit()
+
+
 STARRED_TAG = "starred"
 STARRED_COLLECTION = "Starred Assets"
 
 
 def ensure_defaults(con: sqlite3.Connection) -> None:
     """The 'starred' tag and 'Starred Assets' collection exist from the
-    first launch (idempotent — INSERT OR IGNORE on the unique names)."""
+    first launch. Idempotent — but note kind-aware matching: under
+    UNIQUE(name, kind) a NULL kind is DISTINCT from itself in sqlite's
+    unique index, so INSERT OR IGNORE alone would stack a new copy on
+    every launch (#141)."""
     con.execute("INSERT OR IGNORE INTO tag(name) VALUES (?)", (STARRED_TAG,))
-    con.execute(
-        "INSERT OR IGNORE INTO collection(name, guid) VALUES (?, ?)",
-        (STARRED_COLLECTION, new_guid()))
+    row = con.execute(
+        "SELECT id FROM collection WHERE name = ? AND kind IS NULL",
+        (STARRED_COLLECTION,)).fetchone()
+    if row is None:
+        con.execute(
+            "INSERT INTO collection(name, kind, guid) VALUES (?, NULL, ?)",
+            (STARRED_COLLECTION, new_guid()))
+    con.commit()
 
 
 def _starred_ids(con: sqlite3.Connection) -> tuple[int, int]:
@@ -660,12 +746,13 @@ def _starred_ids(con: sqlite3.Connection) -> tuple[int, int]:
     starring must always work."""
     tag = con.execute("SELECT id FROM tag WHERE name = ?",
                       (STARRED_TAG,)).fetchone()
-    coll = con.execute("SELECT id FROM collection WHERE name = ?",
-                       (STARRED_COLLECTION,)).fetchone()
+    coll = con.execute(
+        "SELECT id FROM collection WHERE name = ? AND kind IS NULL",
+        (STARRED_COLLECTION,)).fetchone()
     tid = tag["id"] if tag else con.execute(
         "INSERT INTO tag(name) VALUES (?)", (STARRED_TAG,)).lastrowid
     cid = coll["id"] if coll else con.execute(
-        "INSERT INTO collection(name) VALUES (?)",
+        "INSERT INTO collection(name, kind) VALUES (?, NULL)",
         (STARRED_COLLECTION,)).lastrowid
     return tid, cid
 
@@ -723,10 +810,10 @@ COLLECTION_KINDS = ("icon", "font", "image", "video", "audio", "doc",
 
 
 def collection_tree(con: sqlite3.Connection) -> list[dict]:
-    """Every collection with parent, tags, and per-kind member counts —
-    parents before children, ready for a one-level tree render."""
+    """Every collection with parent, kind, tags, and per-kind member
+    counts — parents before children, ready for a one-level tree render."""
     rows = [dict(r) for r in con.execute(
-        "SELECT id, name, parent_id, tags FROM collection"
+        "SELECT id, name, parent_id, tags, kind FROM collection"
         " ORDER BY name COLLATE NOCASE")]
     counts: dict[int, dict] = {}
     for r in con.execute(
@@ -742,12 +829,19 @@ def collection_tree(con: sqlite3.Connection) -> list[dict]:
 
 
 def create_sub_collection(con: sqlite3.Connection, name: str,
-                          parent_id: int = 0, tags: str = "") -> int:
+                          parent_id: int = 0, tags: str = "",
+                          kind: str = "") -> int:
     name = (name or "").strip() or "Untitled collection"
+    parent_id = int(parent_id) if parent_id else 0
+    if not kind and parent_id:
+        # a sub-collection of a typed parent belongs to the same type
+        prow = con.execute("SELECT kind FROM collection WHERE id = ?",
+                           (parent_id,)).fetchone()
+        kind = (prow["kind"] if prow else None) or ""
     cur = con.execute(
-        "INSERT INTO collection(name, parent_id, tags, guid)"
-        " VALUES (?, ?, ?, ?)",
-        (name, int(parent_id) if parent_id else None, tags, new_guid()))
+        "INSERT INTO collection(name, parent_id, tags, kind, guid)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (name, parent_id or None, tags, kind or None, new_guid()))
     con.commit()
     return int(cur.lastrowid or 0)
 
@@ -772,7 +866,9 @@ def delete_collection(con: sqlite3.Connection, coll_id: int) -> None:
 def add_collection_ref(con: sqlite3.Connection, coll_id: int, kind: str,
                        item_id: int, label: str = "") -> bool:
     """Attach any asset-kind row to a collection. Returns False for an
-    unknown kind or a row that does not exist."""
+    unknown kind, a row that does not exist, or a kind mismatch —
+    collections are single-type (#141). An untyped collection locks to
+    the kind of its first ref."""
     if kind not in COLLECTION_KINDS:
         return False
     if kind == "snippet":
@@ -785,6 +881,16 @@ def add_collection_ref(con: sqlite3.Connection, coll_id: int, kind: str,
         ok = con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
                          (item_id, kind)).fetchone()
     if not ok:
+        return False
+    crow = con.execute("SELECT kind FROM collection WHERE id = ?",
+                       (coll_id,)).fetchone()
+    if crow is None:
+        return False
+    if crow["kind"] is None:
+        # first ref into an untyped collection sets its type
+        con.execute("UPDATE collection SET kind = ? WHERE id = ?",
+                    (kind, coll_id))
+    elif crow["kind"] != kind:
         return False
     con.execute(
         "INSERT OR IGNORE INTO collection_ref(collection_id, item_kind,"

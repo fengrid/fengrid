@@ -349,6 +349,67 @@ def entry_scan_kind(pack_kind: str) -> str | None:
     return {"icon": "folder", "font": "fontroot"}.get(pack_kind)
 
 
+# pack kind -> the ASSET kind its downloads produce (collections are
+# typed by asset kind, not by scan-source kind — #141)
+_PACK_ASSET_KIND = {"icon": "icon", "font": "font"}
+
+
+def _ensure_typed_collection(con: sqlite3.Connection, name: str,
+                             kind: str) -> int:
+    row = con.execute(
+        "SELECT id FROM collection WHERE name = ? AND kind IS ?",
+        (name, kind)).fetchone()
+    if row is not None:
+        return row["id"]
+    from .db import new_guid
+    cur = con.execute(
+        "INSERT INTO collection(name, kind, guid) VALUES (?, ?, ?)",
+        (name, kind, new_guid()))
+    return int(cur.lastrowid or 0)
+
+
+def sync_download_collections(con: sqlite3.Connection) -> None:
+    """#141 download step: every downloaded preset pack files its
+    indexed assets into a default 'Downloaded' collection (one per
+    asset type) AND a collection named after the pack, so downloaded
+    asset collections are browsable the moment they land.
+
+    Idempotent — called after every download AND after every completed
+    scan, because membership can only be built once the clone's assets
+    are actually indexed. A pack whose clone never registers a source
+    (templates) or whose source has no assets yet simply contributes
+    nothing until a later scan reconciles it.
+    """
+    rows = con.execute(
+        "SELECT e.name, e.local_path, l.kind AS pack_kind"
+        " FROM preset_entry e JOIN preset_library l ON l.id = e.library_id"
+        " WHERE e.downloaded = 1").fetchall()
+    touched = False
+    for r in rows:
+        kind = _PACK_ASSET_KIND.get(r["pack_kind"])
+        if kind is None:
+            continue
+        dl_id = _ensure_typed_collection(con, "Downloaded", kind)
+        item_id = _ensure_typed_collection(con, r["name"], kind)
+        if not r["local_path"]:
+            continue
+        src = con.execute(
+            "SELECT id FROM source WHERE path = ?",
+            (str(Path(r["local_path"]).resolve()),)).fetchone()
+        if src is None:
+            continue
+        for cid in (dl_id, item_id):
+            cur = con.execute(
+                "INSERT OR IGNORE INTO collection_ref"
+                "(collection_id, item_kind, item_id)"
+                " SELECT ?, a.kind, a.id FROM asset a"
+                " WHERE a.source_id = ?", (cid, src["id"]))
+            if cur.rowcount:
+                touched = True
+    if touched:
+        con.commit()
+
+
 def sync_downloaded_sources(con: sqlite3.Connection) -> list[dict]:
     """Register scan sources for every downloaded preset entry whose
     clone exists on disk.

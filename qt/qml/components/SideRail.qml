@@ -601,6 +601,52 @@ Rectangle {
                         code.set_starred_only(!code.starredOnly)
                 }
             }
+            // ── default preset collections (#141): every pane's preset
+            // packs live in a pinned 'Presets' entry; packs the user has
+            // actually saved to disk (downloaded entries) also surface in
+            // 'Saved Presets'. Both open the Presets dialog on the pane's
+            // first matching pack.
+            RailItem {
+                visible: rail.showCollections
+                         && rail.sectOpen.collections !== false
+                         && presets !== null && rail.paneKind !== ""
+                         && presets.libraries.some(
+                             p => p.kind === rail.paneKind)
+                label: qsTr("Presets")
+                count: String(presets !== null
+                              ? presets.libraries.filter(
+                                  p => p.kind === rail.paneKind).length : 0)
+                badge: "preset"
+                onPicked: {
+                    var packs = presets !== null
+                                ? presets.libraries.filter(
+                                    p => p.kind === rail.paneKind) : []
+                    if (packs.length > 0)
+                        presetsDialog.openLibrary(packs[0].id)
+                }
+            }
+            RailItem {
+                visible: rail.showCollections
+                         && rail.sectOpen.collections !== false
+                         && presets !== null && rail.paneKind !== ""
+                         && presets.libraries.some(
+                             p => p.kind === rail.paneKind
+                                  && p.downloaded > 0)
+                label: qsTr("Saved Presets")
+                count: String(presets !== null
+                              ? presets.libraries.filter(
+                                  p => p.kind === rail.paneKind
+                                       && p.downloaded > 0).length : 0)
+                badge: "preset"
+                onPicked: {
+                    var packs = presets !== null
+                                ? presets.libraries.filter(
+                                    p => p.kind === rail.paneKind
+                                         && p.downloaded > 0) : []
+                    if (packs.length > 0)
+                        presetsDialog.openLibrary(packs[0].id)
+                }
+            }
             Repeater {
                 model: {
                     if (!rail.showCollections
@@ -612,9 +658,16 @@ Rectangle {
                                 ? library.collections : []
                     for (var i = 0; i < colls.length; i++) {
                         var c = colls[i]
-                        var show = rail.pane === 0 || c.n === 0
-                                   || (c.counts
-                                       && c.counts[rail.paneKind] > 0)
+                        // #141: collections are asset-TYPE specific and
+                        // the list is pane-scoped — a collection shows on
+                        // the pane matching its kind. Untyped legacy
+                        // collections keep the content-based rule
+                        // (empty ones stay reachable everywhere).
+                        var show = c.kind !== undefined && c.kind !== null
+                                   ? c.kind === rail.paneKind
+                                   : (c.n === 0
+                                      || (c.counts
+                                          && c.counts[rail.paneKind] > 0))
                         var starred = rail.pane !== 0
                                       && c.name === "Starred Assets"
                         if (show && !starred)
@@ -636,14 +689,18 @@ Rectangle {
                     readonly property bool isSmart:
                         modelData.t === "smart"
                     readonly property var row: modelData.row
-                    // context-specific: a collection is listed when it holds
-                    // refs of the current pane's kind — or when it's empty,
-                    // so newly created collections stay reachable everywhere
+                    // context-specific: typed collections show on their
+                    // kind's pane only (#141); untyped legacy rows keep
+                    // the content rule (empty ones stay reachable)
+                    readonly property bool kindVisible:
+                        collRow.row.kind !== undefined
+                        && collRow.row.kind !== null
+                        ? collRow.row.kind === rail.paneKind
+                        : (collRow.row.n === 0
+                           || (collRow.row.counts
+                               && collRow.row.counts[rail.paneKind] > 0))
                     visible: rail.showCollections
-                             && (collRow.isSmart
-                                 || rail.pane === 0 || collRow.row.n === 0
-                                 || (collRow.row.counts
-                                     && collRow.row.counts[rail.paneKind] > 0))
+                             && (collRow.isSmart || collRow.kindVisible)
                              // the dedicated Starred row covers the seeded
                              // starred collection on the palette/snippet panes
                              && !(rail.pane !== 0 && !collRow.isSmart
@@ -865,7 +922,8 @@ Rectangle {
                         clip: true
                         onAccepted: {
                             if (text.trim() !== "")
-                                library.create_collection(text.trim())
+                                library.create_collection(text.trim(),
+                                                          rail.paneKind)
                             text = ""
                         }
                     }
@@ -886,7 +944,9 @@ Rectangle {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (collInput.text.trim() !== "")
-                                    library.create_collection(collInput.text.trim())
+                                    library.create_collection(
+                                        collInput.text.trim(),
+                                        rail.paneKind)
                                 collInput.text = ""
                             }
                         }
@@ -947,8 +1007,9 @@ Rectangle {
                          || (presets !== null
                              && presets.libraries.length > 0) }
             Repeater {
-                // ONE Libraries list: user libraries (tag sets) first,
-                // then curated preset packs for the active pane's kind
+                // ONE Libraries list, GLOBAL by design (#141): every user
+                // library shows on every pane (counts stay per-pane), then
+                // curated preset packs for the active pane's kind
                 // (badge "preset", sub shows remote/local state)
                 model: {
                     if (rail.sectOpen.libraries === false)
@@ -957,9 +1018,7 @@ Rectangle {
                     var views = taxonomy !== null
                                 ? taxonomy.libraryViews : []
                     for (var i = 0; i < views.length; i++)
-                        if (rail.pane === 0 || (views[i].counts
-                                && views[i].counts[rail.paneKind] > 0))
-                            out.push({t: "library", row: views[i]})
+                        out.push({t: "library", row: views[i]})
                     var packs = presets !== null ? presets.libraries : []
                     for (var j = 0; j < packs.length; j++)
                         if (rail.paneKind === ""
@@ -973,7 +1032,7 @@ Rectangle {
                     readonly property bool isPreset:
                         modelData.t === "preset"
                     readonly property var row: modelData.row
-                    visible: libRow.isPreset || rail.paneKind !== ""
+                    visible: libRow.isPreset || true  // #141: libraries are global
                     label: libRow.row.name
                     badge: libRow.isPreset ? "preset" : ""
                     sub: libRow.isPreset
@@ -1224,6 +1283,35 @@ Rectangle {
                 background: Rectangle {
                     radius: 8; color: theme.tokens.surface
                     border.color: theme.tokens.border
+                }
+                FgMenuItem {
+                    text: qsTr("Create Smart Collection…")
+                    height: 28
+                    enabled: tagMenu.target !== null
+                    onTriggered: {
+                        // seed the smart-collection dialog with this tag
+                        // (#141: tags are the basis of smart collections)
+                        smartDialog.editId = 0
+                        smartDialog.stashName = tagMenu.target.name
+                        smartDialog.stashTags = tagMenu.target.name
+                        smartDialog.stashQ = ""
+                        smartDialog.stashAll = false
+                        smartDialog.open()
+                    }
+                }
+                FgMenuItem {
+                    text: qsTr("Create Library…")
+                    height: 28
+                    enabled: tagMenu.target !== null
+                    onTriggered: {
+                        // seed the library dialog with this tag (#141:
+                        // tags are the basis of smart libraries)
+                        libDialog.editId = 0
+                        libDialog.stashName = tagMenu.target.name
+                        libDialog.stashTags = tagMenu.target.name
+                        libDialog.stashAll = false
+                        libDialog.open()
+                    }
                 }
                 FgMenuItem {
                     text: qsTr("Rename tag…")

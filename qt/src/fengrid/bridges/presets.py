@@ -208,6 +208,10 @@ class Presets(QObject):
             clone = str(Path(detail).resolve())
             if any(Path(n["path"]) == Path(clone) for n in registered):
                 self.sourceAdded.emit(str(clone), kind)
+        # #141: file the download into its collections (per-type
+        # 'Downloaded' + a collection named after the pack); membership
+        # fills in as the clone's scan completes
+        core_presets.sync_download_collections(self._con)
         self.entriesChanged.emit()
         self.librariesChanged.emit()
 
