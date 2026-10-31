@@ -80,6 +80,8 @@ def fonts_ui(tmp_path):
     engine.rootContext().setContextProperty("taxonomy", taxonomy)
     engine.rootContext().setContextProperty("previewProfile", None)
     engine.rootContext().setContextProperty("terms", None)
+    from fengrid.bridges.prefs import Prefs
+    engine.rootContext().setContextProperty("prefs", Prefs(con, str(tmp_path)))
     comp = QQmlComponent(
         engine, QUrl.fromLocalFile(str(QML_DIR / "components" / "Fonts.qml")))
     root = comp.create(engine.rootContext())
@@ -256,7 +258,7 @@ def test_export_button_opens_dialog_with_checked_families(fonts_ui):
     assert sorted(_var(root.property("checkedFams"))) == ["Alpha", "Gamma"]
     btns = _export_buttons(win)
     assert len(btns) >= 1, "export buttons not found"
-    _click(win, btns[0])          # "Export CSS — 2 families"
+    _click(win, btns[0])          # "Export Font(s) — 2 families" (#114)
     dialog = _find_dialog(root)
     assert dialog is not None, "FontsCssDialog not found"
     assert list(_var(dialog.property("chosen"))) == ["Alpha", "Gamma"]

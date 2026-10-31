@@ -18,6 +18,11 @@ Rectangle {
 
     property string itemKind: "icon"
     property int itemId: -1
+    // #115: multi-select support — when ≥2 ids are set (Fonts pane
+    // checkbox selection), the panel shows an aggregate summary instead
+    // of the single-item detail view
+    property var selectedIds: []
+    readonly property bool multi: selectedIds.length > 1
     property var props: null
     property int activeTab: 0
     // Projects and saved Libraries carry their own repo tree — the
@@ -57,7 +62,8 @@ Rectangle {
         reload()
         activeTab = defaultTab()
     }
-    visible: itemId >= 0
+    onSelectedIdsChanged: reload()
+    visible: itemId >= 0 || multi
     Component.onCompleted: {
         reload()
         if (!sampleCustom && autoSample !== "")
@@ -65,6 +71,15 @@ Rectangle {
     }
 
     function reload() {
+        if (multi) {
+            // #115: aggregate summary over the checked families
+            props = (taxonomy !== null)
+                ? taxonomy.selection_properties(itemKind, selectedIds) : null
+            related = []
+            activeTab = 0   // Details tab is hidden in multi mode
+            refreshSources()
+            return
+        }
         props = (taxonomy !== null && itemId >= 0)
                 ? taxonomy.item_properties(itemKind, itemId) : null
         related = (taxonomy !== null && itemId >= 0)
@@ -164,7 +179,12 @@ Rectangle {
             Layout.topMargin: 4
             spacing: 2
             PanelTab { label: qsTr("Info"); tabIdx: 0 }
-            PanelTab { label: qsTr("Details"); tabIdx: 1 }
+            PanelTab {
+                label: qsTr("Details"); tabIdx: 1
+                // #115: the font specimen / palette colors don't make
+                // sense for a multi-selection aggregate view
+                visible: !panel.multi
+            }
             PanelTab {
                 label: qsTr("Docs"); tabIdx: 2
                 visible: panel.isEntity
@@ -204,6 +224,158 @@ Rectangle {
 
                     Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
 
+                    // ───────────────────────────── aggregate summary (#115)
+                    // Shown when ≥2 fonts are checkbox-selected: count +
+                    // aggregate stats + shared tags. Single-item detail
+                    // sections (fields, links, metadata) are hidden below.
+                    ColumnLayout {
+                        visible: panel.multi
+                        Layout.fillWidth: true
+                        spacing: 6
+                        SectionHeader { text: qsTr("Selection") }
+                        Repeater {
+                            model: panel.multi && panel.props ? [
+                                { l: qsTr("Families"),
+                                  v: String(panel.props.meta.families || panel.props.count) },
+                                { l: qsTr("Files"),
+                                  v: String(panel.props.meta.files || 0) },
+                                { l: qsTr("Size"),
+                                  v: panel.props.meta.bytes !== undefined
+                                     ? (panel.props.meta.bytes > 1048576
+                                        ? (panel.props.meta.bytes / 1048576).toFixed(1) + " MB"
+                                        : (panel.props.meta.bytes / 1024).toFixed(0) + " KB")
+                                     : "—" },
+                                { l: qsTr("Formats"),
+                                  v: panel.props.meta.formats !== undefined
+                                     ? Object.keys(panel.props.meta.formats)
+                                       .join(", ") : "—" }
+                            ] : []
+                            RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Text {
+                                    text: modelData.l
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.textMuted
+                                    Layout.preferredWidth: 80
+                                }
+                                Text {
+                                    text: modelData.v
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.text
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                        Text {
+                            text: qsTr("%1 fonts selected — tags below are shared by every selected font")
+                                  .arg(panel.props ? panel.props.count : 0)
+                            font.family: theme.uiFont
+                            font.pixelSize: 10
+                            color: theme.tokens.textMuted
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    // ── IDENTITY: the generated GUID + the user slug
+                    // ([[ … ]] links) — every asset kind carries one
+                    // (#120: fonts previously had no IDENTITY surface)
+                    SectionHeader {
+                        text: qsTr("Identity")
+                        visible: !panel.multi
+                        Layout.fillWidth: true
+                    }
+                    ColumnLayout {
+                        visible: !panel.multi
+                        spacing: 4
+                        Layout.fillWidth: true
+                        RowLayout {
+                            spacing: 6
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("GUID")
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.textMuted
+                                Layout.preferredWidth: 56
+                            }
+                            Text {
+                                id: guidText
+                                text: panel.props ? (panel.props.guid || "") : ""
+                                font.family: theme.monoFont
+                                font.pixelSize: 10
+                                color: theme.tokens.text
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
+                            IconButton {
+                                icon_name: "copy"
+                                icon_px: 11
+                                implicitWidth: 22
+                                implicitHeight: 22
+                                ToolTip.text: qsTr("Copy GUID")
+                                onClicked: {
+                                    if (guidText.text !== "" && library !== null)
+                                        library.copy_text(guidText.text)
+                                }
+                            }
+                        }
+                        RowLayout {
+                            spacing: 6
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("Slug")
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.textMuted
+                                Layout.preferredWidth: 56
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 24
+                                radius: 6
+                                color: theme.tokens.surface2
+                                border.color: slugField.activeFocus
+                                              ? theme.tokens.accent
+                                              : theme.tokens.border
+                                TextInput {
+                                    id: slugField
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.text
+                                    clip: true
+                                    text: panel.props ? (panel.props.slug || "") : ""
+                                    onAccepted: commitSlug()
+                                    onEditingFinished: commitSlug()
+                                    function commitSlug() {
+                                        if (panel.multi || taxonomy === null)
+                                            return
+                                        if (text === (panel.props.slug || ""))
+                                            return
+                                        taxonomy.set_slug(panel.itemKind,
+                                                          panel.itemId, text)
+                                        panel.reload()
+                                    }
+                                }
+                            }
+                        }
+                        Text {
+                            visible: slugField.text !== ""
+                            text: qsTr("Link with [[ %1 ]]").arg(slugField.text)
+                            font.family: theme.monoFont
+                            font.pixelSize: 9
+                            color: theme.tokens.textMuted
+                        }
+                    }
+
                     // ------------------------------------------------------ TAGS
                     SectionHeader { text: qsTr("Tags") }
                     Flow {
@@ -228,6 +400,7 @@ Rectangle {
                                         color: theme.tokens.text
                                     }
                                     Text {
+                                        visible: !panel.multi
                                         text: "✕"
                                         font.pixelSize: 9
                                         color: theme.tokens.textMuted
@@ -253,6 +426,7 @@ Rectangle {
                         }
                     }
                     RowLayout {
+                        visible: !panel.multi
                         spacing: 6
                         Layout.fillWidth: true
                         Rectangle {
@@ -316,9 +490,13 @@ Rectangle {
                     }
 
                     // ------------------------------------------------ FIELDS
-                    SectionHeader { text: qsTr("Custom fields") }
+                    SectionHeader {
+                        text: qsTr("Custom fields")
+                        visible: !panel.multi
+                    }
                     Repeater {
-                        model: panel.props ? panel.props.fields : []
+                        model: panel.multi ? []
+                                           : (panel.props ? panel.props.fields : [])
                         RowLayout {
                             id: propRow
                             required property var modelData
@@ -488,9 +666,13 @@ Rectangle {
                     }
 
                     // ------------------------------------------------- LINKS
-                    SectionHeader { text: qsTr("Links") }
+                    SectionHeader {
+                        text: qsTr("Links")
+                        visible: !panel.multi
+                    }
                     Repeater {
-                        model: panel.props ? panel.props.links : []
+                        model: panel.multi ? []
+                                           : (panel.props ? panel.props.links : [])
                         RowLayout {
                             id: linkRow
                             required property var modelData

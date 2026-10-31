@@ -148,6 +148,10 @@ class Fonts(QObject):
         self._rescan_pending = False
         self._scan_count = 0
         self._scan_total = 0
+        # #119: pane-wide custom preview text for the grid cards
+        # (persisted; empty = curated passages)
+        self._grid_sample = str(
+            settings.get(con, "grid_sample_text", "") or "")
         self._scan_path = ""
         self._thread = None
         self._worker = None
@@ -320,6 +324,28 @@ class Fonts(QObject):
     # -------------------------------------------------- specimen text
     sampleCustomChanged = Signal()
 
+    # #119: pane-wide custom preview text — applies to every card in the
+    # grid (the inspector's per-font specimen field is separate and stays)
+    gridSampleChanged = Signal()
+
+    @Property(str, notify=gridSampleChanged)
+    def gridSample(self) -> str:
+        return getattr(self, "_grid_sample", "")
+
+    @Slot(str)
+    def set_grid_sample(self, text: str) -> None:
+        text = str(text or "").strip()
+        if text == getattr(self, "_grid_sample", ""):
+            return
+        self._grid_sample = text
+        settings.set(self._con, "grid_sample_text", text)
+        self.gridSampleChanged.emit()
+
+    @Slot()
+    def clear_grid_sample(self) -> None:
+        """Back to the curated per-bucket passages."""
+        self.set_grid_sample("")
+
     @Property(bool, notify=sampleCustomChanged)
     def sampleCustom(self) -> bool:
         return bool(getattr(self, "_sample_custom", False))
@@ -412,6 +438,23 @@ class Fonts(QObject):
             "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
             " ORDER BY id LIMIT 1", (family,)).fetchone()
         return row[0] if row else -1
+
+    @Slot("QVariantList", result="QVariantList")
+    def checked_family_ids(self, families) -> list:
+        """Primary asset IDs for a list of family names (#115) — the
+        Properties panel's multi-select target. One id per family (the
+        family's first indexed row); unknown families silently drop."""
+        out = []
+        for fam in (families or []):
+            fam = str(fam)
+            if not fam:
+                continue
+            row = self._con.execute(
+                "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
+                " ORDER BY id LIMIT 1", (fam,)).fetchone()
+            if row:
+                out.append(row[0])
+        return out
 
     @Slot(str, str)
     def export_css(self, family: str, dest_dir: str) -> None:

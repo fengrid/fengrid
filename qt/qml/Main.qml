@@ -162,6 +162,11 @@ ApplicationWindow {
                     y = p.y + 6
                 }
                 // ── databases: current / Quick access / Recent ──
+                // #116: hidden items inside a Menu still reserve their
+                // height in the content layout (Qt 6 menu geometry) —
+                // every conditional item pins height to 0 when hidden,
+                // otherwise the menu shows a ~90px dead band when no
+                // quick-access/recent databases exist
                 FgMenuItem {
                     enabled: false
                     font.pixelSize: 11
@@ -173,6 +178,7 @@ ApplicationWindow {
                 }
                 FgMenuItem {
                     visible: dbs !== null && dbs.quick.length > 0
+                    height: visible ? implicitHeight : 0
                     enabled: false
                     text: qsTr("Quick access")
                 }
@@ -188,6 +194,7 @@ ApplicationWindow {
                 }
                 FgMenuItem {
                     visible: dbs !== null && dbs.recent.length > 0
+                    height: visible ? implicitHeight : 0
                     enabled: false
                     text: qsTr("Recent")
                 }
@@ -204,6 +211,7 @@ ApplicationWindow {
                 FgMenuSeparator {
                     visible: dbs !== null && (dbs.quick.length > 0
                                               || dbs.recent.length > 0)
+                    height: visible ? implicitHeight : 0
                 }
                 FgMenuItem {
                     visible: dbs !== null
@@ -224,6 +232,7 @@ ApplicationWindow {
                 }
                 FgMenuItem {
                     visible: dbs !== null && dbs.recent.length > 0
+                    height: visible ? implicitHeight : 0
                     text: qsTr("Clear recent")
                     onTriggered: dbs.clearRecent()
                 }
@@ -424,7 +433,7 @@ ApplicationWindow {
                 id: sizeSlider
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
-                ToolTip.text: qsTr("Grid tile size on the icons pane")
+                ToolTip.text: qsTr("Grid tile size — icons and font previews")
                 from: 16
                 to: 256
                 stepSize: 16
@@ -587,10 +596,16 @@ ApplicationWindow {
                     ? (fonts !== null
                        ? fonts.family_primary_id(fonts.selectedFamily) : -1)
                     : (colors !== null ? colors.paletteId : -1)
+            // #115: checkbox multi-selection on the Fonts pane → the
+            // panel shows an aggregate summary instead of single-item
+            // detail (same pattern as the Icons pane's InspectorPanel)
+            selectedIds: root.pane === 1 && fontsPane !== null && fonts !== null
+                         ? fonts.checkedFamilyIds(fontsPane.checkedFams) : []
             // pane 3 hosts its own PropertiesPanel in the editor row —
             // the snippet preview spans the FULL lower band, so the
             // Main-level inspector would push it out of the window
-            visible: root.pane >= 1 && root.pane <= 2 && itemId >= 0
+            visible: root.pane >= 1 && root.pane <= 2
+                     && (itemId >= 0 || selectedIds.length > 1)
         }
     }
     }   // blurHost
