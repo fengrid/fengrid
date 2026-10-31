@@ -424,7 +424,7 @@ ApplicationWindow {
                 id: sizeSlider
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
-                ToolTip.text: qsTr("Grid tile size on the icons pane")
+                ToolTip.text: qsTr("Grid tile size — icons and font previews")
                 from: 16
                 to: 256
                 stepSize: 16

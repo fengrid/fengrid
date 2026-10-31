@@ -80,6 +80,8 @@ def fonts_ui(tmp_path):
     engine.rootContext().setContextProperty("taxonomy", taxonomy)
     engine.rootContext().setContextProperty("previewProfile", None)
     engine.rootContext().setContextProperty("terms", None)
+    from fengrid.bridges.prefs import Prefs
+    engine.rootContext().setContextProperty("prefs", Prefs(con, str(tmp_path)))
     comp = QQmlComponent(
         engine, QUrl.fromLocalFile(str(QML_DIR / "components" / "Fonts.qml")))
     root = comp.create(engine.rootContext())
