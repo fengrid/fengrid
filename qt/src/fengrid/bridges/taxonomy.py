@@ -571,11 +571,35 @@ class Taxonomy(QObject):
         tags = core_db.tags_for(self._con, item_id, kind)
         fields = core_tax.asset_field_values(self._con, item_id, kind)
         links = core_tax.links_for(self._con, kind, item_id, "both")
-        return {"kind": kind, "id": item_id, "tags": tags,
+        # #120: the IDENTITY surface (GUID + slug) rides in the payload
+        # for every kind — fonts previously had no way to see either
+        guid, slug = self._guid_slug(kind, item_id)
+        return {"kind": kind, "id": item_id, "guid": guid, "slug": slug,
+                "tags": tags,
                 "fields": fields,
                 "links": links,
                 "meta": self._shaped_meta(self._kind_meta(kind, item_id)),
                 "starred": core_db.is_starred(self._con, item_id, kind)}
+
+    def _guid_slug(self, kind: str, item_id: int) -> tuple[str, str]:
+        """The (guid, slug) pair for an item's table row (#120)."""
+        table = {
+            "icon": "asset", "font": "asset", "image": "asset",
+            "video": "asset", "audio": "asset", "doc": "asset",
+            "data": "asset", "spatial": "asset", "timeseries": "asset",
+            "markdown": "asset", "snippet": "snippet", "palette": "palette",
+            "collection": "collection", "library": "library_view",
+            "project": "projects", "preset": "preset_library",
+            "preset_entry": "preset_entry",
+        }.get(kind)
+        if table is None:
+            return "", ""
+        row = self._con.execute(
+            f"SELECT guid, slug FROM {table} WHERE id = ?",
+            (item_id,)).fetchone()
+        if row is None:
+            return "", ""
+        return (row["guid"] or "", row["slug"] or "")
 
     @Slot(str, "QVariantList", result="QVariantMap")
     def selection_properties(self, kind: str, ids) -> dict:
