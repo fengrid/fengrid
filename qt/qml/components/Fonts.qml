@@ -206,22 +206,31 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 10
                     // curated default specimen: a passage whose word
-                    // shapes fit this preview size (bucket follows the
-                    // grid scale — #118); swaps at only three
-                    // breakpoints pane-wide; disabled when the user
-                    // types custom text in the inspector's sample field
+                    // shapes fit this preview size. The size class is
+                    // computed locally and the passage picked from the
+                    // bridge's per-bucket specimen PROPERTIES (#137) —
+                    // calling the preview_text() slot from every card
+                    // binding re-crossed the Python bridge once per
+                    // visible card on every grid resize (measured: a
+                    // multi-second binding storm per slider notch on a
+                    // 500-family library — the reported freeze/slowness).
                     // #119: pane-wide custom preview text wins when set;
-                    // otherwise the curated per-bucket passage (#118:
-                    // the bucket follows the grid scale); the per-asset
-                    // custom sample field disables both
+                    // the per-asset custom sample field disables the
+                    // curated passages (#118: the class follows the grid
+                    // scale — specimenPx).
+                    readonly property int specimenPx: Math.max(
+                        12, Math.round(26 * famGrid.fontScale))
                     text: fonts !== null && fonts.gridSample !== ""
                           ? fonts.gridSample
                           : (fonts !== null && !fonts.sampleCustom
-                             ? fonts.preview_text(
-                                 Math.round(26 * famGrid.fontScale))
+                             ? (specimenPx <= fonts.smallMaxPx
+                                ? fonts.specimenSmall
+                                : specimenPx <= fonts.mediumMaxPx
+                                ? fonts.specimenMedium
+                                : fonts.specimenLarge)
                              : qsTr("Fengrid 123"))
                     font.family: model.family
-                    font.pixelSize: Math.max(12, Math.round(26 * famGrid.fontScale))
+                    font.pixelSize: specimenPx
                     elide: Text.ElideRight
                     color: theme.tokens.text
                 }
