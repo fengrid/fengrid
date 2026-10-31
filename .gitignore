@@ -3,8 +3,9 @@
 #  qt/resources/branding/, which must NOT be caught by this rule)
 /branding/
 
-# Dev-only symlink to system icons
-icons
+# Dev-only symlink to system icons (root-anchored: the vendored
+# Qlementine set under qt/resources/icons/ must stay tracked — #112)
+/icons
 
 # Internal design brief — not for distribution
 IDEA.md

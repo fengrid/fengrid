@@ -6,19 +6,15 @@ Image {
     property string name
     property color tint: "#E7EDF2"
     property int px: 16
-    // #97: minimum stroke width in DEVICE px for small-glyph sites
-    // (swatch chips) — a 1-px arc stroke has no solid core below
-    // ~19 device px. 0 keeps the hairline cadence unchanged.
-    property int minStroke: 0
 
     width: px
     height: px
-    source: Icons.url(name, tint, "none", px, Screen.devicePixelRatio || 1, minStroke)
-    // rasterize at the EXACT device-pixel size. The old px*2 raster +
-    // bilinear downscale halved the hairline stroke into sub-pixel
-    // fuzz (the "fuzzy plus icon" report). Screen.devicePixelRatio is
-    // 1 on standard desktops, 2 on hidpi — either way the raster
-    // matches what the scene graph draws 1:1, no resampling.
+    // filled Qlementine silhouettes: the tint rides in the SVG root
+    // fill (see Icons.qml); no stroke/minStroke machinery anymore.
+    source: Icons.url(name, tint, "none", px, Screen.devicePixelRatio || 1)
+    // rasterize at the EXACT device-pixel size: the declared intrinsic
+    // raster (#97 rule) is 1:1 with what the scene graph draws — no
+    // resampling at any zoom or dpr.
     sourceSize.width: px * (Screen.devicePixelRatio || 1)
     sourceSize.height: px * (Screen.devicePixelRatio || 1)
     smooth: true
