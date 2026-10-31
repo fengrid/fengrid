@@ -92,6 +92,9 @@ Rectangle {
     property int jobTotal: 0
     property string csvColumn: "0"
     property string pendingRestore: ""
+    // #98: VS Code snippet scan results — set by the Import & Watch row's
+    // scan button, read by the snippet scan popup
+    property var snipScanResults: []
     function refreshData() {
         if (dataio === null) return
         watchRows = dataio.watches()
@@ -1136,6 +1139,35 @@ Rectangle {
 
                         SettingRow {
                             section: "import"
+                            label: qsTr("Import code snippets")
+                            desc: qsTr("Bring in VS Code and massCode snippets. Scan finds files at VS Code's default snippet folder; Files… picks any .code-snippets, .json or massCode database.")
+                            keys: "import snippets code vscode masscode scan detect location vs code default files"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                SettingsButton {
+                                    text: qsTr("Scan VS Code…")
+                                    onClicked: {
+                                        // #98: scan the default User/snippets
+                                        // folders of VS Code and its variants;
+                                        // the popup lists what it found (or
+                                        // the not-found message) and imports
+                                        // on click
+                                        settingsRoot.snipScanResults =
+                                            code !== null
+                                            ? code.scan_vscode_snippets() : []
+                                        snippetScanPopup.open()
+                                    }
+                                }
+                                SettingsButton {
+                                    text: qsTr("Files…")
+                                    onClicked: snippetFileDialogLoader.open()
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
                             label: qsTr("File storage mode")
                             desc: qsTr("Copy embeds files into Fengrid's data folder (self-contained). Link keeps them where they are and symlinks — needs read permission on the original location.")
                             keys: "copy link embed symlink mode storage external permission embedded readonly"
@@ -1698,7 +1730,7 @@ Rectangle {
                                     folderImportLoader.active = false
                                 }
                             }
-                            // #81 dead-attempt recycle guard +
+                            // #81 dead-attempt recycle guard + 
                             // click/resolve telemetry — see zipDialogLoader
                             // for the full rationale (same class).
                             onLoaded: item.open()
@@ -1710,6 +1742,144 @@ Rectangle {
                                     active = false
                                 openStamp = Date.now()
                                 active = true
+                            }
+                        }
+
+                        // #98: snippet file picker — same lazy-loader pattern
+                        // as the other dialogs (portal hang avoidance)
+                        Loader {
+                            id: snippetFileDialogLoader
+                            active: false
+                            property int openStamp: 0
+                            sourceComponent: FileDialog {
+                                id: snippetFileDialog
+                                title: qsTr("Import code snippets")
+                                currentFolder: settingsRoot.lastDialogUrl()
+                                fileMode: FileDialog.OpenFile
+                                nameFilters: [
+                                    qsTr("Snippets (*.code-snippets *.json *.sqlite *.db *.sqlite3)"),
+                                    qsTr("All files (*)")
+                                ]
+                                onAccepted: {
+                                    settingsRoot.dialogEvent(
+                                        "snippets", "resolved-accepted",
+                                        Date.now()
+                                        - snippetFileDialogLoader.openStamp)
+                                    // kind = "" → the bridge infers it from
+                                    // the file extension
+                                    code !== null && code.import_snippets(
+                                        "", settingsRoot.url2path(selectedFile))
+                                    settingsRoot.rememberDialogDir(
+                                        snippetFileDialog.currentFolder)
+                                    snippetFileDialogLoader.active = false
+                                }
+                                onRejected: {
+                                    settingsRoot.dialogEvent(
+                                        "snippets", "resolved-rejected",
+                                        Date.now()
+                                        - snippetFileDialogLoader.openStamp)
+                                    settingsRoot.rememberDialogDir(
+                                        snippetFileDialog.currentFolder)
+                                    snippetFileDialogLoader.active = false
+                                }
+                            }
+                            onLoaded: item.open()
+                            function open() {
+                                settingsRoot.dialogEvent(
+                                    "snippets", active ? "retry-click" : "click",
+                                    0)
+                                if (active)
+                                    active = false
+                                openStamp = Date.now()
+                                active = true
+                            }
+                        }
+
+                        // #98: VS Code snippet scan results popup — lists
+                        // the files found at default locations; clicking
+                        // one imports it immediately
+                        Popup {
+                            id: snippetScanPopup
+                            parent: Overlay.overlay
+                            anchors.centerIn: parent
+                            width: 380
+                            height: Math.min(320, snipColumn.implicitHeight + 56)
+                            modal: true
+                            background: Rectangle {
+                                radius: 8
+                                color: theme.tokens.surface
+                                border.color: theme.tokens.border
+                            }
+                            ColumnLayout {
+                                id: snipColumn
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 8
+                                Text {
+                                    text: settingsRoot.snipScanResults.length
+                                          ? qsTr("VS Code snippets found")
+                                          : qsTr("No snippet files found at VS Code's default locations")
+                                    font.family: theme.headingFont
+                                    font.pixelSize: 13
+                                    color: theme.tokens.text
+                                }
+                                Text {
+                                    visible: settingsRoot.snipScanResults.length === 0
+                                    text: qsTr("Checked: VS Code, Insiders, VSCodium and Cursor. You can still import any file with Files… below.")
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.textMuted
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                                ListView {
+                                    visible: settingsRoot.snipScanResults.length > 0
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    clip: true
+                                    model: settingsRoot.snipScanResults
+                                    delegate: ItemDelegate {
+                                        required property var modelData
+                                        width: ListView.view.width
+                                        height: 34
+                                        contentItem: RowLayout {
+                                            spacing: 8
+                                            ColumnLayout {
+                                                spacing: 1
+                                                Layout.fillWidth: true
+                                                Text {
+                                                    text: modelData.name
+                                                    font.family: theme.monoFont
+                                                    font.pixelSize: 11
+                                                    color: theme.tokens.text
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: modelData.app
+                                                    font.family: theme.uiFont
+                                                    font.pixelSize: 9
+                                                    color: theme.tokens.textMuted
+                                                }
+                                            }
+                                            SettingsButton {
+                                                text: qsTr("Import")
+                                                onClicked: {
+                                                    code !== null
+                                                        && code.import_snippets(
+                                                            "", modelData.path)
+                                                    snippetScanPopup.close()
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ScrollBar.vertical: ScrollBar { }
+                                }
+                                FgDialogFooter {
+                                    acceptLabel: qsTr("Close")
+                                    onCancelClicked: snippetScanPopup.close()
+                                    onAcceptClicked: snippetScanPopup.close()
+                                }
                             }
                         }
                     }

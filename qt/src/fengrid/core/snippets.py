@@ -9,8 +9,10 @@ user's existing store imports losslessly.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
+import sys
 
 from . import db as core_db
 from pathlib import Path
@@ -353,6 +355,63 @@ def import_file(kind, path):
     if kind == "masscode":
         return parse_masscode_db(p)
     raise ValueError("unknown import kind: %s (use vscode or masscode)" % kind)
+
+
+def infer_snippet_kind(path):
+    """Guess the import kind from the file extension (#98).
+
+    massCode stores snippets in SQLite databases (.sqlite/.db); VS Code
+    uses JSON-derived formats (.code-snippets / .json). Anything else
+    defaults to vscode — the parse error message names the real problem
+    when the guess is wrong.
+    """
+    suffix = Path(path).suffix.lower()
+    if suffix in (".sqlite", ".db", ".sqlite3"):
+        return "masscode"
+    return "vscode"
+
+
+# --------------------------------------------------------------------------
+# VS Code snippet location scan (#98) — discovers snippet files at the
+# default User/snippets folders for VS Code and its common variants, so
+# the Settings import row can offer a one-click scan instead of making
+# the user navigate to the config directory by hand.
+# --------------------------------------------------------------------------
+_VSCODE_VARIANTS = ("Code", "Code - Insiders", "VSCodium", "Cursor")
+_SNIPPET_EXTS = {".code-snippets", ".json"}
+
+
+def scan_vscode_snippets():
+    """Find snippet files at VS Code's default locations (#98).
+
+    Scans the User/snippets folder for each VS Code variant (Code,
+    Insiders, VSCodium, Cursor) under the platform's config root.
+    Returns a list of dicts {app, name, path} for each .code-snippets
+    or .json file found. Empty list when none exist — the user can
+    always point at any file manually from the Settings import row.
+    """
+    home = Path.home()
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", str(home / "AppData" / "Roaming"))
+        bases = [Path(appdata)]
+    elif sys.platform == "darwin":
+        bases = [home / "Library" / "Application Support"]
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME", str(home / ".config"))
+        bases = [Path(xdg)]
+
+    out = []
+    for base in bases:
+        for variant in _VSCODE_VARIANTS:
+            root = base / variant / "User" / "snippets"
+            if not root.is_dir():
+                continue
+            for f in sorted(root.iterdir()):
+                if (not f.is_file() or f.suffix.lower() not in _SNIPPET_EXTS
+                        or f.name.startswith(".")):
+                    continue
+                out.append({"app": variant, "name": f.stem, "path": str(f)})
+    return out
 
 
 # --------------------------------------------------------------------------
