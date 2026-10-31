@@ -1,0 +1,152 @@
+# fengrid-builds — Qt 6 build pipelines (DRAFT — not yet executed).
+#
+# Triggers:
+#   - push to `main` → prod variants (fengrid-prod-*)
+#   - push to `dev`  → dev variants (fengrid-dev-*, same code + QA toolchain)
+#   - workflow_dispatch (manual runs for pipeline testing; pushes to other
+#     branches such as dev-qt intentionally fire nothing while the pipelines
+#     remain drafts)
+#
+# Runner contract (per the 2026-10-18 task):
+#   self-hosted runners tagged with `docker` + the OS/arch. Caveats that are
+#   documented (not accidental):
+#   - Linux rows build inside containers, arch-native — no QEMU emulation.
+#   - Windows rows run the native PowerShell script; the windows Dockerfiles
+#     exist as the containerized alternative for runners with Windows
+#     containers enabled.
+#   - macOS rows run the native script; Docker cannot host macOS images
+#     (Apple EULA) — the `docker` label is part of the runner naming
+#     convention, the job itself never invokes Docker on macOS.
+#   - windows-arm64 fails fast at the PySide6 wheel probe (no wheels on PyPI,
+#     verified 2026-10-18). This is the recorded decision, not a bug.
+#
+# Runner prerequisites: docker + buildx (linux rows), Python 3.11+ (native
+# rows; windows rows also need Windows PowerShell — `shell: powershell` uses
+# the built-in 5.1), git.
+
+name: fengrid-builds
+
+on:
+  push:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fengrid-builds-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-builds:
+    if: github.ref_name == 'main'
+    name: build prod (${{ matrix.target }})
+    runs-on: ${{ fromJSON(matrix.runs-on) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runs-on: ["self-hosted", "docker", "linux-x64"]
+            artifact-path: build/linux-x64/fengrid-*.tar.gz
+          - target: linux-arm64
+            runs-on: ["self-hosted", "docker", "linux-arm64"]
+            artifact-path: build/linux-arm64/fengrid-*.tar.gz
+          - target: windows-x64
+            runs-on: ["self-hosted", "docker", "windows-x64"]
+            artifact-path: qt/dist/
+          - target: windows-arm64
+            runs-on: ["self-hosted", "docker", "windows-arm64"]
+            artifact-path: qt/dist/
+          - target: macos-x64
+            runs-on: ["self-hosted", "docker", "macos-x64"]
+            artifact-path: qt/dist/
+          - target: macos-arm64
+            runs-on: ["self-hosted", "docker", "macos-arm64"]
+            artifact-path: qt/dist/
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build (docker — via buildx wrapper, arch-native, no QEMU)
+        if: startsWith(matrix.target, 'linux')
+        env:
+          FENGRID_VARIANT: prod
+          OUTPUT: local
+        run: bash build/scripts/build-docker-linux.sh ${{ matrix.target }}
+
+      - name: build (native — windows)
+        if: startsWith(matrix.target, 'windows')
+        shell: powershell
+        env:
+          FENGRID_VARIANT: prod
+        run: build/scripts/build-windows.ps1 -Target ${{ matrix.target }}
+
+      - name: build (native — macos; docker cannot host macOS images)
+        if: startsWith(matrix.target, 'macos')
+        shell: bash
+        env:
+          FENGRID_VARIANT: prod
+        run: bash build/scripts/build-macos.sh ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fengrid-prod-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
+
+  dev-builds:
+    if: github.ref_name == 'dev'
+    name: build dev (${{ matrix.target }})
+    runs-on: ${{ fromJSON(matrix.runs-on) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runs-on: ["self-hosted", "docker", "linux-x64"]
+            artifact-path: build/linux-x64/fengrid-*.tar.gz
+          - target: linux-arm64
+            runs-on: ["self-hosted", "docker", "linux-arm64"]
+            artifact-path: build/linux-arm64/fengrid-*.tar.gz
+          - target: windows-x64
+            runs-on: ["self-hosted", "docker", "windows-x64"]
+            artifact-path: qt/dist/
+          - target: windows-arm64
+            runs-on: ["self-hosted", "docker", "windows-arm64"]
+            artifact-path: qt/dist/
+          - target: macos-x64
+            runs-on: ["self-hosted", "docker", "macos-x64"]
+            artifact-path: qt/dist/
+          - target: macos-arm64
+            runs-on: ["self-hosted", "docker", "macos-arm64"]
+            artifact-path: qt/dist/
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build (docker — via buildx wrapper, arch-native, no QEMU)
+        if: startsWith(matrix.target, 'linux')
+        env:
+          FENGRID_VARIANT: dev
+          OUTPUT: local
+        run: bash build/scripts/build-docker-linux.sh ${{ matrix.target }}
+
+      - name: build (native — windows)
+        if: startsWith(matrix.target, 'windows')
+        shell: powershell
+        env:
+          FENGRID_VARIANT: dev
+        run: build/scripts/build-windows.ps1 -Target ${{ matrix.target }}
+
+      - name: build (native — macos; docker cannot host macOS images)
+        if: startsWith(matrix.target, 'macos')
+        shell: bash
+        env:
+          FENGRID_VARIANT: dev
+        run: bash build/scripts/build-macos.sh ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fengrid-dev-${{ matrix.target }}-${{ github.sha }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error

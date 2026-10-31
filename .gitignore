@@ -1,14 +1,11 @@
-# Generated at install time — regenerate with install.sh
-list.txt
-list.js
-meta.js
-meta-state.tsv
-
 # internal candidate branding docs — not for distribution
-branding/
+# (root-anchored: the runtime mark ships from the tracked
+#  qt/resources/branding/, which must NOT be caught by this rule)
+/branding/
 
-# Dev-only symlink to system icons
-icons
+# Dev-only symlink to system icons (root-anchored: the vendored
+# Qlementine set under qt/resources/icons/ must stay tracked — #112)
+/icons
 
 # Internal design brief — not for distribution
 IDEA.md
@@ -24,7 +21,21 @@ Thumbs.db
 __pycache__/
 *.pyc
 
-# runtime state written by server/serve.py at startup (removed at shutdown)
-server-state.js
-fonts-list.txt
-font-meta.js
+# build-provenance stamp written by the build scripts (#43)
+/qt/.build-commit
+
+# local build outputs — build/scripts/build-docker-linux.sh lands artifacts in
+# build/<target>/; build/pyinstaller/ holds regenerated spec files (never
+# commit host-absolute specs). build/scripts + requirements stay tracked.
+build/*
+!build/scripts/
+!build/requirements-*.txt
+dist/
+qt/dist/
+qt/build/
+
+# pytest cache
+.pytest_cache/
+list.txt
+meta-state.tsv.new
+working.md~
