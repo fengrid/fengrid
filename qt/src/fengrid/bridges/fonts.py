@@ -144,6 +144,7 @@ class Fonts(QObject):
         self._starred_only = False
         self._types: list = []
         self._selected = ""
+        self._specimens: dict | None = None
         self._scanning = False
         self._rescan_pending = False
         self._scan_count = 0
@@ -364,6 +365,75 @@ class Fonts(QObject):
         Fonts pane opens so the specimen text rotates each session."""
         from ..core import preview_text as core_preview
         self._samples = core_preview.reshuffle()
+        # #137: rebuild the property-side cache from the same draw so
+        # the grid's property reads follow the rotation
+        self._specimens = None
+        self._resolve_specimens()
+        self.specimensChanged.emit()
+
+    # #137: the per-bucket specimens as PROPERTIES. The grid card's
+    # bindings pick among them with plain property reads (cached C++
+    # lookups) — invoking the preview_text() slot from every card
+    # binding re-crossed the Python bridge once per visible card on
+    # EVERY grid resize (measured on a 514-family library: ~280 calls
+    # and a ≥3 s binding storm per slider notch — the reported
+    # "resource intensive and slow", and on larger libraries the
+    # mid-drag backlog froze the app, reading as a crash). The slot
+    # stays for single-shot callers (the inspector's specimen field).
+    specimensChanged = Signal()
+
+    def _resolve_specimens(self) -> dict:
+        """Build the per-bucket specimens lazily (same draw discipline
+        as preview_text: one random passage per bucket per session)."""
+        cached = getattr(self, "_specimens", None)
+        if cached is not None:
+            return cached
+        from ..core import preview_text as core_preview
+        self._samples = core_preview.reshuffle()
+        bps = core_preview.boundaries()
+        if len(bps) >= 3:
+            small_max, small_name = bps[0]
+            medium_max, medium_name = bps[1]
+            large_name = bps[-1][1]
+        else:                     # degenerate resources file — documented
+            small_max, small_name = 19, "small"   # defaults
+            medium_max, medium_name = 47, "medium"
+            large_name = "large"
+        specs = {
+            "small_max": int(small_max),
+            "medium_max": int(medium_max),
+            "small": self._samples.get(small_name, ""),
+            "medium": self._samples.get(medium_name, ""),
+            "large": self._samples.get(large_name, ""),
+        }
+        self._specimens = specs
+        return specs
+
+    @Property(int, notify=specimensChanged)
+    def smallMaxPx(self) -> int:
+        """Top edge of the small specimen bucket (the QML picker's
+        first comparison point)."""
+        return self._resolve_specimens()["small_max"]
+
+    @Property(int, notify=specimensChanged)
+    def mediumMaxPx(self) -> int:
+        """Top edge of the medium specimen bucket."""
+        return self._resolve_specimens()["medium_max"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenSmall(self) -> str:
+        """Curated passage for the small size class (px < smallMaxPx)."""
+        return self._resolve_specimens()["small"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenMedium(self) -> str:
+        """Curated passage for the medium size class."""
+        return self._resolve_specimens()["medium"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenLarge(self) -> str:
+        """Curated passage for the large size class (px > mediumMaxPx)."""
+        return self._resolve_specimens()["large"]
 
     @Slot(int, result=str)
     def preview_text(self, px: int) -> str:
