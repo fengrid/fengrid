@@ -439,6 +439,23 @@ class Fonts(QObject):
             " ORDER BY id LIMIT 1", (family,)).fetchone()
         return row[0] if row else -1
 
+    @Slot("QVariantList", result="QVariantList")
+    def checked_family_ids(self, families) -> list:
+        """Primary asset IDs for a list of family names (#115) — the
+        Properties panel's multi-select target. One id per family (the
+        family's first indexed row); unknown families silently drop."""
+        out = []
+        for fam in (families or []):
+            fam = str(fam)
+            if not fam:
+                continue
+            row = self._con.execute(
+                "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
+                " ORDER BY id LIMIT 1", (fam,)).fetchone()
+            if row:
+                out.append(row[0])
+        return out
+
     @Slot(str, str)
     def export_css(self, family: str, dest_dir: str) -> None:
         self._export(core_fonts.export_family_css, family, dest_dir, "css")

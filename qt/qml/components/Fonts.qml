@@ -130,24 +130,17 @@ Item {
                 onClicked: gridSamplePopup.open()
             }
             ExportButton {
+                // #114: the .zip button is redundant — the CSS dialog's
+                // «Save as ZIP…» covers the same flow; one entry point
                 label: fontsRoot.anyChecked
-                       ? qsTr("Export CSS — %1 families")
+                       ? qsTr("Export Font(s) — %1 families")
                              .arg(fontsRoot.checkedFams.length)
                        : (fonts !== null && fonts.selectedFamily !== ""
-                          ? qsTr("Export CSS — %1").arg(fonts.selectedFamily)
-                          : qsTr("Export CSS"))
+                          ? qsTr("Export Font(s) — %1").arg(fonts.selectedFamily)
+                          : qsTr("Export Font(s)"))
                 onClicked: cssDialog.openWith(fontsRoot.anyChecked
                                               ? fontsRoot.checkedFams
                                               : fonts.selectedFamily)
-            }
-            ExportButton {
-                label: qsTr(".zip")
-                onClicked: cssDialog.openWith(fontsRoot.anyChecked
-                                              ? fontsRoot.checkedFams
-                                              : fonts.selectedFamily)
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Same dialog — use «Save as ZIP…» " +
-                                   "inside; formats are selectable there")
             }
             IconButton {
                 icon_name: "refresh"
@@ -172,8 +165,16 @@ Item {
         reuseItems: true
         cacheBuffer: 800
         model: fonts !== null ? fonts.model : null
-        cellWidth: 220
-        cellHeight: 120
+        // #118: the header grid-size slider now drives the Fonts pane too —
+        // the same prefs.iconSize that scales the Icons grid maps to a
+        // font-card scale (1.0 at the 64px default), clamped so the cards
+        // stay usable at the slider's extremes
+        readonly property real fontScale: {
+            var raw = prefs !== null ? prefs.iconSize : 64
+            return Math.max(0.45, Math.min(3.0, raw / 64))
+        }
+        cellWidth: Math.round(220 * fontScale)
+        cellHeight: Math.round(120 * fontScale)
 
         ScrollBar.vertical: ScrollBar { }
 
@@ -205,8 +206,8 @@ Item {
                     anchors.right: parent.right
                     anchors.rightMargin: 10
                     // curated default specimen: a passage whose word
-                    // shapes fit this preview size (bucket "medium" at
-                    // the fixed 26px card size); swaps at only three
+                    // shapes fit this preview size (bucket follows the
+                    // grid scale — #118); swaps at only three
                     // breakpoints pane-wide; disabled when the user
                     // types custom text in the inspector's sample field
                     // #119: pane-wide custom preview text wins when set;
@@ -215,8 +216,11 @@ Item {
                           ? fonts.gridSample
                           : (fonts !== null && !fonts.sampleCustom
                              ? fonts.preview_text(26) : qsTr("Fengrid 123"))
+                    text: fonts !== null && !fonts.sampleCustom
+                          ? fonts.preview_text(Math.round(26 * famGrid.fontScale))
+                          : qsTr("Fengrid 123")
                     font.family: model.family
-                    font.pixelSize: 26
+                    font.pixelSize: Math.max(12, Math.round(26 * famGrid.fontScale))
                     elide: Text.ElideRight
                     color: theme.tokens.text
                 }
@@ -226,7 +230,9 @@ Item {
                     anchors.bottomMargin: 6
                     anchors.left: parent.left
                     anchors.leftMargin: 10
-                    width: parent.width - 20
+                    // #118: reserve room for the file-count label — at
+                    // small grid sizes the two overlapped on long names
+                    width: parent.width - 20 - famMeta.implicitWidth - 8
                     text: model.family
                     font.family: theme.monoFont
                     font.pixelSize: 10
