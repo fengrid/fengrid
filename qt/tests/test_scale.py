@@ -473,3 +473,16 @@ def test_palette_bytes_transparency_no_warning(tmp_path):
         out = core_export.export(str(path), tmp_path, "pal", "jpeg", 8)
     assert out.exists()
     assert not [x for x in w if "converted to RGBA" in str(x.message)]
+
+
+# --------------------------------------------------------- #119 grid sample
+def test_grid_sample_text_persists(tmp_path):
+    """#119: the pane-wide grid preview text persists in settings and
+    round-trips through the fonts bridge semantics (set/clear)."""
+    from fengrid.core import db as core_db
+    from fengrid.core import settings as core_settings
+    con = core_db.connect(tmp_path / "lib.db")
+    core_settings.set(con, "grid_sample_text", "Hamburgefonstiv")
+    assert core_settings.get(con, "grid_sample_text", "") == "Hamburgefonstiv"
+    core_settings.set(con, "grid_sample_text", "")
+    assert core_settings.get(con, "grid_sample_text", "") == ""

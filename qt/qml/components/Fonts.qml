@@ -120,6 +120,15 @@ Item {
                     border.color: theme.tokens.border
                 }
             }
+            // #119: pane-wide grid preview text — opens the editor popup;
+            // highlights while a custom text is active
+            IconButton {
+                icon_name: "type"
+                ToolTip.text: fonts !== null && fonts.gridSample !== ""
+                              ? qsTr("Preview text — custom (click to edit)")
+                              : qsTr("Preview text — curated passages (click to customize)")
+                onClicked: gridSamplePopup.open()
+            }
             ExportButton {
                 label: fontsRoot.anyChecked
                        ? qsTr("Export CSS — %1 families")
@@ -200,8 +209,12 @@ Item {
                     // the fixed 26px card size); swaps at only three
                     // breakpoints pane-wide; disabled when the user
                     // types custom text in the inspector's sample field
-                    text: fonts !== null && !fonts.sampleCustom
-                          ? fonts.preview_text(26) : qsTr("Fengrid 123")
+                    // #119: pane-wide custom preview text wins when set;
+                    // otherwise the curated per-bucket passage
+                    text: fonts !== null && fonts.gridSample !== ""
+                          ? fonts.gridSample
+                          : (fonts !== null && !fonts.sampleCustom
+                             ? fonts.preview_text(26) : qsTr("Fengrid 123"))
                     font.family: model.family
                     font.pixelSize: 26
                     elide: Text.ElideRight
@@ -520,6 +533,88 @@ Item {
     function openExportCss() { cssDialog.openWith(fonts.selectedFamily) }
     FontsCssDialog { id: cssDialog }
     Toast { id: exportToast }
+
+    // #119: pane-wide grid preview text editor
+    Popup {
+        id: gridSamplePopup
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: 360
+        modal: true
+        background: Rectangle {
+            radius: 8
+            color: theme.tokens.surface
+            border.color: theme.tokens.border
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 10
+            Text {
+                text: qsTr("Grid Preview Text")
+                font.family: theme.headingFont
+                font.pixelSize: 13
+                color: theme.tokens.text
+            }
+            Text {
+                text: qsTr("Applies to every font card in the grid. Leave empty to use the curated passages.")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                height: 30
+                radius: 6
+                color: theme.tokens.surface2
+                border.color: gridSampleInput.activeFocus
+                              ? theme.tokens.accent : theme.tokens.border
+                TextInput {
+                    id: gridSampleInput
+                    anchors.fill: parent
+                    anchors.leftMargin: 9; anchors.rightMargin: 9
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: theme.uiFont
+                    font.pixelSize: 12
+                    color: theme.tokens.text
+                    clip: true
+                    selectByMouse: true
+                    text: fonts !== null ? fonts.gridSample : ""
+                    onAccepted: {
+                        fonts !== null && fonts.set_grid_sample(text)
+                        gridSamplePopup.close()
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Button {
+                    text: qsTr("Apply")
+                    onClicked: {
+                        fonts !== null && fonts.set_grid_sample(
+                            gridSampleInput.text)
+                        gridSamplePopup.close()
+                    }
+                }
+                Button {
+                    text: qsTr("Reset to curated")
+                    enabled: fonts !== null && fonts.gridSample !== ""
+                    onClicked: {
+                        fonts !== null && fonts.clear_grid_sample()
+                        gridSampleInput.text = ""
+                        gridSamplePopup.close()
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: qsTr("Cancel")
+                    onClicked: gridSamplePopup.close()
+                }
+            }
+        }
+    }
     Connections {
         target: fonts
         function onExportDone(path) {
