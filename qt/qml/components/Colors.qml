@@ -471,7 +471,7 @@ Item {
                 icon_name: "trash"
                 icon_px: 12
                 // stroke uses the app-wide hairline cadence (no
-                // icon_minStroke opt-in) to match every other glyph
+                // opt-in) to match every other glyph
                 implicitWidth: 22
                 implicitHeight: 22
                 ToolTip.text: qsTr("Delete palette")
@@ -721,7 +721,7 @@ Item {
                             // (no scaling either way); the chip shrinks
                             // to 20px — 2px breathing room per side.
                             // Stroke uses the app-wide hairline cadence
-                            // (no minStroke opt-in) to match every other
+                            // (no opt-in) to match every other
                             // interface glyph.
                             px: 16
                             tint: st.tint
