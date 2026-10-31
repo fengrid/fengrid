@@ -148,6 +148,10 @@ class Fonts(QObject):
         self._rescan_pending = False
         self._scan_count = 0
         self._scan_total = 0
+        # #119: pane-wide custom preview text for the grid cards
+        # (persisted; empty = curated passages)
+        self._grid_sample = str(
+            settings.get(con, "grid_sample_text", "") or "")
         self._scan_path = ""
         self._thread = None
         self._worker = None
@@ -319,6 +323,28 @@ class Fonts(QObject):
 
     # -------------------------------------------------- specimen text
     sampleCustomChanged = Signal()
+
+    # #119: pane-wide custom preview text — applies to every card in the
+    # grid (the inspector's per-font specimen field is separate and stays)
+    gridSampleChanged = Signal()
+
+    @Property(str, notify=gridSampleChanged)
+    def gridSample(self) -> str:
+        return getattr(self, "_grid_sample", "")
+
+    @Slot(str)
+    def set_grid_sample(self, text: str) -> None:
+        text = str(text or "").strip()
+        if text == getattr(self, "_grid_sample", ""):
+            return
+        self._grid_sample = text
+        settings.set(self._con, "grid_sample_text", text)
+        self.gridSampleChanged.emit()
+
+    @Slot()
+    def clear_grid_sample(self) -> None:
+        """Back to the curated per-bucket passages."""
+        self.set_grid_sample("")
 
     @Property(bool, notify=sampleCustomChanged)
     def sampleCustom(self) -> bool:

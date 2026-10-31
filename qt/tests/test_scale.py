@@ -511,3 +511,14 @@ def test_item_properties_carries_guid_slug(tmp_path):
 
     # unknown kind → empty identity, no crash
     assert bridge._guid_slug("bogus", 1) == ("", "")
+# --------------------------------------------------------- #119 grid sample
+def test_grid_sample_text_persists(tmp_path):
+    """#119: the pane-wide grid preview text persists in settings and
+    round-trips through the fonts bridge semantics (set/clear)."""
+    from fengrid.core import db as core_db
+    from fengrid.core import settings as core_settings
+    con = core_db.connect(tmp_path / "lib.db")
+    core_settings.set(con, "grid_sample_text", "Hamburgefonstiv")
+    assert core_settings.get(con, "grid_sample_text", "") == "Hamburgefonstiv"
+    core_settings.set(con, "grid_sample_text", "")
+    assert core_settings.get(con, "grid_sample_text", "") == ""
