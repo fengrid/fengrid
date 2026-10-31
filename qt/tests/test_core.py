@@ -1301,7 +1301,7 @@ def test_demo_install_roundtrip(lib, tmp_path):
     assert summary["installed"] is True
     assert summary["projects"] == 14
     assert summary["palettes"] == 8
-    assert summary["snippets"] == 12
+    assert summary["snippets"] == 14
     assert summary["icons"] == 20
     assert summary["font"] is True
 

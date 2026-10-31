@@ -474,6 +474,25 @@ def test_palette_bytes_transparency_no_warning(tmp_path):
     assert out.exists()
     assert not [x for x in w if "converted to RGBA" in str(x.message)]
 
+# ------------------------------------------------------ #121 demo snippets
+def test_demo_snippets_are_fullstack():
+    """#121: demo snippets carry real HTML+CSS (not placeholders) and
+    the interactive ones carry JS — previews render as full-featured
+    layouts with all three editor panes populated."""
+    from fengrid.core import demo
+    web = [s for s in demo.SNIPPETS if s["language"] == "web"]
+    assert len(web) >= 10, "expected a full demo suite of web snippets"
+    for s in web:
+        assert s["html"].strip(), f"{s['title']}: empty html"
+        assert s["css"].strip(), f"{s['title']}: empty css"
+    interactive = [s for s in web if "getElementById" in s["js"]
+                   or "querySelector" in s["js"]]
+    assert len(interactive) >= 6, (
+        f"expected ≥6 interactive demo snippets, got {len(interactive)}")
+    # the new full-stack additions exist
+    titles = {s["title"] for s in demo.SNIPPETS}
+    assert {"Tabs", "Toast stack"} <= titles
+
 
 # ------------------------------------------------------ #120 identity payload
 def test_item_properties_carries_guid_slug(tmp_path):
