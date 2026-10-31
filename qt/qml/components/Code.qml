@@ -453,29 +453,6 @@ Item {
                         verticalAlignment: Text.AlignVCenter
                     }
                 }
-                IconButton {
-                    icon_name: "upload"
-                    ToolTip.text: qsTr("Import snippets (VSCode / massCode)")
-                    onClicked: importDialog.open()
-                }
-                ComboBox {
-                    id: importKind
-                    Layout.preferredWidth: 92
-                    model: ["vscode", "masscode"]
-                    background: Rectangle {
-                        radius: 6
-                        color: theme.tokens.surface2
-                        border.color: theme.tokens.border
-                    }
-                    contentItem: Text {
-                        text: importKind.displayText
-                        font.family: theme.monoFont
-                        font.pixelSize: 10
-                        color: theme.tokens.text
-                        verticalAlignment: Text.AlignVCenter
-                        leftPadding: 6
-                    }
-                }
             }
 
             Rectangle {
@@ -750,15 +727,6 @@ Item {
                     }
                 }
             }
-        }
-
-        FileDialog {
-            id: importDialog
-            nameFilters: importKind.currentIndex === 0
-                         ? [qsTr("Snippets (*.json *.code-snippets)")]
-                         : [qsTr("Databases (*.sqlite *.db)")]
-            onAccepted: code !== null && code.import_snippets(
-                importKind.currentText, Icons.toLocalPath(selectedFile))
         }
     }
     Rectangle { width: 1; anchors.top: parent.top; anchors.bottom: parent.bottom
