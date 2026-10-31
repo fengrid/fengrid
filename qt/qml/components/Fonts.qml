@@ -211,14 +211,15 @@ Item {
                     // breakpoints pane-wide; disabled when the user
                     // types custom text in the inspector's sample field
                     // #119: pane-wide custom preview text wins when set;
-                    // otherwise the curated per-bucket passage
+                    // otherwise the curated per-bucket passage (#118:
+                    // the bucket follows the grid scale); the per-asset
+                    // custom sample field disables both
                     text: fonts !== null && fonts.gridSample !== ""
                           ? fonts.gridSample
                           : (fonts !== null && !fonts.sampleCustom
-                             ? fonts.preview_text(26) : qsTr("Fengrid 123"))
-                    text: fonts !== null && !fonts.sampleCustom
-                          ? fonts.preview_text(Math.round(26 * famGrid.fontScale))
-                          : qsTr("Fengrid 123")
+                             ? fonts.preview_text(
+                                 Math.round(26 * famGrid.fontScale))
+                             : qsTr("Fengrid 123"))
                     font.family: model.family
                     font.pixelSize: Math.max(12, Math.round(26 * famGrid.fontScale))
                     elide: Text.ElideRight
