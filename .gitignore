@@ -39,3 +39,4 @@ qt/build/
 list.txt
 meta-state.tsv.new
 working.md~
+.env
