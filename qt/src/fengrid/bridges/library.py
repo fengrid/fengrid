@@ -168,10 +168,11 @@ def _lists_queries(con: sqlite3.Connection) -> dict:
         counts.setdefault(r["collection_id"], {})[r["item_kind"]] = r["n"]
     colls = []
     for r in con.execute(
-            "SELECT id, name, parent_id, tags FROM collection"
+            "SELECT id, name, parent_id, tags, kind FROM collection"
             " ORDER BY name COLLATE NOCASE"):
         c = {"id": r["id"], "name": r["name"],
-             "parentId": r["parent_id"] or 0, "tags": r["tags"] or ""}
+             "parentId": r["parent_id"] or 0, "tags": r["tags"] or "",
+             "kind": r["kind"]}
         c["counts"] = counts.get(r["id"], {})
         c["n"] = sum(c["counts"].values())
         colls.append(c)
@@ -941,8 +942,9 @@ class Library(QObject):
     # tags, all asset kinds)
     @Slot(str, int, str, result=int)
     def create_sub_collection(self, name: str, parent_id: int = 0,
-                              tags: str = "") -> int:
-        cid = core_db.create_sub_collection(self._con, name, parent_id, tags)
+                              tags: str = "", kind: str = "") -> int:
+        cid = core_db.create_sub_collection(self._con, name, parent_id,
+                                            tags, kind)
         self._mark_lists_dirty()
         self.message.emit(f"Collection '{(name or '').strip()}' created")
         return cid
@@ -984,18 +986,21 @@ class Library(QObject):
     def collection_members(self, coll_id: int) -> list:
         return core_db.refs_for(self._con, coll_id)
 
-    @Slot(str, result=int)
-    def create_collection(self, name: str) -> int:
+    @Slot(str, str, result=int)
+    def create_collection(self, name: str, kind: str = "") -> int:
         name = (name or "").strip()
         if not name:
             return -1
+        kind = (kind or "").strip()
         row = self._con.execute(
-            "SELECT id FROM collection WHERE name = ?", (name,)).fetchone()
+            "SELECT id FROM collection WHERE name = ? AND kind IS ?",
+            (name, kind or None)).fetchone()
         if row:
             self._mark_lists_dirty()
             return row[0]
         cur = self._con.execute(
-            "INSERT INTO collection(name) VALUES (?)", (name,))
+            "INSERT INTO collection(name, kind) VALUES (?, ?)",
+            (name, kind or None))
         self._con.commit()
         self._mark_lists_dirty()
         self.message.emit(f"Collection '{name}' created")
@@ -1253,6 +1258,14 @@ class Library(QObject):
         self._last_scan = time.strftime("%H:%M:%S")
         settings.set(self._con, "last_scan", self._last_scan)
         self.scanningChanged.emit()
+        # #141: a scan may have just indexed a downloaded pack's clone —
+        # reconcile the download collections (idempotent, cheap when
+        # nothing new landed)
+        from ..core import presets as core_presets
+        try:
+            core_presets.sync_download_collections(self._con)
+        except Exception:                          # noqa: BLE001
+            pass
         self._mark_lists_dirty()
         self._apply_filters()
         self.scanFinished.emit(report)
