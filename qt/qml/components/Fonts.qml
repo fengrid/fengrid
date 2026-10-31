@@ -121,24 +121,17 @@ Item {
                 }
             }
             ExportButton {
+                // #114: the .zip button is redundant — the CSS dialog's
+                // «Save as ZIP…» covers the same flow; one entry point
                 label: fontsRoot.anyChecked
-                       ? qsTr("Export CSS — %1 families")
+                       ? qsTr("Export Font(s) — %1 families")
                              .arg(fontsRoot.checkedFams.length)
                        : (fonts !== null && fonts.selectedFamily !== ""
-                          ? qsTr("Export CSS — %1").arg(fonts.selectedFamily)
-                          : qsTr("Export CSS"))
+                          ? qsTr("Export Font(s) — %1").arg(fonts.selectedFamily)
+                          : qsTr("Export Font(s)"))
                 onClicked: cssDialog.openWith(fontsRoot.anyChecked
                                               ? fontsRoot.checkedFams
                                               : fonts.selectedFamily)
-            }
-            ExportButton {
-                label: qsTr(".zip")
-                onClicked: cssDialog.openWith(fontsRoot.anyChecked
-                                              ? fontsRoot.checkedFams
-                                              : fonts.selectedFamily)
-                ToolTip.visible: hovered
-                ToolTip.text: qsTr("Same dialog — use «Save as ZIP…» " +
-                                   "inside; formats are selectable there")
             }
             IconButton {
                 icon_name: "refresh"

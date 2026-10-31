@@ -256,7 +256,7 @@ def test_export_button_opens_dialog_with_checked_families(fonts_ui):
     assert sorted(_var(root.property("checkedFams"))) == ["Alpha", "Gamma"]
     btns = _export_buttons(win)
     assert len(btns) >= 1, "export buttons not found"
-    _click(win, btns[0])          # "Export CSS — 2 families"
+    _click(win, btns[0])          # "Export Font(s) — 2 families" (#114)
     dialog = _find_dialog(root)
     assert dialog is not None, "FontsCssDialog not found"
     assert list(_var(dialog.property("chosen"))) == ["Alpha", "Gamma"]
