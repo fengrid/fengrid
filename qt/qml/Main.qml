@@ -587,10 +587,16 @@ ApplicationWindow {
                     ? (fonts !== null
                        ? fonts.family_primary_id(fonts.selectedFamily) : -1)
                     : (colors !== null ? colors.paletteId : -1)
+            // #115: checkbox multi-selection on the Fonts pane → the
+            // panel shows an aggregate summary instead of single-item
+            // detail (same pattern as the Icons pane's InspectorPanel)
+            selectedIds: root.pane === 1 && fontsPane !== null && fonts !== null
+                         ? fonts.checkedFamilyIds(fontsPane.checkedFams) : []
             // pane 3 hosts its own PropertiesPanel in the editor row —
             // the snippet preview spans the FULL lower band, so the
             // Main-level inspector would push it out of the window
-            visible: root.pane >= 1 && root.pane <= 2 && itemId >= 0
+            visible: root.pane >= 1 && root.pane <= 2
+                     && (itemId >= 0 || selectedIds.length > 1)
         }
     }
     }   // blurHost

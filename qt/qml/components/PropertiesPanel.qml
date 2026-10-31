@@ -18,6 +18,11 @@ Rectangle {
 
     property string itemKind: "icon"
     property int itemId: -1
+    // #115: multi-select support — when ≥2 ids are set (Fonts pane
+    // checkbox selection), the panel shows an aggregate summary instead
+    // of the single-item detail view
+    property var selectedIds: []
+    readonly property bool multi: selectedIds.length > 1
     property var props: null
     property int activeTab: 0
     // Projects and saved Libraries carry their own repo tree — the
@@ -57,7 +62,8 @@ Rectangle {
         reload()
         activeTab = defaultTab()
     }
-    visible: itemId >= 0
+    onSelectedIdsChanged: reload()
+    visible: itemId >= 0 || multi
     Component.onCompleted: {
         reload()
         if (!sampleCustom && autoSample !== "")
@@ -65,6 +71,15 @@ Rectangle {
     }
 
     function reload() {
+        if (multi) {
+            // #115: aggregate summary over the checked families
+            props = (taxonomy !== null)
+                ? taxonomy.selection_properties(itemKind, selectedIds) : null
+            related = []
+            activeTab = 0   // Details tab is hidden in multi mode
+            refreshSources()
+            return
+        }
         props = (taxonomy !== null && itemId >= 0)
                 ? taxonomy.item_properties(itemKind, itemId) : null
         related = (taxonomy !== null && itemId >= 0)
@@ -164,7 +179,12 @@ Rectangle {
             Layout.topMargin: 4
             spacing: 2
             PanelTab { label: qsTr("Info"); tabIdx: 0 }
-            PanelTab { label: qsTr("Details"); tabIdx: 1 }
+            PanelTab {
+                label: qsTr("Details"); tabIdx: 1
+                // #115: the font specimen / palette colors don't make
+                // sense for a multi-selection aggregate view
+                visible: !panel.multi
+            }
             PanelTab {
                 label: qsTr("Docs"); tabIdx: 2
                 visible: panel.isEntity
@@ -204,6 +224,63 @@ Rectangle {
 
                     Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
 
+                    // ───────────────────────────── aggregate summary (#115)
+                    // Shown when ≥2 fonts are checkbox-selected: count +
+                    // aggregate stats + shared tags. Single-item detail
+                    // sections (fields, links, metadata) are hidden below.
+                    ColumnLayout {
+                        visible: panel.multi
+                        Layout.fillWidth: true
+                        spacing: 6
+                        SectionHeader { text: qsTr("Selection") }
+                        Repeater {
+                            model: panel.multi && panel.props ? [
+                                { l: qsTr("Families"),
+                                  v: String(panel.props.meta.families || panel.props.count) },
+                                { l: qsTr("Files"),
+                                  v: String(panel.props.meta.files || 0) },
+                                { l: qsTr("Size"),
+                                  v: panel.props.meta.bytes !== undefined
+                                     ? (panel.props.meta.bytes > 1048576
+                                        ? (panel.props.meta.bytes / 1048576).toFixed(1) + " MB"
+                                        : (panel.props.meta.bytes / 1024).toFixed(0) + " KB")
+                                     : "—" },
+                                { l: qsTr("Formats"),
+                                  v: panel.props.meta.formats !== undefined
+                                     ? Object.keys(panel.props.meta.formats)
+                                       .join(", ") : "—" }
+                            ] : []
+                            RowLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Text {
+                                    text: modelData.l
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.textMuted
+                                    Layout.preferredWidth: 80
+                                }
+                                Text {
+                                    text: modelData.v
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.text
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+                            }
+                        }
+                        Text {
+                            text: qsTr("%1 fonts selected — tags below are shared by every selected font")
+                                  .arg(panel.props ? panel.props.count : 0)
+                            font.family: theme.uiFont
+                            font.pixelSize: 10
+                            color: theme.tokens.textMuted
+                            wrapMode: Text.Wrap
+                            Layout.fillWidth: true
+                        }
+                    }
+
                     // ------------------------------------------------------ TAGS
                     SectionHeader { text: qsTr("Tags") }
                     Flow {
@@ -228,6 +305,7 @@ Rectangle {
                                         color: theme.tokens.text
                                     }
                                     Text {
+                                        visible: !panel.multi
                                         text: "✕"
                                         font.pixelSize: 9
                                         color: theme.tokens.textMuted
@@ -253,6 +331,7 @@ Rectangle {
                         }
                     }
                     RowLayout {
+                        visible: !panel.multi
                         spacing: 6
                         Layout.fillWidth: true
                         Rectangle {
@@ -316,9 +395,13 @@ Rectangle {
                     }
 
                     // ------------------------------------------------ FIELDS
-                    SectionHeader { text: qsTr("Custom fields") }
+                    SectionHeader {
+                        text: qsTr("Custom fields")
+                        visible: !panel.multi
+                    }
                     Repeater {
-                        model: panel.props ? panel.props.fields : []
+                        model: panel.multi ? []
+                                           : (panel.props ? panel.props.fields : [])
                         RowLayout {
                             id: propRow
                             required property var modelData
@@ -488,9 +571,13 @@ Rectangle {
                     }
 
                     // ------------------------------------------------- LINKS
-                    SectionHeader { text: qsTr("Links") }
+                    SectionHeader {
+                        text: qsTr("Links")
+                        visible: !panel.multi
+                    }
                     Repeater {
-                        model: panel.props ? panel.props.links : []
+                        model: panel.multi ? []
+                                           : (panel.props ? panel.props.links : [])
                         RowLayout {
                             id: linkRow
                             required property var modelData
