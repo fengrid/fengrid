@@ -281,6 +281,101 @@ Rectangle {
                         }
                     }
 
+                    // ── IDENTITY: the generated GUID + the user slug
+                    // ([[ … ]] links) — every asset kind carries one
+                    // (#120: fonts previously had no IDENTITY surface)
+                    SectionHeader {
+                        text: qsTr("Identity")
+                        visible: !panel.multi
+                        Layout.fillWidth: true
+                    }
+                    ColumnLayout {
+                        visible: !panel.multi
+                        spacing: 4
+                        Layout.fillWidth: true
+                        RowLayout {
+                            spacing: 6
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("GUID")
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.textMuted
+                                Layout.preferredWidth: 56
+                            }
+                            Text {
+                                id: guidText
+                                text: panel.props ? (panel.props.guid || "") : ""
+                                font.family: theme.monoFont
+                                font.pixelSize: 10
+                                color: theme.tokens.text
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
+                            IconButton {
+                                icon_name: "copy"
+                                icon_px: 11
+                                implicitWidth: 22
+                                implicitHeight: 22
+                                ToolTip.text: qsTr("Copy GUID")
+                                onClicked: {
+                                    if (guidText.text !== "" && library !== null)
+                                        library.copy_text(guidText.text)
+                                }
+                            }
+                        }
+                        RowLayout {
+                            spacing: 6
+                            Layout.fillWidth: true
+                            Text {
+                                text: qsTr("Slug")
+                                font.family: theme.uiFont
+                                font.pixelSize: 11
+                                color: theme.tokens.textMuted
+                                Layout.preferredWidth: 56
+                            }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 24
+                                radius: 6
+                                color: theme.tokens.surface2
+                                border.color: slugField.activeFocus
+                                              ? theme.tokens.accent
+                                              : theme.tokens.border
+                                TextInput {
+                                    id: slugField
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    font.family: theme.monoFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.text
+                                    clip: true
+                                    text: panel.props ? (panel.props.slug || "") : ""
+                                    onAccepted: commitSlug()
+                                    onEditingFinished: commitSlug()
+                                    function commitSlug() {
+                                        if (panel.multi || taxonomy === null)
+                                            return
+                                        if (text === (panel.props.slug || ""))
+                                            return
+                                        taxonomy.set_slug(panel.itemKind,
+                                                          panel.itemId, text)
+                                        panel.reload()
+                                    }
+                                }
+                            }
+                        }
+                        Text {
+                            visible: slugField.text !== ""
+                            text: qsTr("Link with [[ %1 ]]").arg(slugField.text)
+                            font.family: theme.monoFont
+                            font.pixelSize: 9
+                            color: theme.tokens.textMuted
+                        }
+                    }
+
                     // ------------------------------------------------------ TAGS
                     SectionHeader { text: qsTr("Tags") }
                     Flow {

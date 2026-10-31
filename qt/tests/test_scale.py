@@ -473,3 +473,41 @@ def test_palette_bytes_transparency_no_warning(tmp_path):
         out = core_export.export(str(path), tmp_path, "pal", "jpeg", 8)
     assert out.exists()
     assert not [x for x in w if "converted to RGBA" in str(x.message)]
+
+
+# ------------------------------------------------------ #120 identity payload
+def test_item_properties_carries_guid_slug(tmp_path):
+    """#120: item_properties returns guid + slug for every asset kind —
+    the IDENTITY section on the Properties panel reads from the payload
+    (fonts previously had no IDENTITY surface at all)."""
+    from fengrid.core import db as core_db
+    from fengrid.core import indexer
+    from fengrid.core import taxonomy as core_tax
+    from pathlib import Path as P
+    con = core_db.connect(tmp_path / "lib.db")
+    src_dir = tmp_path / "fonts"
+    src_dir.mkdir()
+    (src_dir / "Test-Regular.ttf").write_bytes(b"")
+    sources = indexer.ensure_sources(con, [src_dir], kinds=("fontroot",))
+    indexer.scan_fonts(con, sources)
+    row = con.execute(
+        "SELECT id, guid, slug FROM asset WHERE kind = 'font' LIMIT 1"
+    ).fetchone()
+    assert row is not None, "no font indexed"
+
+    class _T:
+        pass
+    # drive the bridge method directly
+    from fengrid.bridges.taxonomy import Taxonomy
+    bridge = Taxonomy(con, str(tmp_path))
+    props = bridge.item_properties("font", row["id"])
+    assert props["guid"] == row["guid"] and props["guid"] != ""
+    assert props["slug"] == ""
+
+    # slug set → payload reflects it
+    core_db.set_slug(con, "font", row["id"], "test serif")
+    props = bridge.item_properties("font", row["id"])
+    assert props["slug"] == "test-serif"
+
+    # unknown kind → empty identity, no crash
+    assert bridge._guid_slug("bogus", 1) == ("", "")
