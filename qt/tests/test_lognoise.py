@@ -67,20 +67,20 @@ def test_identify_font_ttf_unaffected_by_brotli_probe(monkeypatch):
 def test_gate_dedupes_logging_and_counts(capsys):
     root = logging.getLogger()
     saved = root.handlers[:]
-    root.handlers.clear()  # force records to reach logging.lastResort
+    root.handlers.clear()  # force records to reach logging lastResort
     try:
         with lognoise.scan_noise_gate():
             lg = logging.getLogger("fontTools.ttLib.tables._h_e_a_d")
             for i in range(5):
-                lg.warning("'%d' timestamp seems very low; "
-                           "regarding as unix timestamp", 1700000000 + i)
+                lg.warning("'%s' timestamp seems very low; "
+                           "regarding as unix timestamp",
+                           "created" if i % 2 == 0 else "modified")
         err = capsys.readouterr().err
     finally:
         root.handlers[:] = saved
-    # first occurrence printed live once + once in the summary
-    assert err.count("timestamp seems very low") == 2
-    assert "(+4 more suppressed)" in err
-    assert "[fontTools.ttLib.tables._h_e_a_d]" in err
+    # issue #138: the head-table timestamp notes are auto-corrections —
+    # dropped outright, not even once, no summary line
+    assert err == "", err
 
 
 def test_gate_dedupes_python_warnings(capsys):
@@ -96,8 +96,27 @@ def test_gate_dedupes_python_warnings(capsys):
     assert "(+2 more suppressed)" in err
 
 
+def test_gate_still_dedupes_other_fonttools_messages(capsys):
+    """No over-filtering: a fontTools message that is NOT a timestamp
+    auto-correction still gets the once + summary treatment."""
+    root = logging.getLogger()
+    saved = root.handlers[:]
+    root.handlers.clear()
+    try:
+        with lognoise.scan_noise_gate():
+            lg = logging.getLogger("fontTools.ttLib.tables._c_m_a_p")
+            for i in range(3):
+                lg.warning("unsupported subtable version %d", i)
+        err = capsys.readouterr().err
+    finally:
+        root.handlers[:] = saved
+    assert err.count("unsupported subtable version") == 2, err
+    assert "(+2 more suppressed)" in err
+
+
 def test_gate_counts_digit_varying_messages_together(capsys):
-    """Per-file timestamps must not defeat the dedupe key."""
+    """Per-file values must not defeat the dedupe key — and the
+    timestamp auto-corrections are dropped outright (#138)."""
     root = logging.getLogger()
     saved = root.handlers[:]
     root.handlers.clear()
@@ -105,12 +124,12 @@ def test_gate_counts_digit_varying_messages_together(capsys):
         with lognoise.scan_noise_gate():
             lg = logging.getLogger("fontTools.ttLib.tables._h_e_a_d")
             for stamp in range(3):
-                lg.warning("'%d' timestamp out of range; ignoring top bytes",
-                           stamp * 7919)
+                lg.warning("'%s' timestamp out of range; ignoring top bytes",
+                           "created" if stamp % 2 == 0 else "modified")
         err = capsys.readouterr().err
     finally:
         root.handlers[:] = saved
-    assert "(+2 more suppressed)" in err
+    assert err == "", err
 
 
 # ------------------------------------------------- scan_fonts woff2 skips

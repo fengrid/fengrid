@@ -477,7 +477,10 @@ Rectangle {
                                         // dim the unselected swatches a touch
                                         // so the active one reads first
                                         opacity: sel ? 1 : 0.62
-                                        ToolTip.visible: ma.hovered
+                                        // #138: coerce to a real bool — on the
+                                        // first binding pass the MouseArea's
+                                        // properties are not initialized yet
+                                        ToolTip.visible: ma ? ma.hovered === true : false
                                         ToolTip.text: modelData.name
                                         MouseArea {
                                             id: ma

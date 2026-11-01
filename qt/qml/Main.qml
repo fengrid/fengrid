@@ -600,7 +600,7 @@ ApplicationWindow {
             // panel shows an aggregate summary instead of single-item
             // detail (same pattern as the Icons pane's InspectorPanel)
             selectedIds: root.pane === 1 && fontsPane !== null && fonts !== null
-                    ? fonts.checkedFamilyIds(fontsPane.checkedFams) : []
+                    ? fonts.checked_family_ids(fontsPane.checkedFams) : []
             // pane 3 hosts its own PropertiesPanel in the editor row —
             // the snippet preview spans the FULL lower band, so the
             // Main-level inspector would push it out of the window

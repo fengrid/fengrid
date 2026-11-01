@@ -634,7 +634,12 @@ Rectangle {
                                         border.width: sel ? 2 : 0
                                         border.color: theme.tokens.text
                                         opacity: sel ? 1 : 0.62
-                                        ToolTip.visible: ma.hovered
+                                        // #138: on the first binding pass the
+                                        // MouseArea exists but its properties
+                                        // are not initialized yet — coerce
+                                        // to a real bool so creation logs no
+                                        // "Unable to assign [undefined] to bool"
+                                        ToolTip.visible: ma ? ma.hovered === true : false
                                         ToolTip.text: modelData.name
                                         MouseArea {
                                             id: ma
