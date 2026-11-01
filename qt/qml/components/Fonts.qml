@@ -153,12 +153,13 @@ Item {
         reuseItems: true
         cacheBuffer: 800
         model: fonts !== null ? fonts.model : null
-        // #118: the header grid-size slider now drives the Fonts pane too —
-        // the same prefs.iconSize that scales the Icons grid maps to a
-        // font-card scale (1.0 at the 64px default), clamped so the cards
-        // stay usable at the slider's extremes
+        // #118/#153: the header grid-size slider drives the Fonts pane
+        // through prefs.fontGridSize — the Fonts pane's OWN persisted
+        // size (the Icons grid keeps prefs.iconSize), mapped to a
+        // font-card scale (1.0 at the 64px default), clamped so the
+        // cards stay usable at the slider's extremes
         readonly property real fontScale: {
-            var raw = prefs !== null ? prefs.iconSize : 64;
+            var raw = prefs !== null ? prefs.fontGridSize : 64;
             return Math.max(0.45, Math.min(3.0, raw / 64));
         }
         cellWidth: Math.round(220 * fontScale)

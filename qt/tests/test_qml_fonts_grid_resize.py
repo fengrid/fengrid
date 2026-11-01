@@ -9,7 +9,7 @@ mid-drag backlog froze the app, reading as a crash). The fix computes
 the size class in QML and picks the passage from the bridge's per-bucket
 specimen PROPERTIES (cached C++ reads).
 
-Regression proof: change prefs.iconSize under a live Fonts.qml and
+Regression proof: change prefs.fontGridSize under a live Fonts.qml and
 assert the grid re-scales (cellWidth follows the fontScale map) with
 ZERO preview_text slot invocations and the right bucket specimen
 showing. This test FAILS on the pre-fix binding — the slot ran once per
@@ -181,12 +181,12 @@ def test_preview_text_slot_still_resolves_buckets(tmp_path):
 
 
 def test_grid_resize_re_scales_without_bridge_calls(fonts_ui):
-    """#137 core: a prefs.iconSize change re-scales the grid AND swaps
+    """#137 core: a prefs.fontGridSize change re-scales the grid AND swaps
     the specimen size class with ZERO preview_text invocations."""
     grid, fonts_bridge, prefs = (fonts_ui["grid"], fonts_ui["fonts"],
                                  fonts_ui["prefs"])
     initial_cell = int(grid.property("cellWidth"))
-    # fixture fresh prefs default icon_size = 32 → fontScale 0.5 → 110
+    # fixture fresh prefs default font_grid_size = 32 → fontScale 0.5 → 110
     assert initial_cell == 110
 
     calls = {"n": 0}
@@ -199,7 +199,7 @@ def test_grid_resize_re_scales_without_bridge_calls(fonts_ui):
     fonts_bridge.preview_text = counting
 
     # large class: 128/64 → scale 2.0 → cell 440, specimenPx 52 (>47)
-    prefs.set_icon_size(128)
+    prefs.set_font_grid_size(128)
     _settle(_qapp(), 1.0)
     assert int(grid.property("cellWidth")) == 440
     assert calls["n"] == 0, "resize path re-crossed the Python bridge"
@@ -208,7 +208,7 @@ def test_grid_resize_re_scales_without_bridge_calls(fonts_ui):
     assert str(shown.property("text")) == fonts_bridge.specimenLarge
 
     # small class: 16/64 → clamped scale 0.45 → cell 99, specimenPx 12
-    prefs.set_icon_size(16)
+    prefs.set_font_grid_size(16)
     _settle(_qapp(), 1.0)
     assert int(grid.property("cellWidth")) == 99
     assert calls["n"] == 0, "resize path re-crossed the Python bridge"
@@ -218,7 +218,7 @@ def test_grid_resize_re_scales_without_bridge_calls(fonts_ui):
     assert abs(float(shown.property("font").pixelSize()) - 12) < 0.01
 
     # medium class: 80/64 → scale 1.25 → cell 275, specimenPx 33
-    prefs.set_icon_size(80)
+    prefs.set_font_grid_size(80)
     _settle(_qapp(), 1.0)
     assert int(grid.property("cellWidth")) == 275
     assert calls["n"] == 0

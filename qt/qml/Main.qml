@@ -44,7 +44,10 @@ ApplicationWindow {
             toast.show(startupNotice)
     }
 
-    property int iconSize: sizeSlider.value
+    // #153: the icons grid reads its OWN persisted size — the header
+    // slider edits the active pane's value, so binding here to the
+    // slider would drag the icons grid along with font-grid changes
+    property int iconSize: prefs !== null ? prefs.iconSize : 32
     // 0 = icons, 1 = fonts, 2 = colors, 3 = code, 4 = projects (top-bar
     // pane switcher); --pane N (QA) overrides via the initialPane context
     property int pane: typeof initialPane !== "undefined" ? initialPane : 0
@@ -434,24 +437,40 @@ ApplicationWindow {
                 id: sizeSlider
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
-                ToolTip.text: qsTr("Grid tile size — icons and font previews")
+                // #153: the slider drives the ACTIVE pane's grid —
+                // independent persisted sizes for icons and fonts
+                ToolTip.text: root.pane === 1
+                              ? qsTr("Font Grid Size")
+                              : qsTr("Icon Grid Size")
                 from: 16
                 to: 256
                 stepSize: 16
-                value: prefs !== null ? prefs.iconSize : 32
+                value: prefs !== null ? (root.pane === 1
+                                         ? prefs.fontGridSize
+                                         : prefs.iconSize) : 32
                 Layout.preferredWidth: 110
                 Layout.alignment: Qt.AlignVCenter
                 // moved() = user-driven only (no feedback loop with the
-                // sync below); set_icon_size dedupes per-step writes
-                onMoved: prefs !== null
-                        && prefs.set_icon_size(Math.round(value))
+                // sync below); the setters dedupe per-step writes
+                onMoved: {
+                    if (prefs === null)
+                        return;
+                    if (root.pane === 1)
+                        prefs.set_font_grid_size(Math.round(value));
+                    else
+                        prefs.set_icon_size(Math.round(value));
+                }
                 Connections {
                     // a drag writes `value` imperatively, killing the
                     // binding above — re-sync from Settings while idle
                     target: prefs
                     function onIconSizeChanged() {
-                        if (!sizeSlider.pressed)
+                        if (!sizeSlider.pressed && root.pane !== 1)
                             sizeSlider.value = prefs.iconSize
+                    }
+                    function onFontGridSizeChanged() {
+                        if (!sizeSlider.pressed && root.pane === 1)
+                            sizeSlider.value = prefs.fontGridSize
                     }
                 }
             }
