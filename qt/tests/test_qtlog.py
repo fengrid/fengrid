@@ -95,3 +95,25 @@ def test_install_is_idempotent():
     qtlog._installed = False
     assert qtlog.install() is True
     assert qtlog.install() is False
+
+
+def test_unresolved_property_third_party_dropped_but_ours_reports(capsys):
+    """#138: 'Could not resolve property' floods from third-party icon
+    themes (/usr/share/icons/...) are dropped; the same defect in OUR
+    resources (path carries a fengrid segment) still reports."""
+    ctx = types.SimpleNamespace(category="qt.svg")
+    qtlog._installed = True  # exercise _handler directly, no install
+    qtlog._handler(QtCore.QtMsgType.QtWarningMsg, ctx,
+                   "/usr/share/icons/Humanity/devices/48/camera-photo.svg"
+                   ":194:6: Could not resolve property: #linearGradient9800")
+    qtlog._handler(QtCore.QtMsgType.QtWarningMsg, ctx,
+                   "/home/me/projects/fengrid/qt/resources/icons/x.svg"
+                   ":3:1: Could not resolve property: #missingref")
+    # non-warning severity is never dropped
+    qtlog._handler(QtCore.QtMsgType.QtCriticalMsg, ctx,
+                   "/usr/share/icons/bad.svg:1:1:"
+                   " Could not resolve property: #x")
+    err = capsys.readouterr().err
+    assert "camera-photo.svg" not in err, err
+    assert "fengrid/qt/resources/icons/x.svg" in err, err
+    assert "bad.svg" in err, err
