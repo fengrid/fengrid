@@ -214,6 +214,138 @@ def test_preview_source_empty_clone(tmp_path):
 
 
 # ------------------------------------------------- fallback card render
+# ------------------------------------------------- download progress
+def _wait_for(predicate, timeout=30.0):
+    """Pump the Qt loop until predicate() turns true (worker threads +
+    queued signals need a running loop; tests have none)."""
+    import time
+    from PySide6.QtCore import QCoreApplication
+    deadline = time.time() + timeout
+    while not predicate() and time.time() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.02)
+    return predicate()
+
+
+def test_download_reports_progress_and_ingest_state(env, tmp_path):
+    """#141: an icon-pack download streams clone percent, then flips to
+    the 'ingest' pulse (the scan indexes the fresh clone), and
+    note_scan_finished drops the bar."""
+    bridge, con, tmp = env
+    src = _mk_source_repo(tmp_path / "icon-src")
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(src), row["id"]))
+    con.commit()
+
+    progress: list[tuple[int, str, int]] = []
+    states: list[tuple[int, str]] = []
+    bridge.downloadProgress.connect(
+        lambda eid, phase, pct: progress.append((eid, phase, pct)))
+    bridge.downloadState.connect(
+        lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])
+    assert _wait_for(lambda: states), "no downloadState within timeout"
+
+    # clone phase: starts indeterminate, ends at exactly 100
+    clone = [p for p in progress if p[0] == row["id"]]
+    assert clone[0] == (row["id"], "clone", -1), clone
+    assert clone[-1] == (row["id"], "clone", 100), clone
+    pcts = [p[2] for p in clone]
+    assert pcts == sorted(pcts), f"progress stepped back: {pcts}"
+    # the clone landed → the entry ingests until the scan finishes
+    assert (row["id"], "ingest") in states
+    assert (row["id"], "done") not in states
+    rows = bridge.entries(icon_lib["id"])
+    me = [r for r in rows if r["id"] == row["id"]][0]
+    assert me["ingesting"] is True and me["busy"] is False
+
+    # the library/fonts scan finishes → the bar goes away
+    bridge.note_scan_finished()
+    assert (row["id"], "done") in states
+    me = [r for r in bridge.entries(icon_lib["id"]) if r["id"] == row["id"]][0]
+    assert me["ingesting"] is False
+
+
+def test_download_template_entry_goes_straight_to_done(env, tmp_path):
+    """Template clones are never indexed (#37) — no ingest pulse, the
+    bar clears as soon as the clone lands."""
+    bridge, con, tmp = env
+    src = _mk_source_repo(tmp_path / "tpl-src")
+    tpl_lib = [l for l in bridge.libraries if l["kind"] == "template"][0]
+    row = bridge.entries(tpl_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(src), row["id"]))
+    con.commit()
+
+    states: list[tuple[int, str]] = []
+    bridge.downloadState.connect(lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])
+    assert _wait_for(lambda: (row["id"], "done") in states)
+    assert (row["id"], "ingest") not in states
+
+
+def test_failed_clone_clears_the_bar(env, tmp_path):
+    """A clone that never lands must not leave a stuck loading bar."""
+    bridge, con, tmp = env
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(tmp_path / "no-such-repo"), row["id"]))
+    con.commit()
+
+    states: list[tuple[int, str]] = []
+    bridge.downloadState.connect(lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])
+    assert _wait_for(lambda: (row["id"], "done") in states)
+
+
+def test_entries_snapshot_carries_progress_for_reopens(env):
+    """entries() seeds the dialog's bar after a reopen mid-download."""
+    bridge, con, tmp = env
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    bridge._busy.add(row["id"])
+    bridge._progress[row["id"]] = 42
+    me = [r for r in bridge.entries(icon_lib["id"])
+          if r["id"] == row["id"]][0]
+    assert me["busy"] is True and me["progressPct"] == 42
+    bridge._busy.discard(row["id"])
+    me = [r for r in bridge.entries(icon_lib["id"])
+          if r["id"] == row["id"]][0]
+    assert me["busy"] is False and me["progressPct"] is None
+
+
+def test_update_refresh_reports_indeterminate_progress(env, tmp_path):
+    """Updating an already-downloaded pack (git pull) pulses: phase
+    'update', percent -1."""
+    bridge, con, tmp = env
+    src = _mk_source_repo(tmp_path / "upd-src")
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(src), row["id"]))
+    con.commit()
+
+    bridge.download(row["id"])
+    assert _wait_for(lambda: row_is_downloaded(con, row["id"]))
+
+    progress: list[tuple[int, str, int]] = []
+    bridge.downloadProgress.connect(
+        lambda eid, phase, pct: progress.append((eid, phase, pct)))
+    states: list[tuple[int, str]] = []
+    bridge.downloadState.connect(lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])          # second call → update path
+    assert _wait_for(lambda: (row["id"], "update", -1) in progress)
+
+
+def row_is_downloaded(con, entry_id):
+    r = con.execute("SELECT downloaded FROM preset_entry WHERE id = ?",
+                    (entry_id,)).fetchone()
+    return r is not None and r["downloaded"] == 1
+
+
 def test_fallback_preview_rendered_when_no_imagery(env, tmp_path):
     bridge, con, tmp = env
     src_dir = tmp_path / "plain-repo"

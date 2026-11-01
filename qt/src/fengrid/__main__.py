@@ -468,6 +468,17 @@ def main(argv=None) -> int:
         else:
             library.rescan()
 
+    # #141: a completed library/fonts scan means every preset entry that
+    # was still "ingesting" (fresh clone's assets being indexed) is done
+    # — its loading bar in the Preset Libraries dialog goes away. A scan
+    # of unrelated sources clears the pulse too; the pack is functional
+    # either way.
+    def _on_any_scan_finished(_report: dict) -> None:
+        presets_bridge.note_scan_finished()
+
+    library.scanFinished.connect(_on_any_scan_finished)
+    fonts.scanFinished.connect(_on_any_scan_finished)
+
     presets_bridge.sourceAdded.connect(_on_preset_source)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the

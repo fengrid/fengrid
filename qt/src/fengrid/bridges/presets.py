@@ -45,12 +45,27 @@ class Presets(QObject):
     # path, kind — a newly registered scan source for a fresh clone;
     # the app wires this to the library/fonts rescans (#37)
     sourceAdded = Signal(str, str)
+    # #141: live download progress — entryId, phase ("clone"|"update"),
+    # percent 0-100 (-1 = indeterminate pulse). Emitted from the worker
+    # thread; Qt queues them onto the main thread, so the dialog's bar
+    # updates are safe.
+    downloadProgress = Signal(int, str, int)
+    # #141: entryId, phase — "ingest" when the fresh clone's scan begins
+    # (the bar switches to an indeterminate "indexing" pulse), "done"
+    # when the loading bar should go away.
+    downloadState = Signal(int, str)
 
     def __init__(self, con, data_dir: str = "", parent=None):
         super().__init__(parent)
         self._con = con
         self._data_dir = str(data_dir or "")
         self._busy: set[int] = set()
+        # #141: last clone percent per entry (worker-thread writes, GIL
+        # safe) — lets entries() re-seed the dialog's bar after a reopen
+        self._progress: dict[int, int] = {}
+        # #141: entries whose clone landed and whose assets are being
+        # indexed by the library/fonts scan right now
+        self._ingesting: set[int] = set()
         self.cloneDone.connect(self._on_clone_done)
 
     # ------------------------------------------------------------- listing
@@ -93,6 +108,12 @@ class Presets(QObject):
                 "localPath": r["local_path"],
                 "preview": r["preview_path"],
                 "busy": r["id"] in self._busy,
+                # #141: progress snapshot for the dialog's loading bar —
+                # percent while cloning (None before the first tick),
+                # -1 pulse; "ingesting" flags the post-clone index scan
+                "progressPct": self._progress.get(r["id"])
+                if r["id"] in self._busy else None,
+                "ingesting": r["id"] in self._ingesting,
                 "libraryKind": kind_str,
                 "colors": r["colors"] or "",
             }
@@ -182,13 +203,24 @@ class Presets(QObject):
 
     def _clone_worker(self, entry_id: int, url: str, branch: str,
                       dest: str) -> None:
+        # #141: feed the dialog's loading bar — the worker thread emits
+        # the signal; Qt queues it onto the main thread. The bar shows a
+        # pulse until git's first progress tick arrives.
+        def _pct(p: int) -> None:
+            self._progress[entry_id] = int(p)
+            self.downloadProgress.emit(entry_id, "clone", int(p))
+
+        self._progress.pop(entry_id, None)
+        self.downloadProgress.emit(entry_id, "clone", -1)
         try:
-            Repo.clone(url, dest, branch or "")
+            Repo.clone(url, dest, branch or "", progress=_pct)
             self.cloneDone.emit(entry_id, True, dest)
         except Exception as e:                     # noqa: BLE001
             self.cloneDone.emit(entry_id, False, str(e)[:300])
 
     def _update_worker(self, entry_id: int, local_path: str) -> None:
+        # #141: an update (git pull) reports no percent — pulse
+        self.downloadProgress.emit(int(entry_id), "update", -1)
         try:
             repo = Repo(local_path)
             remotes = repo.remotes()
@@ -201,12 +233,16 @@ class Presets(QObject):
             self.cloneDone.emit(entry_id, False, str(e)[:300])
 
     def _on_clone_done(self, entry_id: int, ok: bool, detail: str) -> None:
-        self._busy.discard(int(entry_id))
+        entry_id = int(entry_id)
+        self._busy.discard(entry_id)
+        self._progress.pop(entry_id, None)
         row = self._row(entry_id)
         if row is None:
+            self.downloadState.emit(entry_id, "done")
             return
         if not ok:
             self.message.emit(f"Download failed: {detail}")
+            self.downloadState.emit(entry_id, "done")   # clear the bar
             self.entriesChanged.emit()
             return
         branch = self._current_branch(detail)
@@ -214,24 +250,35 @@ class Presets(QObject):
             "UPDATE preset_entry SET downloaded = 1, local_path = ?,"
             " branch = CASE WHEN ? != '' THEN ? ELSE branch END"
             " WHERE id = ?",
-            (detail, branch, branch, int(entry_id)))
+            (detail, branch, branch, entry_id))
         self._con.commit()
         preview = self._make_preview(detail, row["repo"], row["name"])
         if preview:
             self._con.execute(
                 "UPDATE preset_entry SET preview_path = ? WHERE id = ?",
-                (preview, int(entry_id)))
+                (preview, entry_id))
             self._con.commit()
         self.message.emit(f"{row['name']} downloaded — preview generated")
         # register the clone as a scan source so its assets reach the
         # grid (#37): icon packs index as icons, font packs as fonts;
         # template packs are deliberately never indexed
         kind = core_presets.entry_scan_kind(self._pack_kind(row))
+        ingesting = False
         if kind is not None:
             registered = core_presets.sync_downloaded_sources(self._con)
             clone = str(Path(detail).resolve())
             if any(Path(n["path"]) == Path(clone) for n in registered):
+                # #141: the clone landed — its assets still need to be
+                # indexed by the scan. The loading bar switches to an
+                # indeterminate "indexing" pulse and stays up until that
+                # scan finishes (note_scan_finished clears it).
+                ingesting = True
+                self._ingesting.add(entry_id)
+                self.downloadState.emit(entry_id, "ingest")
                 self.sourceAdded.emit(str(clone), kind)
+        if not ingesting:
+            # nothing to index — the loading bar is done right away
+            self.downloadState.emit(entry_id, "done")
         # #141: file the download into its collections (per-type
         # 'Downloaded' + a collection named after the pack); membership
         # fills in as the clone's scan completes
@@ -241,6 +288,21 @@ class Presets(QObject):
         core_presets.sync_pack_libraries(self._con)
         self.entriesChanged.emit()
         self.librariesChanged.emit()
+
+    @Slot()
+    def note_scan_finished(self) -> None:
+        """#141: the library/fonts scan that indexes a fresh clone's
+        assets just finished — every entry still in the ingestion phase
+        drops its loading bar. Called for both bridge scans; a scan of
+        unrelated sources also clears the pulse (it cannot hurt — the
+        entry's own assets are indexed by any completed scan)."""
+        if not self._ingesting:
+            return
+        ids = list(self._ingesting)
+        self._ingesting.clear()
+        for eid in ids:
+            self.downloadState.emit(eid, "done")
+        self.entriesChanged.emit()
 
     def _pack_kind(self, entry_row) -> str:
         r = self._con.execute(
