@@ -393,3 +393,128 @@ def _tmp_con():
     import os
     path = os.path.join(tempfile.mkdtemp(), "t.db")
     return core_db.connect(path)
+
+
+# ─────────────────────────────────────────────── planning board (#132)
+
+def test_planning_board_and_stages(api_env):
+    """The board route reflects the same stage model the pane uses —
+    and an empty library yields eight empty stages, not an error."""
+    base = api_env["base"]
+    st, body = _req(base, "GET", "/api/v1/planning/stages")
+    assert st == 200
+    keys = [x["key"] for x in body["data"]["items"]]
+    assert keys == ["triage", "todo", "scheduled", "ready", "running",
+                    "blocked", "review", "done"]
+    st, body = _req(base, "GET", "/api/v1/planning/board")
+    assert st == 200
+    assert body["data"]["total"] == 0
+    assert [x["key"] for x in body["data"]["stages"]] == keys
+
+
+def test_planning_task_lifecycle(api_env):
+    """Create → describe → patch → move → delete over HTTP: the API can
+    drive the whole task model the Planning pane edits."""
+    base = api_env["base"]
+    st, body = _req(base, "POST", "/api/v1/planning/tasks",
+                    {"title": "Wire the footer", "stage": "todo",
+                     "priority": "normal", "due_date": "2026-11-15",
+                     "status_note": "in progress"})
+    assert st == 200, body
+    tid = body["data"]["id"]
+    assert body["data"]["stage"] == "todo"
+    assert body["data"]["shortId"] and len(body["data"]["shortId"]) == 6
+
+    st, body = _req(base, "GET", f"/api/v1/planning/tasks/{tid}")
+    assert body["data"]["status_note"] == "in progress"
+    assert body["data"]["assets"] == []
+
+    st, body = _req(base, "PATCH", f"/api/v1/planning/tasks/{tid}",
+                    {"title": "Wire the footer properly",
+                     "priority": "high"})
+    assert body["data"]["title"] == "Wire the footer properly"
+    assert body["data"]["priority"] == "high"
+
+    st, body = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/move",
+                    {"stage": "review", "index": 0})
+    assert body["data"]["stage"] == "review"
+
+    st, board = _req(base, "GET", "/api/v1/planning/board")
+    review = [s for s in board["data"]["stages"] if s["key"] == "review"][0]
+    assert [c["id"] for c in review["cards"]] == [tid]
+    assert board["data"]["total"] == 1
+
+    # the filter behaves like the pane's filter field
+    st, board = _req(base, "GET", "/api/v1/planning/board?q=properly")
+    assert sum(len(s["cards"]) for s in board["data"]["stages"]) == 1
+    st, board = _req(base, "GET", "/api/v1/planning/board?q=nomatch")
+    assert sum(len(s["cards"]) for s in board["data"]["stages"]) == 0
+
+    st, body = _req(base, "DELETE", f"/api/v1/planning/tasks/{tid}")
+    assert body["data"] == {"deleted": tid}
+    assert _req(base, "GET", f"/api/v1/planning/tasks/{tid}")[0] == 404
+
+
+def test_planning_task_validation(api_env):
+    base = api_env["base"]
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks", {"title": ""})
+    assert st == 400
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks",
+                 {"title": "x", "stage": "garbage"})
+    assert st == 400
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks",
+                 {"title": "x", "priority": "urgent"})
+    assert st == 400
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks",
+                 {"title": "x", "project_id": 4242})
+    assert st == 404
+    st, body = _req(base, "POST", "/api/v1/planning/tasks",
+                    {"title": "ok"})
+    tid = body["data"]["id"]
+    st, _ = _req(base, "PATCH", f"/api/v1/planning/tasks/{tid}",
+                 {"evil": "x"})
+    assert st == 400
+    st, _ = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/move",
+                 {"stage": "nope"})
+    assert st == 400
+    st, _ = _req(base, "GET", "/api/v1/planning/tasks/99999")
+    assert st == 404
+    st, _ = _req(base, "DELETE", "/api/v1/planning/tasks/99999")
+    assert st == 404
+
+
+def test_planning_task_assets_and_project(api_env):
+    """Deep integration over HTTP: assign a project, link a library
+    asset, unlink it again."""
+    base = api_env["base"]
+    icon_id = api_env["icon_id"]
+    st, body = _req(base, "POST", "/api/v1/planning/tasks",
+                    {"title": "With assets", "stage": "running"})
+    tid = body["data"]["id"]
+
+    st, body = _req(base, "PATCH", f"/api/v1/planning/tasks/{tid}",
+                    {"project_id": None})
+    assert body["data"]["project_id"] is None
+
+    st, body = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/assets",
+                    {"kind": "icon", "asset_id": icon_id})
+    assert st == 200, body
+    assert body["data"]["assetCount"] == 1
+    row_id = body["data"]["assets"][0]["id"]
+    assert body["data"]["assets"][0]["name"] == "Test Icon"
+
+    st, _ = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/assets",
+                 {"kind": "icon", "asset_id": 987654})
+    assert st == 400
+    st, _ = _req(base, "DELETE",
+                 f"/api/v1/planning/tasks/{tid}/assets/{row_id}")
+    assert st == 200
+    st, body = _req(base, "GET", f"/api/v1/planning/tasks/{tid}")
+    assert body["data"]["assetCount"] == 0
+
+
+def test_planning_auth_enforced(api_env):
+    """The planning routes sit behind the same bearer wall as the rest."""
+    base = api_env["base"]
+    st, _ = _req(base, "GET", "/api/v1/planning/board", token="")
+    assert st in (401, 403)

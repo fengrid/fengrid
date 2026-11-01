@@ -25,6 +25,7 @@ try:
     from fengrid.core import exportplus as xp
     from fengrid.core import ingest
     from fengrid.core import kinds as core_kinds
+    from fengrid.core import planning as core_planning
     from fengrid.core import projects as core_projects
     from fengrid.core import snippets as core_snippets
     from fengrid.core import taxonomy
@@ -38,6 +39,7 @@ except ImportError:                              # run from a plain checkout
     from fengrid.core import exportplus as xp
     from fengrid.core import ingest
     from fengrid.core import kinds as core_kinds
+    from fengrid.core import planning as core_planning
     from fengrid.core import projects as core_projects
     from fengrid.core import snippets as core_snippets
     from fengrid.core import taxonomy
@@ -1029,5 +1031,161 @@ def assets_lookup(ctx: Api, body: dict, params: dict) -> dict:
             raise ApiError(404, "not_found", "no match")
         kind, iid = hit["kind"], hit["id"]
         return _describe(con, kind, iid)
+    finally:
+        con.close()
+
+
+# ─────────────────────────────────────────────── planning board (#132)
+
+_TASK_FIELDS = ("title", "description", "status_note", "due_date",
+                "priority", "project_id")
+
+
+def planning_board(ctx: Api, body: dict, params: dict | None = None) -> dict:
+    """The full Kanban board: every stage with its position-ordered
+    cards and per-stage colors. `?q=` filters like the pane's filter."""
+    con = ctx.con()
+    try:
+        q = (params or {}).get("q", "")
+        return {"stages": core_planning.board(con, q),
+                "total": core_planning.total(con)}
+    finally:
+        con.close()
+
+
+def planning_stages(ctx: Api, body: dict) -> dict:
+    """Stage metadata: keys, labels, dark/light dot colors."""
+    con = ctx.con()
+    try:
+        return {"items": core_planning.stages(con)}
+    finally:
+        con.close()
+
+
+def planning_task(ctx: Api, body: dict, tid: int) -> dict:
+    con = ctx.con()
+    try:
+        t = core_planning.task(con, int(tid))
+        if t is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        return t
+    finally:
+        con.close()
+
+
+def planning_task_create(ctx: Api, body: dict) -> dict:
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise ApiError(400, "bad_request", "title required")
+    stage = body.get("stage") or "triage"
+    if stage not in core_planning.STAGE_KEYS:
+        raise ApiError(400, "bad_request", f"unknown stage: {stage}")
+    priority = body.get("priority") or ""
+    if priority and priority not in core_planning.PRIORITIES:
+        raise ApiError(400, "bad_request", f"unknown priority: {priority}")
+    con = ctx.con()
+    try:
+        pid = body.get("project_id")
+        if pid not in (None, "", 0):
+            row = con.execute("SELECT id FROM projects WHERE id = ?",
+                              (int(pid),)).fetchone()
+            if row is None:
+                raise ApiError(404, "not_found",
+                               f"project {pid} not found")
+            pid = int(pid)
+        else:
+            pid = None
+        tid = core_planning.create_task(
+            con, title, stage, pid,
+            description=body.get("description") or "",
+            priority=priority,
+            due_date=body.get("due_date") or "")
+        note = body.get("status_note") or ""
+        if note:
+            core_planning.update_task(con, tid, status_note=note)
+        return core_planning.task(con, tid)
+    finally:
+        con.close()
+
+
+def planning_task_update(ctx: Api, body: dict, tid: int) -> dict:
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        fields = {k: v for k, v in body.items() if k in _TASK_FIELDS}
+        if "priority" in fields:
+            pr = fields["priority"] or ""
+            if pr and pr not in core_planning.PRIORITIES:
+                raise ApiError(400, "bad_request",
+                               f"unknown priority: {pr}")
+        if not fields:
+            raise ApiError(400, "bad_request",
+                           "no updatable fields in body")
+        core_planning.update_task(con, int(tid), **fields)
+        return core_planning.task(con, int(tid))
+    finally:
+        con.close()
+
+
+def planning_task_move(ctx: Api, body: dict, tid: int) -> dict:
+    stage = body.get("stage") or ""
+    if stage not in core_planning.STAGE_KEYS:
+        raise ApiError(400, "bad_request", f"unknown stage: {stage}")
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        index = int(body.get("index", 10 ** 9))
+        if not core_planning.move_task(con, int(tid), stage, index):
+            raise ApiError(400, "bad_request", "move rejected")
+        return core_planning.task(con, int(tid))
+    finally:
+        con.close()
+
+
+def planning_task_delete(ctx: Api, body: dict, tid: int) -> dict:
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        core_planning.delete_task(con, int(tid))
+        return {"deleted": int(tid)}
+    finally:
+        con.close()
+
+
+def planning_task_link(ctx: Api, body: dict, tid: int) -> dict:
+    kind = body.get("kind") or ""
+    try:
+        asset_id = int(body.get("asset_id"))
+    except (TypeError, ValueError):
+        raise ApiError(400, "bad_request", "asset_id required")
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        if not core_planning.link_asset(con, int(tid), kind, asset_id,
+                                        body.get("label") or ""):
+            raise ApiError(400, "bad_request",
+                           f"asset not found in the library: "
+                           f"{kind} #{asset_id}")
+        return core_planning.task(con, int(tid))
+    finally:
+        con.close()
+
+
+def planning_task_unlink(ctx: Api, body: dict, tid: int,
+                         row_id: int) -> dict:
+    con = ctx.con()
+    try:
+        row = con.execute(
+            "SELECT id FROM project_task_asset WHERE id = ?"
+            " AND task_id = ?", (int(row_id), int(tid))).fetchone()
+        if row is None:
+            raise ApiError(404, "not_found",
+                           f"link {row_id} on task {tid} not found")
+        core_planning.unlink_asset(con, int(row_id))
+        return {"deleted": int(row_id)}
     finally:
         con.close()
