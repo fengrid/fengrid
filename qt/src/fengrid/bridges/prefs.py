@@ -92,7 +92,7 @@ class Prefs(QObject):
 
     @Slot(int)
     def set_startup_pane(self, pane: int) -> None:
-        pane = max(0, min(4, int(pane)))
+        pane = max(0, min(5, int(pane)))
         if pane == self._startup_pane:
             return
         self._startup_pane = pane

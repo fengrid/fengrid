@@ -96,6 +96,7 @@ _APP_NAMES = [
     "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up",
     "code", "copy", "download", "droplet", "external-link", "file-text",
     "folder-plus", "git-branch", "grid", "hard-drive", "help", "image",
+    "kanban",
     "layers", "lock", "menu", "moon", "package", "paint-drop", "play",
     "plus", "refresh",
     "search", "star", "sun", "tag", "trash", "type", "unlock", "upload",

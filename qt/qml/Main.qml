@@ -58,6 +58,7 @@ ApplicationWindow {
     property var colorsPane: null
     property var codePane: null
     property var projectsPane: null
+    property var planningPane: null
     // blur the main UI behind open modal windows (Preset Libraries,
     // entity inspector, Settings) — read by the blur-behind host.
     // CRASH GUARD: the MultiEffect layer is shader-based; on the
@@ -566,6 +567,21 @@ ApplicationWindow {
                 }
                 onStatusChanged: if (status === Loader.Ready) projectsPane = item
             }
+            Loader {
+                id: planningLoader
+                active: root.pane === 5 || root.startupPane === 5
+                asynchronous: true
+                sourceComponent: Planning {
+                    // deep integration: a card's project chip opens the
+                    // project in the Projects pane
+                    onProjectOpenRequested: (id) => {
+                        root.pane = 4;
+                        if (projects !== null)
+                            projects.open(id);
+                    }
+                }
+                onStatusChanged: if (status === Loader.Ready) planningPane = item
+            }
         }
 
         Rectangle {
@@ -622,7 +638,8 @@ ApplicationWindow {
         function flash() {
             color = [theme.tokens.accentIcon, theme.tokens.accentFont,
                      theme.tokens.accentColor, theme.tokens.accentCode,
-                     theme.tokens.accentProject][root.pane]
+                     theme.tokens.accentProject,
+                     theme.tokens.accentPlanning][root.pane]
             paneFlashAnim.restart()
         }
         Connections {
@@ -727,6 +744,9 @@ ApplicationWindow {
                         return qsTr("%1 snippets").arg(code.snippetCount)
                     if (root.pane === 4 && projects !== null)
                         return qsTr("%1 projects").arg(projects.projects.length)
+                    if (root.pane === 5 && planning !== null
+                            && typeof planning !== "undefined")
+                        return qsTr("%1 tasks").arg(planning.totalCount)
                     return ""
                 }
                 font.family: theme.monoFont
@@ -1074,12 +1094,13 @@ ApplicationWindow {
         enabled: !root.setupOpen && !root.paletteOpen && !Shell.capturing
         onActivated: root.settingsOpen = !root.settingsOpen
     }
-    // Ctrl+1..5 — quick pane switching matching the top-bar order
+    // Ctrl+1..6 — quick pane switching matching the top-bar order
     Shortcut { sequence: "Ctrl+1"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 0 }
     Shortcut { sequence: "Ctrl+2"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 1 }
     Shortcut { sequence: "Ctrl+3"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 2 }
     Shortcut { sequence: "Ctrl+4"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 3 }
     Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 4 }
+    Shortcut { sequence: "Ctrl+6"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 5 }
 
     // global undo/redo — routes to the FOCUSED pane's undo bridge
     // (project settings changes for Projects, palette edits for Colors;

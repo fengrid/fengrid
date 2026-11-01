@@ -292,6 +292,12 @@ Rectangle {
                 paneIdx: 4
                 ToolTip.text: qsTr("Projects")
             }
+            PaneTab {
+                iconName: "kanban"
+                accent: theme.tokens.accentPlanning
+                paneIdx: 5
+                ToolTip.text: qsTr("Planning")
+            }
         }
 
         // hairline separating the tab row from the rail content
@@ -325,7 +331,8 @@ Rectangle {
         // A11Y-2: the pane glyph must be announced
         Accessible.role: Accessible.PageTab
         Accessible.name: {
-            var names = ["Icons", "Fonts", "Colors", "Code", "Projects"];
+            var names = ["Icons", "Fonts", "Colors", "Code", "Projects",
+                "Planning"];
             return (names[paneIdx] || "pane") + (checked ? " (active)" : "");
         }
         Accessible.checkable: true

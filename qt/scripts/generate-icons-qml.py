@@ -42,6 +42,7 @@ MAPPING = {
     "hard-drive": "hardware/hdd",
     "help": "misc/help",
     "image": "file/picture",
+    "kanban": "action/kanban",
     "layers": "navigation/layers-2",
     "lock": "action/lock",
     "menu": "navigation/menu-burger",
