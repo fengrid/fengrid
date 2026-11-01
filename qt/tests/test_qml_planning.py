@@ -17,6 +17,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 import pytest                                    # noqa: E402
+from PySide6.QtCore import QPointF as _QPointF    # noqa: E402
+from PySide6.QtCore import Qt as _Qt              # noqa: E402
 from PySide6.QtCore import QUrl                  # noqa: E402
 from PySide6.QtGui import QGuiApplication        # noqa: E402
 from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
@@ -171,22 +173,26 @@ def test_move_task_via_bridge_updates_board(planning_ui):
 
 
 def test_drag_glue_targets(planning_ui):
-    """stageAtPoint maps board coordinates to stage keys; indexAtY maps
-    a y position to an insertion slot — the two halves of drag & drop."""
+    """stageAtPoint resolves planningRoot coordinates to a stage key and
+    indexAtY resolves them to an insertion slot — the two halves of
+    drag & drop. Coordinates go through mapToItem so Flickable scroll
+    offsets can never skew the hit test."""
     root = planning_ui["root"]
     cols = _stage_cols(root)
     expanded = [c for c in cols if c.property("expanded")][0]
     w = expanded.property("width")
-    x = expanded.property("x")
-    y = expanded.property("y")
-    key = root.stageAtPoint(x + w / 2, y + 100)
+    # the column's center, mapped into planningRoot coordinates (the
+    # space the drag proxy and the card MouseArea report)
+    center = expanded.mapToItem(root, w / 2, 100)
+    key = root.stageAtPoint(center.x(), center.y())
     assert key == expanded.property("stageData")["key"]
     assert root.stageAtPoint(-50, -50) == ""
     # insertion slot beyond the last card appends
-    assert expanded.indexAtY(10_000) == \
+    assert expanded.indexAtY(center.x(), 10_000) == \
         len(expanded.property("stageData")["cards"])
-    # slot before every card is 0
-    assert expanded.indexAtY(y + 30) == 0
+    # slot before every card is 0 (top of the column, planningRoot coords)
+    top = expanded.mapToItem(root, w / 2, 60)
+    assert expanded.indexAtY(top.x(), top.y()) == 0
 
 
 def test_dialog_opens_with_task_data(planning_ui):
@@ -204,3 +210,55 @@ def test_dialog_opens_with_task_data(planning_ui):
     assert d.property("creating") is False
     assert d.property("task")["title"] == "Dialog probe"
     d.close()
+
+
+def test_card_drag_gesture_moves_task(planning_ui):
+    """Full gesture path: press a card, drag it over a collapsed bar,
+    release — the proxy follows the pointer, the drop files the task in
+    that stage and expands it (the #132 retest bug: the Flickables ate
+    the gesture and drags did nothing)."""
+    ui = planning_ui
+    root, bridge, win = ui["root"], ui["bridge"], ui["win"]
+    root.setProperty("expandedStage", "todo")
+    tid = bridge.create_task("Drag Target", "todo")
+    _qapp().processEvents()
+
+    cols = _stage_cols(root)
+    todo = [c for c in cols
+            if c.property("stageData")["key"] == "todo"][0]
+    triage = [c for c in cols
+              if c.property("stageData")["key"] == "triage"][0]
+
+    card = [o for o in _by_class(todo, "TaskCard")
+            if o.property("task")["id"] == tid][0]
+    ma = [c for c in card.childItems()
+          if c.metaObject().className().startswith("QQuickMouseArea")][0]
+
+    start = card.mapToItem(win.contentItem(), card.width() / 2,
+                           card.height() / 2)
+    QTest.mousePress(win, _Qt.MouseButton.LeftButton,
+                     pos=start.toPoint())
+    _qapp().processEvents()
+    # move past the 6px drag threshold
+    QTest.mouseMove(win, (start + _QPointF(0, 40)).toPoint())
+    _qapp().processEvents()
+    assert root.property("dragTaskId") == tid, "drag never started"
+
+    hover = triage.mapToItem(win.contentItem(), 17, 300)
+    QTest.mouseMove(win, hover.toPoint())
+    _qapp().processEvents()
+    assert root.property("dragHoverStage") == "triage"
+
+    QTest.mouseRelease(win, _Qt.MouseButton.LeftButton,
+                       pos=hover.toPoint())
+    _qapp().processEvents()
+    assert root.property("dragTaskId") == -1
+    assert root.property("expandedStage") == "triage", \
+        "dropping on a collapsed bar must expand it"
+    # the drop triggered a board rebuild — the pre-drop column wrappers
+    # are dead; re-fetch from the fresh delegate tree
+    fresh = _stage_cols(root)
+    triage2 = [c for c in fresh
+               if c.property("stageData")["key"] == "triage"][0]
+    triage_cards = triage2.property("stageData")["cards"]
+    assert any(c["id"] == tid for c in triage_cards)

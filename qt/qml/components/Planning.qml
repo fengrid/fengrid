@@ -60,23 +60,24 @@ Item {
     }
 
     // ------------------------------------------------------------- drag glue
-    function beginDrag(task, globalX, globalY) {
+    // ALL drag coordinates are in planningRoot space. Column positions
+    // are resolved with mapToItem so Flickable scroll offsets (the
+    // board pans horizontally, columns scroll vertically) never skew
+    // the hit test.
+    function beginDrag(task, prX, prY) {
         if (!bridge || dragTaskId !== -1)
             return;
         dragTaskId = task.id;
         dragStage = task.stage;
         dragProxy.title = task.title;
         dragProxy.width = Math.max(180, Math.min(260, taskColWidth));
-        dragProxy.x = boardArea.mapFromItem(planningRoot, 0, 0).x + 0;
-        dragProxyMove(globalX, globalY);
+        dragProxyMove(prX, prY);
         dragProxy.visible = true;
     }
 
-    function dragProxyMove(globalX, globalY) {
-        // map the point (in planningRoot coordinates) into boardArea
-        var q = boardArea.mapFromItem(planningRoot, 0, 0);
-        dragProxy.x = globalX - q.x - dragProxy.width / 2;
-        dragProxy.y = globalY - q.y - 14;
+    function dragProxyMove(prX, prY) {
+        dragProxy.x = prX - dragProxy.width / 2;
+        dragProxy.y = prY - 14;
         dragHoverStage = stageAtPoint(dragProxy.x + dragProxy.width / 2,
                                       dragProxy.y);
     }
@@ -89,22 +90,33 @@ Item {
         var key = stageAtPoint(cx, cy);
         dragProxy.visible = false;
         dragHoverStage = "";
+        var tid = dragTaskId;
         dragTaskId = -1;
         dragStage = "";
         if (key === "")
             return;
         var col = columnFor(key);
-        var idx = col !== null ? col.indexAtY(cy - col.y) : -1;
-        bridge.move_task(dragTaskId, key, Math.max(0, idx));
+        if (col === null)
+            return;
+        var idx;
+        if (col.expanded) {
+            idx = Math.max(0, col.indexAtY(cx, cy));
+        } else {
+            // dropped on a collapsed bar: file at the end and expand it
+            idx = col.stageData.cards.length;
+            expandedStage = key;
+        }
+        bridge.move_task(tid, key, idx);
     }
 
-    function stageAtPoint(x, y) {
+    function stageAtPoint(prX, prY) {
         for (var i = 0; i < stageRepeater.count; i++) {
             var col = stageRepeater.itemAt(i);
             if (!col)
                 continue;
-            if (x >= col.x && x <= col.x + col.width
-                    && y >= col.y && y <= col.y + col.height)
+            var o = col.mapToItem(planningRoot, 0, 0);
+            if (prX >= o.x && prX <= o.x + col.width
+                    && prY >= o.y && prY <= o.y + col.height)
                 return col.stageData.key;
         }
         return "";
@@ -277,28 +289,6 @@ Item {
         }
     }
 
-    // empty state — the whole board has no tasks yet
-    Column {
-        anchors.centerIn: boardArea
-        visible: bridge !== null && bridge.totalCount === 0
-                 && planningRoot.dragTaskId === -1
-        spacing: 6
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("No Tasks Yet")
-            color: theme.tokens.text
-            font.family: theme.headingFont
-            font.pixelSize: 15
-        }
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("Create A Task Or Drop Work Onto Any Stage")
-            color: theme.tokens.textMuted
-            font.family: theme.uiFont
-            font.pixelSize: 12
-        }
-    }
-
     // ------------------------------------------------------- stage column
     component StageColumn: Rectangle {
         id: col
@@ -324,32 +314,33 @@ Item {
             }
         }
 
-        function indexAtY(yInColumn) {
-            // insertion slot for a drop at yInColumn (planningRoot
-            // coordinates): first card whose midpoint is below the drop.
-            // Only TaskCard children count — the empty-stage hint Text
-            // is a sibling in the same Column.
+        function indexAtY(prX, prY) {
+            // insertion slot for a drop at (prX, prY) in planningRoot
+            // coordinates: first card whose midpoint is below the drop.
+            // Cards are mapped per-item so vertical scroll offsets in
+            // this column don't skew the comparison. Only TaskCard
+            // children count — the empty-stage hint Text is a sibling.
             var n = 0;
             for (var j = 0; j < cardsCol.children.length; j++) {
                 var c = cardsCol.children[j];
                 if (!c || c.className !== "TaskCard")
                     continue;
-                var mid = col.y + headerBar.height + cardsCol.y + c.y
-                        + c.height / 2;
-                if (yInColumn < mid)
+                var o = c.mapToItem(planningRoot, 0, 0);
+                if (prY < o.y + c.height / 2)
                     return n;
                 n++;
             }
             return n;
         }
 
-        // collapsed bars accept drops too — dropping on a bar expands it
+        // collapsed bar: click anywhere on it to expand the stage
+        // (declared under the header content, which keeps the top tap
+        // target; during an active drag the grabbing card MouseArea
+        // swallows events, so this never fires as a spurious click)
         MouseArea {
             anchors.fill: parent
-            enabled: !col.expanded && planningRoot.dragTaskId !== -1
-            onClicked: {
-                planningRoot.expandedStage = col.stageData.key;
-            }
+            enabled: !col.expanded
+            onClicked: planningRoot.expandedStage = col.stageData.key
         }
 
         // header: collapsed = dot + rotated label; expanded = dot + label
@@ -662,22 +653,30 @@ Item {
                 var dx = mouse.x - pressX;
                 var dy = mouse.y - pressY;
                 if (!moved && dx * dx + dy * dy > 36) {
+                    // a real drag: take the grab away from the column
+                    // and board Flickables (they would otherwise pan
+                    // instead of moving the card (the #132 retest bug)
                     moved = true;
-                    planningRoot.beginDrag(
-                        card.task,
-                        mapToItem(planningRoot, mouse.x, mouse.y).x,
-                        mapToItem(planningRoot, mouse.x, mouse.y).y);
+                    preventStealing = true;
+                    var g0 = mapToItem(planningRoot, mouse.x, mouse.y);
+                    planningRoot.beginDrag(card.task, g0.x, g0.y);
                 }
                 if (moved) {
                     var g = mapToItem(planningRoot, mouse.x, mouse.y);
                     planningRoot.dragProxyMove(g.x, g.y);
                 }
             }
-            onReleased: {
-                if (moved)
+            onReleased: (mouse) => {
+                if (moved) {
                     planningRoot.endDrag();
-                else
+                } else {
                     planningRoot.openTask(card.task.id);
+                }
+                preventStealing = false;
+            }
+            onCanceled: {
+                planningRoot.endDrag();
+                preventStealing = false;
             }
             Accessible.role: Accessible.ListItem
             Accessible.name: card.task.title
