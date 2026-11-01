@@ -1265,6 +1265,8 @@ class Library(QObject):
         try:
             core_presets.sync_download_collections(self._con)
             core_presets.sync_default_library(self._con)
+            # #141 round 2: downloaded packs become discrete libraries
+            core_presets.sync_pack_libraries(self._con)
         except Exception:                          # noqa: BLE001
             pass
         self._mark_lists_dirty()

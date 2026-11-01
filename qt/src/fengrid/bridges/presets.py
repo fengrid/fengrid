@@ -237,6 +237,8 @@ class Presets(QObject):
         # fills in as the clone's scan completes
         core_presets.sync_download_collections(self._con)
         core_presets.sync_default_library(self._con)
+        # #141 round 2: the pack also becomes a discrete LIBRARY
+        core_presets.sync_pack_libraries(self._con)
         self.entriesChanged.emit()
         self.librariesChanged.emit()
 

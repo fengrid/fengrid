@@ -176,6 +176,52 @@ def test_sync_download_collections_files_downloaded_assets(lib, tmp_path):
     assert n == 2
 
 
+def test_sync_pack_libraries_creates_tagged_pack_library(lib, tmp_path):
+    """#141 round 2: a downloaded pack becomes a discrete LIBRARY — a
+    tag-driven library_view named after the pack, with the pack tag on
+    its indexed assets, browseable from the global Libraries list."""
+    con = lib
+    _seed_downloaded_pack(con, tmp_path)      # 'Flat Icons', 2 icon assets
+    core_presets.sync_pack_libraries(con)
+
+    row = con.execute(
+        "SELECT id, tags, match_all FROM library_view"
+        " WHERE name = 'Flat Icons'").fetchone()
+    assert row is not None
+    assert row["tags"] == "Flat Icons" and row["match_all"] == 0
+
+    # the pack's indexed assets carry the pack tag
+    n = con.execute(
+        "SELECT COUNT(*) AS n FROM asset_tag at"
+        " JOIN tag t ON t.id = at.tag_id"
+        " JOIN asset a ON a.id = at.asset_id"
+        " WHERE t.name = 'Flat Icons'").fetchone()["n"]
+    assert n == 2
+
+    # idempotent: a second pass adds no tags and no duplicate view
+    core_presets.sync_pack_libraries(con)
+    assert con.execute(
+        "SELECT COUNT(*) AS n FROM library_view"
+        " WHERE name = 'Flat Icons'").fetchone()["n"] == 1
+    n2 = con.execute(
+        "SELECT COUNT(*) AS n FROM asset_tag at"
+        " JOIN tag t ON t.id = at.tag_id"
+        " WHERE t.name = 'Flat Icons'").fetchone()["n"]
+    assert n2 == 2
+
+
+def test_sync_pack_libraries_skips_templates(lib, tmp_path):
+    """Template packs never index assets — an always-empty library would
+    be noise, so they stay out of sync_pack_libraries (they remain in
+    the Preset Libraries download browser)."""
+    con = lib
+    _seed_downloaded_pack(con, tmp_path, pack_kind="template")
+    core_presets.sync_pack_libraries(con)
+    assert con.execute(
+        "SELECT COUNT(*) AS n FROM library_view"
+        " WHERE name = 'Site Themes'").fetchone()["n"] == 0
+
+
 def test_sync_download_collections_skips_templates(lib, tmp_path):
     con = lib
     _seed_downloaded_pack(con, tmp_path, pack_kind="template")

@@ -509,6 +509,52 @@ def sync_download_collections(con: sqlite3.Connection) -> None:
 _DEFAULT_LIBRARY_KINDS = ("icon", "font", "palette")
 
 
+def sync_pack_libraries(con: sqlite3.Connection) -> None:
+    """#141 (reporter round 2): every downloaded pack becomes a discrete
+    LIBRARY — a tag-driven ``library_view`` named after the pack, with
+    the pack's tag applied to its indexed assets, so the pack is
+    browsable/filterable from the global Libraries list on every pane.
+
+    Idempotent — the same reconciliation discipline as
+    sync_download_collections: called after downloads and after
+    completed scans, because the tag can only land once the clone's
+    assets are actually indexed. The library_view row itself is created
+    immediately at download time (UNIQUE(name) guarded), counts fill in
+    as assets index.
+    """
+    rows = con.execute(
+        "SELECT e.name, e.local_path, l.kind AS pack_kind"
+        " FROM preset_entry e JOIN preset_library l ON l.id = e.library_id"
+        " WHERE e.downloaded = 1").fetchall()
+    from . import taxonomy as core_tax
+    for r in rows:
+        if _PACK_ASSET_KIND.get(r["pack_kind"]) is None:
+            continue
+        name = str(r["name"]).strip()
+        if not name:
+            continue
+        # the tag the pack's assets carry (library views are tag-driven)
+        con.execute("INSERT OR IGNORE INTO tag(name) VALUES (?)", (name,))
+        tag_id = con.execute("SELECT id FROM tag WHERE name = ?",
+                             (name,)).fetchone()["id"]
+        if r["local_path"]:
+            src = con.execute(
+                "SELECT id FROM source WHERE path = ?",
+                (str(Path(r["local_path"]).resolve()),)).fetchone()
+            if src is not None:
+                con.execute(
+                    "INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
+                    " SELECT a.id, ? FROM asset a WHERE a.source_id = ?",
+                    (tag_id, src["id"]))
+        if con.execute("SELECT 1 FROM library_view WHERE name = ?",
+                       (name,)).fetchone() is None:
+            try:
+                core_tax.create_library_view(con, name, name, False)
+            except ValueError:
+                pass
+    con.commit()
+
+
 def sync_default_library(con: sqlite3.Connection) -> None:
     """#135/#136: ensure each pane's 'Default' library contains the pane's
     preset content plus any downloaded assets.  Idempotent — safe to call

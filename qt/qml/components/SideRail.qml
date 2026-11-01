@@ -946,13 +946,18 @@ Rectangle {
             SectionHeader {
                 label: qsTr("Libraries")
                 sectionKey: "libraries"
-                visible: rail.paneKind !== "" || (presets !== null && presets.libraries.length > 0)
+                visible: rail.paneKind !== ""
+                         || (taxonomy !== null
+                             && taxonomy.libraryViews.length > 0)
             }
             Repeater {
                 // ONE Libraries list, GLOBAL by design (#141): every user
-                // library shows on every pane (counts stay per-pane), then
-                // curated preset packs for the active pane's kind
-                // (badge "preset", sub shows remote/local state)
+                // library shows on every pane (counts stay per-pane).
+                // #141 round 2: preset PACKS are no longer library rows —
+                // they are a download catalog, not a library; the rail
+                // bottom carries the Preset Libraries button instead, and
+                // each downloaded pack becomes its own discrete library
+                // (sync_pack_libraries)
                 model: {
                     if (rail.sectOpen.libraries === false)
                         return [];
@@ -963,32 +968,18 @@ Rectangle {
                             t: "library",
                             row: views[i]
                         });
-                    var packs = presets !== null ? presets.libraries : [];
-                    for (var j = 0; j < packs.length; j++)
-                        if (rail.paneKind === "" || packs[j].kind === rail.paneKind)
-                            out.push({
-                                t: "preset",
-                                row: packs[j]
-                            });
                     return out;
                 }
                 RailItem {
                     id: libRow
                     required property var modelData
-                    readonly property bool isPreset: modelData.t === "preset"
                     readonly property var row: modelData.row
-                    visible: libRow.isPreset || true  // #141: libraries are global
                     label: libRow.row.name
-                    badge: libRow.isPreset ? "preset" : ""
-                    sub: libRow.isPreset ? (libRow.row.downloaded > 0 ? "preset · " + libRow.row.downloaded + " local" : "preset · remote") : (libRow.row.tags || "")
-                    count: String(libRow.isPreset ? libRow.row.entries : (rail.pane === 0 ? libRow.row.n : (libRow.row.counts ? (libRow.row.counts[rail.paneKind] || 0) : 0)))
+                    sub: libRow.row.tags || ""
+                    count: String(rail.pane === 0 ? libRow.row.n : (libRow.row.counts ? (libRow.row.counts[rail.paneKind] || 0) : 0))
                     accent: theme.tokens.accent
-                    active: libRow.isPreset ? false : (rail.pane === 0 ? (library !== null && library.activeLibraryView === String(libRow.row.id)) : (rail.pane === 2 ? colors !== null && colors.libraryTagFilter === String(libRow.row.tags || "") : code !== null && code.libraryTagFilter === String(libRow.row.tags || "")))
+                    active: rail.pane === 0 ? (library !== null && library.activeLibraryView === String(libRow.row.id)) : (rail.pane === 2 ? colors !== null && colors.libraryTagFilter === String(libRow.row.tags || "") : code !== null && code.libraryTagFilter === String(libRow.row.tags || ""))
                     onPicked: {
-                        if (libRow.isPreset) {
-                            presetsDialog.openLibrary(libRow.row.id);
-                            return;
-                        }
                         if (rail.pane === 0 && library !== null) {
                             library.set_library_view(String(libRow.row.id));
                             return;
@@ -1372,36 +1363,73 @@ Rectangle {
             height: 1
             color: theme.tokens.border
         }
-        Rectangle {
+        // #141 round 2: TWO sibling actions — the preset-pack catalog is
+        // a download function, not a library, so it lives here beside the
+        // import flow instead of inside the Libraries list. Each button
+        // half-width; the Preset Libraries button opens the pack browser
+        // preloaded with the ACTIVE pane's pack (works on every pane).
+        Row {
             anchors.fill: parent
             anchors.margins: 6
-            radius: 6
-            color: importMa.containsMouse ? theme.tokens.accent : theme.tokens.surface2
-            border.color: importMa.containsMouse ? theme.tokens.accent : theme.tokens.border
-            Row {
-                anchors.centerIn: parent
-                spacing: 7
-                IconImage {
-                    name: "download"
-                    px: 13
-                    tint: importMa.containsMouse ? theme.tokens.bg : theme.tokens.text
-                    anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+
+            component RailAction: Rectangle {
+                property string actionIcon
+                property string actionLabel
+                property bool isPresetAction
+                width: (parent.width - parent.spacing) / 2
+                height: parent.height
+                radius: 6
+                color: ma.containsMouse ? theme.tokens.accent
+                                        : theme.tokens.surface2
+                border.color: ma.containsMouse ? theme.tokens.accent
+                                               : theme.tokens.border
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 3
+                    IconImage {
+                        name: actionIcon
+                        px: 13
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        tint: ma.containsMouse ? theme.tokens.bg
+                                               : theme.tokens.text
+                    }
+                    Text {
+                        text: actionLabel
+                        font.family: theme.uiFont
+                        font.pixelSize: 10
+                        font.weight: Font.DemiBold
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        color: ma.containsMouse ? theme.tokens.bg
+                                                : theme.tokens.text
+                    }
                 }
-                Text {
-                    text: qsTr("Import Assets")
-                    font.family: theme.uiFont
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    color: importMa.containsMouse ? theme.tokens.bg : theme.tokens.text
-                    anchors.verticalCenter: parent.verticalCenter
+                MouseArea {
+                    id: ma
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (isPresetAction)
+                            presetsDialog.openLibrary(-1, rail.paneKind);
+                        else
+                            rail.importRequested();
+                    }
                 }
+                Accessible.role: Accessible.Button
+                Accessible.name: actionLabel
             }
-            MouseArea {
-                id: importMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: rail.importRequested()
+
+            RailAction {
+                actionIcon: "package"
+                actionLabel: qsTr("Preset Libraries")
+                isPresetAction: true
+            }
+            RailAction {
+                actionIcon: "download"
+                actionLabel: qsTr("Import Assets")
+                isPresetAction: false
             }
         }
     }
