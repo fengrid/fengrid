@@ -72,11 +72,13 @@ from the releases page, unpack, and run the `fengrid` binary.
 ```bash
 git clone https://github.com/fengrid/fengrid.git
 cd fengrid/qt
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e .
-python -m fengrid
+uv sync --no-dev              # frozen env from the committed uv.lock
+uv run python -m fengrid
 ```
+
+(uv first: `curl -LsSf https://astral.sh/uv/install.sh | sh` on Linux/macOS
+or the installer at https://docs.astral.sh/uv/getting-started/installation/;
+plain `uv sync` without `--no-dev` adds the QA toolchain for development.)
 
 **Build a distributable bundle:**
 
@@ -86,7 +88,8 @@ bash build/scripts/build-linux.sh linux-x64     # or linux-arm64
 ```
 
 Requires Python ≥ 3.11. On Linux the bundles carry their own Qt; a source
-run needs PySide6 (installed by pip) and works on both X11 and Wayland.
+run gets its dependencies from the committed `qt/uv.lock` (uv) and works on
+both X11 and Wayland.
 
 ## Documentation
 

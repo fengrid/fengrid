@@ -44,13 +44,17 @@ try {
             $OutDir, $SpecDir
     }
 
-    # native run: isolated venv so CI/local builds don't pollute the host env
-    python -m venv .venv
+    # isolated environment so CI/local builds don't pollute the host: uv sync
+    # materializes qt\.venv from the committed uv.lock (pyproject.toml is the
+    # source of truth). Prod installs the build group only; dev adds the dev
+    # group (pytest/ruff). Same venv layout pip produced, so Activate.ps1 and
+    # every python/PyInstaller call below is unchanged.
+    if ($VARIANT -eq "dev") {
+        uv sync --frozen --group build      # dev group is included by default
+    } else {
+        uv sync --frozen --no-dev --group build
+    }
     . .\.venv\Scripts\Activate.ps1
-    python -m pip install --upgrade pip wheel
-    $Reqs = Join-Path $Root "build\requirements-build.txt"
-    if ($VARIANT -eq "dev") { $Reqs = Join-Path $Root "build\requirements-dev.txt" }
-    python -m pip install -r $Reqs
 
     # platform wheel probe — fail fast with the recorded decision (mirrors the
     # probe in build-linux.sh)

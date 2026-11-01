@@ -13,16 +13,18 @@ releases page, unpack, and run the `fengrid` binary inside.
 ```bash
 git clone https://github.com/fengrid/fengrid.git
 cd fengrid/qt
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e .
+uv sync --no-dev         # frozen env from the committed uv.lock
 ```
+
+(Install uv first: `curl -LsSf https://astral.sh/uv/install.sh | sh` on
+Linux/macOS, or the installer at
+https://docs.astral.sh/uv/getting-started/installation/.)
 
 ## 2. Run
 
 ```bash
-python -m fengrid        # from the qt/ directory (source install)
-./fengrid                # packaged bundle
+uv run python -m fengrid  # from the qt/ directory (source install)
+./fengrid                 # packaged bundle
 ```
 
 The first launch shows the setup screen: pick the icon roots and font
