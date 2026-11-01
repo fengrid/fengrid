@@ -164,6 +164,34 @@ CREATE TABLE IF NOT EXISTS preset_entry (
     guid         TEXT,
     slug         TEXT
 );
+CREATE TABLE IF NOT EXISTS project_task (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    title       TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    stage       TEXT NOT NULL DEFAULT 'triage',
+    position    REAL NOT NULL DEFAULT 0,
+    priority    TEXT NOT NULL DEFAULT '',
+    due_date    TEXT NOT NULL DEFAULT '',
+    status_note TEXT NOT NULL DEFAULT '',
+    created     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated     TEXT NOT NULL DEFAULT (datetime('now')),
+    guid        TEXT,
+    slug        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_task_stage ON project_task(stage, position);
+
+-- tasks can carry their own asset references (deep integration with the
+-- library — same shape as project_asset, scoped per task)
+CREATE TABLE IF NOT EXISTS project_task_asset (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id    INTEGER NOT NULL REFERENCES project_task(id) ON DELETE CASCADE,
+    asset_kind TEXT NOT NULL,        -- 'icon' | 'font' | 'snippet' | 'palette'
+    asset_id   INTEGER NOT NULL,     -- row id in asset / snippet / palette
+    label      TEXT NOT NULL DEFAULT '',
+    UNIQUE(task_id, asset_kind, asset_id)
+);
+
 CREATE TABLE IF NOT EXISTS project_asset (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

@@ -46,8 +46,8 @@ def test_prefs_persist_and_clamp(tmp_path):
 
     p.set_startup_pane(3)
     assert p.startupPane == 3
-    p.set_startup_pane(99)               # clamped to pane range
-    assert p.startupPane == 4
+    p.set_startup_pane(99)               # clamped to pane range — 6 panes
+    assert p.startupPane == 5            # since the Planning pane (#132)
 
     p.set_update_check(False)
     assert p.updateCheck is False

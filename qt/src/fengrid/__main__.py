@@ -366,6 +366,9 @@ def main(argv=None) -> int:
     term_bridge = TermColors(con)
     code_bridge = Code(con)
     projects_bridge = Projects(con)
+    # planning board (#132): Kanban tasks over the project-task model
+    from fengrid.bridges.planning import Planning
+    planning_bridge = Planning(con)
     # studio workspace (Design/Templates/Docker/Docs screens)
     from fengrid.bridges.studio import Studio
     studio_bridge = Studio(con)
@@ -426,6 +429,7 @@ def main(argv=None) -> int:
     css_highlighter = EditorHighlighter(theme)
     ctx.setContextProperty("cssHl", css_highlighter)
     ctx.setContextProperty("projects", projects_bridge)
+    ctx.setContextProperty("planning", planning_bridge)
     ctx.setContextProperty("studio", studio_bridge)
     ctx.setContextProperty("sc", sc_bridge)
     ctx.setContextProperty("undoProjects", projects_undo)
@@ -568,6 +572,8 @@ def main(argv=None) -> int:
                 (f"%{args.qa_select}%",)).fetchone()
             if row:
                 projects_bridge.open(row["id"])
+        elif args.pane == 5:
+            planning_bridge.open_task(args.qa_select)
 
     def _start_initial_scans():
         if args.no_scan:

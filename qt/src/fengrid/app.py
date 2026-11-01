@@ -32,6 +32,8 @@ DARK = {
     "accent_code": "#F0885C",
     "accent_color": "#E879A6",
     "accent_project": "#63C48B",
+    "accent_planning": "#5AA7E8",   # Planning pane — board blue (distinct
+                                    # from the other five category hues)
     # syntax-highlight tokens (code pane); values from the 0.x pane CSS
     "hl_ink": "#F5C25C",    # attributes / CSS props / numbers
     "ink_faint": "#7E8B96",   # comment/placeholder ink (code pane) —
@@ -63,6 +65,7 @@ LIGHT = {
     "accent_code": "#C44A1E",
     "accent_color": "#B0306A",
     "accent_project": "#1B7A4E",
+    "accent_planning": "#1D6FD6",   # darkened for the light surface
     "hl_ink": "#A16207",    # raw amber on white is 1.78:1 — use the ink tone
     "ink_faint": "#9AA6B0",
 }
