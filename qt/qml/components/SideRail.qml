@@ -20,9 +20,8 @@ Rectangle {
     // CONTEXT-SPECIFIC RAIL — the rail's contents follow the active pane:
     // icon-only sections (themes / contexts / types / tags / add-folder)
     // render only on the Icons pane, and the Collections list tracks the
-    // pane's own ref kind (icon, palette, snippet) with per-kind counts.
-    // Fonts and Projects don't carry collection refs yet, so those panes
-    // hide the collections block entirely.
+    // pane's own ref kind (icon, font, palette, snippet) with per-kind
+    // counts; every pane carries typed collections and library filtering.
     // QA modal registry (--dialog <name>) — popups are unreachable from
     // the QObject tree, so Main.qml resolves them through this map
     readonly property var qaModals: ({
@@ -618,11 +617,23 @@ Rectangle {
                 }
             }
             RailItem {
-                visible: rail.showCollections && rail.sectOpen.collections !== false && presets !== null && rail.paneKind !== "" && presets.libraries.some(p => p.kind === rail.paneKind && p.downloaded > 0)
+                // #141: what "saved" means differs per pane — icon/font
+                // packs are saved by DOWNLOADING entries (pack.downloaded
+                // > 0); palette presets are saved by APPLYING one
+                // (auto-filed by the Colors bridge, tagged 'preset').
+                visible: rail.showCollections && rail.sectOpen.collections !== false && rail.paneKind !== "" && (rail.pane === 2 ? (colors !== null && colors.presetPaletteCount > 0) : (presets !== null && presets.libraries.some(p => p.kind === rail.paneKind && p.downloaded > 0)))
                 label: qsTr("Saved Presets")
-                count: String(presets !== null ? presets.libraries.filter(p => p.kind === rail.paneKind && p.downloaded > 0).length : 0)
+                count: rail.pane === 2 ? String(colors !== null ? colors.presetPaletteCount : 0) : String(presets !== null ? presets.libraries.filter(p => p.kind === rail.paneKind && p.downloaded > 0).length : 0)
                 badge: "preset"
                 onPicked: {
+                    if (rail.pane === 2) {
+                        // show the filed preset palettes in the grid
+                        // (any-match on the preset tag); a second click
+                        // clears the filter
+                        if (colors !== null)
+                            colors.set_library_tags("preset", false);
+                        return;
+                    }
                     var packs = presets !== null ? presets.libraries.filter(p => p.kind === rail.paneKind && p.downloaded > 0) : [];
                     if (packs.length > 0)
                         presetsDialog.openLibrary(packs[0].id);
@@ -978,16 +989,18 @@ Rectangle {
                     sub: libRow.row.tags || ""
                     count: String(rail.pane === 0 ? libRow.row.n : (libRow.row.counts ? (libRow.row.counts[rail.paneKind] || 0) : 0))
                     accent: theme.tokens.accent
-                    active: rail.pane === 0 ? (library !== null && library.activeLibraryView === String(libRow.row.id)) : (rail.pane === 2 ? colors !== null && colors.libraryTagFilter === String(libRow.row.tags || "") : code !== null && code.libraryTagFilter === String(libRow.row.tags || ""))
+                    active: rail.pane === 0 ? (library !== null && library.activeLibraryView === String(libRow.row.id)) : (rail.pane === 1 ? (fonts !== null && fonts.libraryTagFilter === String(libRow.row.tags || "")) : (rail.pane === 2 ? colors !== null && colors.libraryTagFilter === String(libRow.row.tags || "") : code !== null && code.libraryTagFilter === String(libRow.row.tags || "")))
                     onPicked: {
                         if (rail.pane === 0 && library !== null) {
                             library.set_library_view(String(libRow.row.id));
                             return;
                         }
-                        // panes 2/3: the view's tag set filters the pane
+                        // panes 1/2/3: the view's tag set filters the pane
                         var tags = String(libRow.row.tags || "");
                         var all = libRow.row.match_all === 1;
-                        if (rail.pane === 2 && colors !== null)
+                        if (rail.pane === 1 && fonts !== null)
+                            fonts.set_library_tags(tags, all);
+                        else if (rail.pane === 2 && colors !== null)
                             colors.set_library_tags(tags, all);
                         else if (rail.pane === 3 && code !== null)
                             code.set_library_tags(tags, all);

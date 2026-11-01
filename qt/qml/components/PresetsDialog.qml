@@ -81,9 +81,10 @@ Dialog {
             currentLib = libId;
         } else {
             // no explicit pack: open the library matching the ACTIVE
-            // pane's asset kind (Fonts pane → Open Fonts, etc.)
+            // pane's asset kind (Fonts pane → Open Fonts, Colors pane
+            // → Color Harmonies, etc.)
             var packs = presets !== null ? presets.libraries : [];
-            var want = paneKind === "font" ? "font" : paneKind === "icon" ? "icon" : paneKind === "template" ? "template" : "";
+            var want = paneKind === "font" ? "font" : paneKind === "icon" ? "icon" : paneKind === "template" ? "template" : paneKind === "palette" ? "palette" : "";
             currentLib = -1;
             for (var i = 0; i < packs.length; i++)
                 if (want !== "" && packs[i].kind === want)

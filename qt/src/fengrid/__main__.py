@@ -479,6 +479,18 @@ def main(argv=None) -> int:
     library.scanFinished.connect(_on_any_scan_finished)
     fonts.scanFinished.connect(_on_any_scan_finished)
 
+    # #141: applying a palette-kind preset from the Preset Libraries
+    # dialog loads it into the Colors pane editor and files it as a
+    # palette tagged 'preset' (Saved Presets row) — previously the
+    # signal had no consumer, so Apply did nothing visible
+    def _on_preset_applied(entry_id: int, hexes: list) -> None:
+        row = con.execute("SELECT name FROM preset_entry WHERE id = ?",
+                          (int(entry_id),)).fetchone()
+        colors_bridge.load_hexes(hexes)
+        colors_bridge.save_as_preset(row["name"] if row else "")
+
+    presets_bridge.presetApplied.connect(_on_preset_applied)
+
     presets_bridge.sourceAdded.connect(_on_preset_source)
     preview_profile = make_preview_profile(con, app)
     # None on platforms without WebEngine — QML binds it only inside the

@@ -542,9 +542,14 @@ def sync_pack_libraries(con: sqlite3.Connection) -> None:
                 "SELECT id FROM source WHERE path = ?",
                 (str(Path(r["local_path"]).resolve()),)).fetchone()
             if src is not None:
+                # tag the pack's assets through the kind-aware item_tag
+                # store — the same table every library/collection filter
+                # reads (asset_tag is the legacy pre-taxonomy table; a
+                # write there is invisible to the rail)
                 con.execute(
-                    "INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
-                    " SELECT a.id, ? FROM asset a WHERE a.source_id = ?",
+                    "INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
+                    " tag_id) SELECT a.id, a.kind, ? FROM asset a"
+                    " WHERE a.source_id = ?",
                     (tag_id, src["id"]))
         if con.execute("SELECT 1 FROM library_view WHERE name = ?",
                        (name,)).fetchone() is None:
