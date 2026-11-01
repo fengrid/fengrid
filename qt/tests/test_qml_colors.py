@@ -72,6 +72,7 @@ def colors_ui(tmp_path):
     yield {"root": root, "win": win, "colors": colors_bridge, "con": con}
 
     # teardown in the proven order (bridges alive while the engine dies)
+    win.hide()
     win.close()
     root.setParentItem(None)
     engine.collectGarbage()
@@ -84,7 +85,7 @@ def _window_click(win, scene_pos):
     """Press + release at a scene position on the WINDOW — delivery goes to
     the topmost item at that position, i.e. the real stacking order."""
     for typ, buttons in ((QEvent.MouseButtonPress, Qt.LeftButton),
-                         (QEvent.MouseButtonRelease, Qt.LeftButton)):
+                         (QEvent.MouseButtonRelease, Qt.NoButton)):
         ev = QMouseEvent(typ, scene_pos, scene_pos, Qt.LeftButton, buttons,
                          Qt.KeyboardModifier.NoModifier)
         QCoreApplication.sendEvent(win, ev)
@@ -300,3 +301,117 @@ def test_hsl_slider_drag_updates_swatch(colors_ui):
     # the component val must track the slider (readout correctness)
     assert abs(h.property("val") - after_h) <= 2, (
         h.property("val"), after_h)
+
+
+def test_color_picker_dialog_applies_hex(colors_ui):
+    """The paint-drop button opens ColorPickerDialog; picking a preset or
+    typing a hex and hitting Apply calls set_hex on the bridge."""
+    ed = colors_ui
+    bridge, win, root = ed["colors"], ed["win"], ed["root"]
+
+    bridge.select(0)
+    _qapp().processEvents()
+    before_hex = bridge.swatches[0]["hex"]
+    assert before_hex != "#FF0000"
+
+    # find the paint-drop IconButton and click it
+    picker_btn = None
+    stack = [root]
+    while stack:
+        o = stack.pop()
+        try:
+            if o.property("icon_name") == "paint-drop":
+                picker_btn = o
+                break
+        except Exception:
+            pass
+        try:
+            stack.extend(o.childItems())
+        except Exception:
+            pass
+    assert picker_btn is not None, "color picker button not found"
+    pos = picker_btn.mapToScene(QPointF(12, 12))
+    _window_click(win, pos)
+    _qapp().processEvents()
+
+    # find the ColorPickerDialog instance (Popup lives in the QObject tree)
+    dlg = None
+    def _find_dlg(obj):
+        nonlocal dlg
+        try:
+            if "ColorPickerDialog" in obj.metaObject().className():
+                dlg = obj
+                return
+        except Exception:
+            pass
+        try:
+            for c in obj.children():
+                _find_dlg(c)
+        except Exception:
+            pass
+    _find_dlg(root)
+    assert dlg is not None, "ColorPickerDialog instance not found"
+
+    # the button's onClicked already called openWith — verify the dialog is visible
+    _qapp().processEvents()
+    assert bool(dlg.property("visible")), "color picker dialog did not open"
+
+    # find the hex TextInput inside the dialog
+    hex_input = None
+    def _find_input(obj):
+        nonlocal hex_input
+        try:
+            cn = obj.metaObject().className()
+            if "TextInput" in cn:
+                hex_input = obj
+                return
+        except Exception:
+            pass
+        try:
+            for c in obj.children():
+                _find_input(c)
+        except Exception:
+            pass
+    _find_input(dlg)
+    assert hex_input is not None, "color picker hex input not found"
+    hex_input.setProperty("text", "#FF0000")
+    _qapp().processEvents()
+
+    # find the Apply Button inside the dialog footer and click it
+    accept_btn = None
+    def _find_accept(obj):
+        nonlocal accept_btn
+        try:
+            cn = obj.metaObject().className()
+            if "Button" in cn:
+                try:
+                    txt = str(obj.property("text") or "")
+                    if "Apply" in txt:
+                        accept_btn = obj
+                        return
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            for c in obj.children():
+                _find_accept(c)
+        except Exception:
+            pass
+    _find_accept(dlg)
+    assert accept_btn is not None, "Apply button not found in dialog"
+    pos2 = accept_btn.mapToScene(
+        QPointF(accept_btn.width() / 2, accept_btn.height() / 2))
+    _window_click(win, pos2)
+    _qapp().processEvents()
+
+    # ensure the dialog is fully closed before the next test
+    try:
+        if bool(dlg.property("visible")):
+            dlg.close()
+            _qapp().processEvents()
+    except Exception:
+        pass
+
+    assert bridge.swatches[0]["hex"].upper() == "#FF0000", (
+        f"color picker did not apply hex: {bridge.swatches[0]['hex']}")
