@@ -608,7 +608,7 @@ def _note_woff2_skips(n: int) -> None:
     (issue #63) — never per file."""
     if n:
         print(f"fengrid: skipped WOFF2 identification for {n} font file(s) —"
-              " install brotli (pip install brotli) for full font metadata",
+              " install brotli (uv pip install brotli) for full font metadata",
               file=sys.stderr)
 
 

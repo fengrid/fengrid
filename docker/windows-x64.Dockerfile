@@ -9,34 +9,37 @@
 # same artifact — this Dockerfile is the containerized alternative and has
 # not had its first real run yet.
 #
-# TODO(draft) before first use: verify the python.org 3.12.x installer URL
-# and the servercore tag available at build time.
+# Package management is uv, matching every other pipeline: the astral
+# installer drops uv into C:\uv (honoring $env:UV_INSTALL_DIR), and uv
+# fetches its own CPython 3.12 (UV_PYTHON) — the python.org installer
+# download is gone.
+#
+# TODO(draft) before first use: verify the astral installer URL is reachable
+# from the runner and the servercore tag available at build time.
 FROM mcr.microsoft.com/windows/servercore:ltsc2022 AS build
 ARG VARIANT=prod
 SHELL ["powershell", "-Command", "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue';"]
 
-RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
-    Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe' -OutFile C:\python-installer.exe; \
-    Start-Process -Wait -FilePath C:\python-installer.exe -ArgumentList '/quiet InstallAllUsers=1 PrependPath=1'; \
-    Remove-Item C:\python-installer.exe
+ENV UV_INSTALL_DIR=C:\uv UV_PYTHON=3.12 UV_NO_CACHE=1 FENGRID_VARIANT=${VARIANT}
 
-ENV PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1 FENGRID_VARIANT=${VARIANT}
+# uv via the official installer (ExecutionPolicy Bypass — servercore's
+# default RemoteSigned would block a downloaded .ps1)
+RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
+    Invoke-WebRequest -Uri 'https://astral.sh/uv/install.ps1' -OutFile C:\uv-install.ps1; \
+    powershell -NoProfile -ExecutionPolicy Bypass -File C:\uv-install.ps1; \
+    Remove-Item C:\uv-install.ps1
+ENV PATH="C:\uv;%PATH%"
 
 WORKDIR C:/work
 COPY build/scripts/ C:/work/build/scripts/
-COPY build/requirements-build.txt C:/work/build/requirements-build.txt
-COPY build/requirements-dev.txt C:/work/build/requirements-dev.txt
+# qt/ carries pyproject.toml + the committed uv.lock (the uv project root)
 COPY qt/ C:/work/qt/
 COPY fonts/ C:/work/fonts/
 
-RUN python -m venv C:\venv
-RUN C:\venv\Scripts\python.exe -m pip install --upgrade pip wheel
-RUN if ($env:FENGRID_VARIANT -eq 'dev') { \
-      C:\venv\Scripts\python.exe -m pip install -r C:\work\build\requirements-dev.txt; \
-    } else { \
-      C:\venv\Scripts\python.exe -m pip install -r C:\work\build\requirements-build.txt; \
-    }
-RUN cd C:\work\qt; C:\venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --name fengrid --add-data 'qml;qml' --add-data '..\fonts;fonts' --paths src src\fengrid\__main__.py
+# frozen environment from the committed uv.lock — uv pulls CPython 3.12
+# into its managed runtimes dir, which persists in this image layer
+RUN cd C:\work\qt; if ($env:FENGRID_VARIANT -eq 'dev') { uv sync --frozen --group build } else { uv sync --frozen --no-dev --group build }
+RUN cd C:\work\qt; C:\work\qt\.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --name fengrid --add-data 'qml;qml' --add-data '..\fonts;fonts' --paths src src\fengrid\__main__.py
 
 FROM mcr.microsoft.com/windows/nanoserver:ltsc2022 AS artifact
 COPY --from=build C:/work/qt/dist/fengrid C:/fengrid

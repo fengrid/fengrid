@@ -12,9 +12,8 @@ frozen as the parity reference — see `docs/review/2026-current-state-review.md
 
 ```sh
 cd qt
-python3 -m venv .venv && . .venv/bin/activate
-pip install -e .
-fengrid
+uv sync            # frozen env (uv.lock) + editable install, dev toolchain included
+uv run fengrid
 ```
 
 Requires a display (this is a GUI; headless boxes need a virtual display).

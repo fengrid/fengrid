@@ -17,7 +17,7 @@
 #
 # DRAFT (2026-10-18): not yet executed — validate the WebEngine runtime lib
 # list on the first real run (see docker/README.md).
-ARG BASE=python:3.12-slim-bookworm
+ARG BASE=ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 FROM ${BASE} AS build
 ARG VARIANT=prod
 # forwarded from build-docker-linux.sh (FENGRID_SMOKE knob) — without
@@ -28,12 +28,11 @@ ARG SMOKE=1
 # build-docker-linux.sh forwards it and build-linux.sh stamps it
 ARG COMMIT=unknown
 ENV DEBIAN_FRONTEND=noninteractive \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1 \
+    UV_NO_CACHE=1 \
+    UV_LINK_MODE=copy \
     FENGRID_VARIANT=${VARIANT} \
     FENGRID_SMOKE=${SMOKE} \
-    FENGRID_BUILD_COMMIT=${COMMIT} \
-    FENGRID_IN_CONTAINER=1
+    FENGRID_BUILD_COMMIT=${COMMIT}
 
 # Qt WebEngine runtime dependencies + build tooling. Validated on the first
 # two container runs (2026-10-19): PyInstaller's "Library not found" list
@@ -56,13 +55,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /work
 COPY build/scripts/ build/scripts/
-COPY build/requirements-build.txt build/requirements-build.txt
-COPY build/requirements-dev.txt build/requirements-dev.txt
+# qt/ carries pyproject.toml + the committed uv.lock (the uv project root)
 COPY qt/ qt/
 COPY fonts/ fonts/
 
-# The build script skips venv creation when FENGRID_IN_CONTAINER=1 and uses
-# the container's system python.
+# uv (on PATH in this base image) syncs /work/qt/.venv from the committed
+# uv.lock inside build-linux.sh — no pip/venv steps in the Dockerfile.
 RUN bash build/scripts/build-linux.sh linux-arm64
 
 FROM scratch AS artifact

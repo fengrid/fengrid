@@ -26,10 +26,10 @@ __pycache__/
 
 # local build outputs — build/scripts/build-docker-linux.sh lands artifacts in
 # build/<target>/; build/pyinstaller/ holds regenerated spec files (never
-# commit host-absolute specs). build/scripts + requirements stay tracked.
+# commit host-absolute specs). build/scripts stays tracked; dependency
+# manifests live in the uv project (qt/pyproject.toml + qt/uv.lock).
 build/*
 !build/scripts/
-!build/requirements-*.txt
 dist/
 qt/dist/
 qt/build/
