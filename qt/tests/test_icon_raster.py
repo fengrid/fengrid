@@ -96,7 +96,8 @@ _APP_NAMES = [
     "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up",
     "code", "copy", "download", "droplet", "external-link", "file-text",
     "folder-plus", "git-branch", "grid", "hard-drive", "help", "image",
-    "layers", "lock", "menu", "moon", "package", "play", "plus", "refresh",
+    "layers", "lock", "menu", "moon", "package", "paint-drop", "play",
+    "plus", "refresh",
     "search", "star", "sun", "tag", "trash", "type", "unlock", "upload",
     "x", "zap",
 ]
@@ -111,9 +112,11 @@ def test_every_icon_name_resolves(icons, name):
     m = re.search(r"viewBox='0 0 16 16' fill='#E7EDF2'>(.+)</svg>", svg, re.S)
     assert m and m.group(1).strip(), f"{name}: empty path body"
     vendored = list(ICONS_DIR.rglob("*.svg"))
-    # the generated dict is built FROM the vendored files — the count of
-    # vendored files must equal the dict size (1:1, no orphans)
-    assert len(vendored) >= len(_APP_NAMES)
+    # the generated dict is built FROM the vendored files; since #149 an
+    # alias can share one file (droplet + paint-drop → misc/paint-drop.svg),
+    # so 1:1 counting is gone — orphan protection lives in
+    # test_vendored_files_match_generated_dict (vendored ⊆ mapped)
+    assert len(vendored) >= 1 and vendored
 
 
 def test_vendored_files_match_generated_dict():
