@@ -121,7 +121,7 @@ def test_vendored_files_match_generated_dict():
     orphan files, no stale dict entries (keeps
     scripts/generate-icons-qml.py honest)."""
     src = (QML_DIR / "components" / "Icons.qml").read_text()
-    keys = set(re.findall(r'^\s{8}"([a-z0-9-]+)":', src, re.M))
+    keys = set(re.findall(r'^\s+"([a-z0-9-]+)":', src, re.M))
     assert keys == set(_APP_NAMES), (
         f"dict keys drifted: {keys ^ set(_APP_NAMES)}")
     vendored = {p.stem for p in ICONS_DIR.rglob("*.svg")}
