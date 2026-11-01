@@ -452,6 +452,9 @@ def main(argv=None) -> int:
     # _start_initial_scans rescans exactly the kinds that registered
     preset_sources = core_presets.sync_downloaded_sources(con)
     core_presets.sync_default_library(con)
+    # #141 round 2: packs downloaded by earlier builds get their
+    # discrete libraries on startup too
+    core_presets.sync_pack_libraries(con)
     presets_bridge = Presets(con, data_dir)
     ctx.setContextProperty("presets", presets_bridge)
 
