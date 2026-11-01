@@ -1264,6 +1264,7 @@ class Library(QObject):
         from ..core import presets as core_presets
         try:
             core_presets.sync_download_collections(self._con)
+            core_presets.sync_default_library(self._con)
         except Exception:                          # noqa: BLE001
             pass
         self._mark_lists_dirty()

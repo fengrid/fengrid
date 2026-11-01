@@ -273,31 +273,24 @@ Dialog {
                                 smooth: true
                             }
 
-                            // remote placeholder: dashed frame + download
-                            // glyph — "this entry is not locally present"
-                            Rectangle {
+                            // palette-kind entry: show color swatches
+                            Row {
                                 anchors.fill: parent
-                                visible: !entryCard.modelData.downloaded
-                                color: "transparent"
-                                border.color: theme.tokens.border
-                                border.width: 1
-                            }
-                            Column {
-                                anchors.centerIn: parent
-                                visible: !entryCard.modelData.downloaded
-                                spacing: 6
-                                IconImage {
-                                    name: "download"
-                                    px: 22
-                                    tint: entryCard.modelData.busy ? theme.tokens.accent : theme.tokens.textMuted
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                }
-                                Text {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: entryCard.modelData.busy ? qsTr("Cloning…") : qsTr("Remote — Not Downloaded")
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 9
-                                    color: theme.tokens.textMuted
+                                visible: entryCard.modelData.libraryKind === "palette"
+                                spacing: 2
+                                Repeater {
+                                    model: {
+                                        var raw = entryCard.modelData.colors || "";
+                                        if (!raw) return [];
+                                        try { return JSON.parse(raw); }
+                                        catch(e) { return []; }
+                                    }
+                                    Rectangle {
+                                        required property var modelData
+                                        width: (previewBox.width - 10) / 5
+                                        height: previewBox.height
+                                        color: modelData
+                                    }
                                 }
                             }
 
@@ -397,10 +390,13 @@ Dialog {
                                     entryMenu.popup();
                                     return;
                                 }
-                                if (entryCard.modelData.downloaded)
+                                if (entryCard.modelData.libraryKind === "palette") {
+                                    presets.apply_preset(entryCard.modelData.id);
+                                } else if (entryCard.modelData.downloaded) {
                                     presets.open_folder(entryCard.modelData.id);
-                                else
+                                } else {
                                     presets.download(entryCard.modelData.id);
+                                }
                             }
                         }
                         Menu {
@@ -413,22 +409,26 @@ Dialog {
                                 border.color: theme.tokens.border
                             }
                             FgMenuItem {
+                                visible: entryCard.modelData.libraryKind !== "palette"
                                 text: entryCard.modelData.downloaded ? qsTr("Update (git pull)") : qsTr("Download (git clone)")
                                 height: 28
                                 onTriggered: presets.download(entryCard.modelData.id)
                             }
                             FgMenuItem {
+                                visible: entryCard.modelData.libraryKind !== "palette"
                                 text: qsTr("Open folder")
                                 height: 28
                                 enabled: entryCard.modelData.downloaded
                                 onTriggered: presets.open_folder(entryCard.modelData.id)
                             }
                             FgMenuItem {
+                                visible: entryCard.modelData.libraryKind !== "palette"
                                 text: qsTr("Open on GitHub")
                                 height: 28
                                 onTriggered: Qt.openUrlExternally("https://github.com/" + entryCard.modelData.repo)
                             }
                             FgMenuItem {
+                                visible: entryCard.modelData.libraryKind !== "palette"
                                 text: qsTr("Remove local copy")
                                 height: 28
                                 enabled: entryCard.modelData.downloaded

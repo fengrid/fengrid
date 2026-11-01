@@ -447,6 +447,7 @@ def main(argv=None) -> int:
     # covers entries downloaded by older builds or on another machine;
     # _start_initial_scans rescans exactly the kinds that registered
     preset_sources = core_presets.sync_downloaded_sources(con)
+    core_presets.sync_default_library(con)
     presets_bridge = Presets(con, data_dir)
     ctx.setContextProperty("presets", presets_bridge)
 

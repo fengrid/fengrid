@@ -318,7 +318,10 @@ _FONT_COLUMNS = (
     "ALTER TABLE asset ADD COLUMN weight INTEGER",
     "ALTER TABLE asset ADD COLUMN italic INTEGER",
 )
-
+_PRESET_ENTRY_COLUMNS = (
+    "ALTER TABLE preset_entry ADD COLUMN colors TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE preset_entry ADD COLUMN palette_id INTEGER",
+)
 
 def _migrate(con: sqlite3.Connection) -> None:
     for stmt in _FONT_COLUMNS:
@@ -328,6 +331,12 @@ def _migrate(con: sqlite3.Connection) -> None:
             if "duplicate column" not in str(e).lower():
                 raise
     con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
+    for stmt in _PRESET_ENTRY_COLUMNS:
+        try:
+            con.execute(stmt)
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
     _migrate_guid_slug(con)
     _migrate_collections(con)
     _migrate_collection_kinds(con)
