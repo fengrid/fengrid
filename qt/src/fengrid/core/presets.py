@@ -21,8 +21,10 @@ project states it unambiguously.
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
+import time
 from pathlib import Path
 
 # ---------------------------------------------------------------- data
@@ -34,6 +36,21 @@ def _e(name, repo, desc, tags, license="", homepage="", branch=""):
         "url": f"https://github.com/{repo}.git",
         "branch": branch, "description": desc, "tags": tags,
         "license": license, "homepage": homepage,
+    }
+
+
+def _c(name, desc, colors, tags, license="", homepage=""):
+    """Palette-kind preset entry (color harmony, no remote URL)."""
+    return {
+        "name": name,
+        "repo": "",
+        "url": "",
+        "branch": "",
+        "description": desc,
+        "tags": tags,
+        "license": license,
+        "homepage": homepage,
+        "colors": colors,
     }
 
 
@@ -265,6 +282,67 @@ PRESET_PACKS = [
                "MIT", "https://bearblog.dev"),
         ],
     },
+    {
+        "name": "Color Harmonies",
+        "kind": "palette",
+        "summary": "Curated color-harmony palettes (complementary, triadic, "
+                   "analogous, split-complementary, tetradic, monochrome). "
+                   "Click any card to load it into the Harmony generator.",
+        "tags": "colors, harmony, palette, curated",
+        "entries": [
+            _c("Complementary Ocean",
+               "Deep navy and sky blue — complementary hues for "
+               "nautical interfaces.",
+               ["#03045E", "#023E8A", "#0077B6", "#00B4D8", "#90E0EF"],
+               "complementary, blue, nautical, cool"),
+            _c("Complementary Ember",
+               "Scarlet and charcoal — high-contrast complementary warmth.",
+               ["#370617", "#6A040F", "#9D0208", "#D00000", "#DC2F02"],
+               "complementary, red, warm, bold"),
+            _c("Triadic Bright",
+               "Blue, pink, and yellow equally spaced — energetic triadic "
+               "scheme.",
+               ["#03045E", "#FF006E", "#FFBE0B", "#8338EC", "#3A86FF"],
+               "triadic, bright, colorful, primary"),
+            _c("Triadic Tropical",
+               "Teal, orange, and violet — warm tropical triadic palette.",
+               ["#0077B6", "#FB5607", "#FFBE0B", "#8338EC", "#3A86FF"],
+               "triadic, tropical, warm, vibrant"),
+            _c("Analogous Forest",
+               "Greens from deep canopy to fresh leaf — serene analogous "
+               "range.",
+               ["#081C15", "#1B4332", "#2D6A4F", "#40916C", "#52B788"],
+               "analogous, green, nature, calm"),
+            _c("Analogous Lavender",
+               "Violet gradient from midnight to soft lavender.",
+               ["#240046", "#3C096C", "#5A189A", "#7B2CBF", "#9D4EDD"],
+               "analogous, purple, soft, gradient"),
+            _c("Split-Complementary Berry",
+               "Violet with teal accents — split-complementary contrast.",
+               ["#5A189A", "#7B2CBF", "#C77DFF", "#06D6A0", "#1B9AAA"],
+               "split-complementary, purple, teal, contrast"),
+            _c("Split-Complementary Coral",
+               "Coral pink with ocean blue accents — beachy split scheme.",
+               ["#FF4D6D", "#FF8FA3", "#FFB3C1", "#00B4D8", "#0077B6"],
+               "split-complementary, pink, blue, beach"),
+            _c("Tetradic Muted",
+               "Four muted hues plus cream — balanced tetradic harmony.",
+               ["#264653", "#2A9D8F", "#E9C46A", "#F4A261", "#E76F51"],
+               "tetradic, muted, earth, balanced"),
+            _c("Tetradic Earth",
+               "Olive, brown, ochre, and cream — grounded tetradic tones.",
+               ["#606C38", "#283618", "#DDA15E", "#BC6C25", "#FEFAE0"],
+               "tetradic, earth, olive, warm"),
+            _c("Monochrome Charcoal",
+               "Five grays from black to mid-tone — monochrome elegance.",
+               ["#0F0F0F", "#2C2C2C", "#484848", "#646464", "#808080"],
+               "monochrome, gray, neutral, elegant"),
+            _c("Monochrome Rose",
+               "Pink gradient from deep rose to soft blush.",
+               ["#4A0E17", "#7B1E3A", "#A62D5C", "#D44D7E", "#FF6FA0"],
+               "monochrome, pink, rose, gradient"),
+        ],
+    },
 ]
 
 
@@ -304,6 +382,8 @@ def ensure_presets(con: sqlite3.Connection) -> None:
         downloaded   INTEGER NOT NULL DEFAULT 0,
         local_path   TEXT NOT NULL DEFAULT '',
         preview_path TEXT NOT NULL DEFAULT '',
+        colors       TEXT NOT NULL DEFAULT '',
+        palette_id   INTEGER,
         guid         TEXT,
         slug         TEXT
     );
@@ -325,16 +405,31 @@ def ensure_presets(con: sqlite3.Connection) -> None:
         else:
             lib_id = row["id"]
         for epos, e in enumerate(pack["entries"]):
-            if con.execute("SELECT 1 FROM preset_entry WHERE library_id = ?"
-                           " AND repo = ?", (lib_id, e["repo"])).fetchone():
-                continue
-            con.execute(
-                "INSERT INTO preset_entry(library_id, name, repo, url,"
-                " branch, description, license, homepage, tags, position)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (lib_id, e["name"], e["repo"], e["url"], e["branch"],
-                 e["description"], e["license"], e["homepage"], e["tags"],
-                 epos))
+            # dedup: font/icon/template entries key by repo; palette
+            # entries have no repo, so key by name
+            if pack["kind"] == "palette":
+                if con.execute("SELECT 1 FROM preset_entry WHERE library_id = ?"
+                               " AND name = ?", (lib_id, e["name"])).fetchone():
+                    continue
+                colors_json = json.dumps(e.get("colors", []))
+                con.execute(
+                    "INSERT INTO preset_entry(library_id, name, repo, url,"
+                    " branch, description, license, homepage, tags,"
+                    " position, colors) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (lib_id, e["name"], e["repo"], e["url"], e["branch"],
+                     e["description"], e["license"], e["homepage"], e["tags"],
+                     epos, colors_json))
+            else:
+                if con.execute("SELECT 1 FROM preset_entry WHERE library_id = ?"
+                               " AND repo = ?", (lib_id, e["repo"])).fetchone():
+                    continue
+                con.execute(
+                    "INSERT INTO preset_entry(library_id, name, repo, url,"
+                    " branch, description, license, homepage, tags, position)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (lib_id, e["name"], e["repo"], e["url"], e["branch"],
+                     e["description"], e["license"], e["homepage"], e["tags"],
+                     epos))
     con.commit()
 
 
@@ -408,6 +503,87 @@ def sync_download_collections(con: sqlite3.Connection) -> None:
                 touched = True
     if touched:
         con.commit()
+
+
+# pane kinds that support preset-derived default libraries
+_DEFAULT_LIBRARY_KINDS = ("icon", "font", "palette")
+
+
+def sync_default_library(con: sqlite3.Connection) -> None:
+    """#135/#136: ensure each pane's 'Default' library contains the pane's
+    preset content plus any downloaded assets.  Idempotent — safe to call
+    after every scan or download.
+
+    * icon pane  → Default (icon)  = every asset indexed from a downloaded
+      icon preset pack clone
+    * font pane  → Default (font)  = every asset indexed from a downloaded
+      font preset pack clone
+    * palette pane → Default (palette) = every colour-harmony preset entry
+      materialised as a palette row
+    """
+    for kind in _DEFAULT_LIBRARY_KINDS:
+        default_id = _ensure_typed_collection(con, "Default", kind)
+        if kind in ("icon", "font"):
+            _sync_default_assets(con, default_id, kind)
+        elif kind == "palette":
+            _sync_default_palettes(con, default_id)
+    con.commit()
+
+
+def _sync_default_assets(con: sqlite3.Connection, default_id: int,
+                         asset_kind: str) -> None:
+    """Add every asset whose source is a downloaded preset pack to the
+    Default collection for this asset kind.  Idempotent."""
+    rows = con.execute(
+        "SELECT s.id FROM source s"
+        " JOIN preset_entry e ON e.local_path = s.path"
+        " JOIN preset_library l ON l.id = e.library_id"
+        " WHERE e.downloaded = 1 AND l.kind = ?"
+        " AND s.kind IN ('folder', 'fontroot')",
+        (asset_kind,)).fetchall()
+    for r in rows:
+        con.execute(
+            "INSERT OR IGNORE INTO collection_ref"
+            " (collection_id, item_kind, item_id)"
+            " SELECT ?, a.kind, a.id FROM asset a WHERE a.source_id = ?",
+            (default_id, r["id"]))
+
+
+def _sync_default_palettes(con: sqlite3.Connection, default_id: int) -> None:
+    """Materialise every palette-kind preset entry as a palette row (if
+    not already done) and ensure it is in the Default palette collection.
+    Idempotent."""
+    from . import db as core_db
+    rows = con.execute(
+        "SELECT e.id, e.name, e.tags, e.colors, e.palette_id"
+        " FROM preset_entry e JOIN preset_library l ON l.id = e.library_id"
+        " WHERE l.kind = 'palette' AND e.colors != ''"
+    ).fetchall()
+    for r in rows:
+        if r["palette_id"]:
+            pid = r["palette_id"]
+        else:
+            now = time.time()
+            pid = con.execute(
+                "INSERT INTO palette(name, tags, created, updated, guid)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (r["name"], r["tags"], now, now, core_db.new_guid())
+            ).lastrowid
+            con.execute(
+                "UPDATE preset_entry SET palette_id = ? WHERE id = ?",
+                (pid, r["id"]))
+        # upsert palette colors
+        con.execute("DELETE FROM palette_color WHERE palette_id = ?", (pid,))
+        colors = json.loads(r["colors"])
+        for pos, hx in enumerate(colors):
+            con.execute(
+                "INSERT INTO palette_color(palette_id, position, hex, locked)"
+                " VALUES (?, ?, ?, 0)", (pid, pos, hx))
+        # add to Default collection
+        con.execute(
+            "INSERT OR IGNORE INTO collection_ref"
+            " (collection_id, item_kind, item_id) VALUES (?, 'palette', ?)",
+            (default_id, pid))
 
 
 def sync_downloaded_sources(con: sqlite3.Connection) -> list[dict]:

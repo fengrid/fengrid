@@ -367,6 +367,28 @@ class Colors(QObject):
         self.open_palette(palette_id)
         self._palette_id = None
 
+    @Slot("QVariantList")
+    def load_hexes(self, hexes: list) -> None:
+        """Load a list of hex strings into the working swatches (used by
+        the preset bridge when a palette-kind preset entry is applied)."""
+        clean = []
+        for h in hexes:
+            h = (h or "").strip()
+            if not h.startswith("#"):
+                h = "#" + h
+            try:
+                core_colors.hex2rgb(h)
+                clean.append({"hex": h, "locked": False})
+            except ValueError:
+                continue
+        if clean:
+            self._swatches = clean
+            self._palette_id = None
+            self.swatchesChanged.emit()
+            self.selectionChanged.emit()
+            self.nameChanged.emit()
+            self.palettesChanged.emit()
+
     @Slot(str, str)
     def export(self, kind: str, dest_dir: str) -> None:
         # #54: normalize any stray file:// URL to a plain local path

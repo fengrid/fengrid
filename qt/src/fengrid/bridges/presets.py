@@ -40,6 +40,8 @@ class Presets(QObject):
     entriesChanged = Signal()
     # entryId, ok, detail(path or error) — emitted on the MAIN thread
     cloneDone = Signal(int, bool, str)
+    # entryId, hexes — emitted when a palette-kind preset is applied
+    presetApplied = Signal(int, "QVariantList")
     # path, kind — a newly registered scan source for a fresh clone;
     # the app wires this to the library/fonts rescans (#37)
     sourceAdded = Signal(str, str)
@@ -75,10 +77,14 @@ class Presets(QObject):
     @Slot(int, result="QVariantList")
     def entries(self, lib_id: int) -> list:
         out = []
+        lib_kind = self._con.execute(
+            "SELECT kind FROM preset_library WHERE id = ?", (int(lib_id),)
+        ).fetchone()
+        kind_str = (lib_kind["kind"] if lib_kind else "").lower()
         for r in self._con.execute(
                 "SELECT * FROM preset_entry WHERE library_id = ?"
                 " ORDER BY position, name", (int(lib_id),)):
-            out.append({
+            entry = {
                 "id": r["id"], "name": r["name"], "repo": r["repo"],
                 "url": r["url"], "branch": r["branch"],
                 "description": r["description"], "license": r["license"],
@@ -87,7 +93,10 @@ class Presets(QObject):
                 "localPath": r["local_path"],
                 "preview": r["preview_path"],
                 "busy": r["id"] in self._busy,
-            })
+                "libraryKind": kind_str,
+                "colors": r["colors"] or "",
+            }
+            out.append(entry)
         return out
 
     @Slot(int, result="QVariantList")
@@ -106,6 +115,21 @@ class Presets(QObject):
         self._con.execute("UPDATE preset_entry SET branch = ? WHERE id = ?",
                           (str(branch or "").strip(), int(entry_id)))
         self._con.commit()
+
+    @Slot(int)
+    def apply_preset(self, entry_id: int) -> None:
+        """Apply a palette-kind preset entry: emit its hex colors so the
+        Colors bridge (or any listener) can load them."""
+        row = self._row(entry_id)
+        if row is None:
+            return
+        import json as _json
+        try:
+            hexes = _json.loads(row["colors"] or "[]")
+        except ValueError:
+            hexes = []
+        if hexes:
+            self.presetApplied.emit(entry_id, hexes)
 
     # ------------------------------------------------------------ download
     @Slot(int)
@@ -212,6 +236,7 @@ class Presets(QObject):
         # 'Downloaded' + a collection named after the pack); membership
         # fills in as the clone's scan completes
         core_presets.sync_download_collections(self._con)
+        core_presets.sync_default_library(self._con)
         self.entriesChanged.emit()
         self.librariesChanged.emit()
 

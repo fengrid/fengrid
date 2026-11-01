@@ -957,6 +957,13 @@ Item {
         }
     }
 
+    Connections {
+        target: presets
+        function onPresetApplied(entryId, hexes) {
+            colors.load_hexes(hexes)
+        }
+    }
+
     // Terminal designer overlay — covers everything below the toolbar when
     // the Terminal sub-tab is active (the harmony UI stays mounted beneath)
     TerminalTab {

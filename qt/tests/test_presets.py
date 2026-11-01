@@ -34,12 +34,12 @@ def env(tmp_path):
 
 
 # ------------------------------------------------------------- registry
-def test_ensure_presets_registers_three_libraries(env):
+def test_ensure_presets_registers_four_libraries(env):
     bridge, con, tmp = env
     libs = bridge.libraries
     names = [l["name"] for l in libs]
     assert names == ["Open Fonts", "Open Icon Sets",
-                     "Site Templates & Themes"]
+                     "Site Templates & Themes", "Color Harmonies"]
     kinds = {l["name"]: l["kind"] for l in libs}
     assert kinds["Open Fonts"] == "font"
     assert kinds["Open Icon Sets"] == "icon"
@@ -57,7 +57,7 @@ def test_ensure_presets_idempotent(env):
     core_presets.ensure_presets(con)
     after = con.execute("SELECT COUNT(*) FROM preset_entry").fetchone()[0]
     assert before == after
-    assert before >= 35          # 13 fonts + 13 icons + 13 templates
+    assert before >= 47          # 13 fonts + 13 icons + 13 templates + 12 colors
 
 
 def test_entries_carry_urls_and_tags(env):
@@ -69,11 +69,14 @@ def test_entries_carry_urls_and_tags(env):
     assert "monospace" in fira["tags"]
     assert fira["license"] != ""
     assert fira["downloaded"] is False
-    # every entry across every pack has a usable clone URL
+    # every non-palette entry across every pack has a usable clone URL
     for lib in bridge.libraries:
         for r in bridge.entries(lib["id"]):
-            assert r["url"].endswith(".git")
-            assert r["repo"].count("/") == 1
+            if lib["kind"] == "palette":
+                assert r["colors"] != ""
+            else:
+                assert r["url"].endswith(".git")
+                assert r["repo"].count("/") == 1
 
 
 # -------------------------------------------------- taxonomy integration
@@ -371,3 +374,71 @@ def test_forget_removes_scan_source(env, tmp_path):
     bridge.forget(eid)
     assert con.execute("SELECT COUNT(*) FROM source").fetchone()[0] == 0
     assert not clone.exists()
+
+
+# -------------------------------------------------- color-harmony presets (#135)
+def test_color_harmony_presets_count(env):
+    bridge, con, tmp = env
+    libs = {l["name"]: l for l in bridge.libraries}
+    assert "Color Harmonies" in libs
+    ch = libs["Color Harmonies"]
+    assert ch["kind"] == "palette"
+    rows = bridge.entries(ch["id"])
+    assert len(rows) == 12
+    for r in rows:
+        assert r["colors"] != ""
+        import json
+        hexes = json.loads(r["colors"])
+        assert len(hexes) == 5
+        for hx in hexes:
+            assert hx.startswith("#")
+            assert len(hx) == 7
+
+
+def test_apply_preset_emits_hexes(env):
+    bridge, con, tmp = env
+    libs = {l["name"]: l for l in bridge.libraries}
+    ch = libs["Color Harmonies"]
+    rows = bridge.entries(ch["id"])
+    row = rows[0]  # first color harmony preset
+    received = []
+    bridge.presetApplied.connect(lambda eid, hexes: received.append((eid, hexes)))
+    bridge.apply_preset(row["id"])
+    assert len(received) == 1
+    assert received[0][0] == row["id"]
+    assert len(received[0][1]) == 5
+
+
+# -------------------------------------------------- default library (#136)
+def test_default_library_created_for_palette(env):
+    bridge, con, tmp = env
+    core_presets.sync_default_library(con)
+    row = con.execute(
+        "SELECT id FROM collection WHERE name = 'Default' AND kind = 'palette'"
+    ).fetchone()
+    assert row is not None
+
+
+def test_default_library_contains_color_harmonies(env):
+    bridge, con, tmp = env
+    core_presets.sync_default_library(con)
+    default_id = con.execute(
+        "SELECT id FROM collection WHERE name = 'Default' AND kind = 'palette'"
+    ).fetchone()["id"]
+    members = con.execute(
+        "SELECT COUNT(*) AS n FROM collection_ref WHERE collection_id = ?",
+        (default_id,)).fetchone()["n"]
+    assert members == 12  # one per color harmony preset
+
+
+def test_sync_default_library_idempotent(env):
+    bridge, con, tmp = env
+    core_presets.sync_default_library(con)
+    core_presets.sync_default_library(con)
+    default_id = con.execute(
+        "SELECT id FROM collection WHERE name = 'Default' AND kind = 'palette'"
+    ).fetchone()["id"]
+    members = con.execute(
+        "SELECT COUNT(*) AS n FROM collection_ref WHERE collection_id = ?",
+        (default_id,)).fetchone()["n"]
+    assert members == 12
