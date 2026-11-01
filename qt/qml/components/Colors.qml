@@ -367,6 +367,11 @@ Item {
         if (colors !== null && colors.selectedIdx >= 0)
             hexField.text = colors.swatches[colors.selectedIdx].hex;
     }
+    function openColorPicker() {
+        if (colors === null || colors.selectedIdx < 0)
+            colors.select(0);
+        colorPickerDialog.openWith(colors.swatches[colors.selectedIdx].hex);
+    }
     function applyHsl() {
         if (colors === null || colors.selectedIdx < 0)
             return;
@@ -396,6 +401,14 @@ Item {
                 return;
             for (var i = 0; i < formats.length; i++)
                 colors.export(formats[i], dest);
+        }
+    }
+
+    ColorPickerDialog {
+        id: colorPickerDialog
+        onAcceptedHex: function (hex) {
+            if (colors !== null && colors.selectedIdx >= 0)
+                colors.set_hex(colors.selectedIdx, hex)
         }
     }
 
@@ -580,6 +593,16 @@ Item {
                     color: theme.tokens.text
                     clip: true
                     onAccepted: colors !== null && colors.selectedIdx >= 0 && colors.set_hex(colors.selectedIdx, text)
+                }
+            }
+            IconButton {
+                icon_name: "paint-drop"
+                icon_px: 16
+                ToolTip.text: qsTr("Open color picker")
+                onClicked: {
+                    if (colors === null || colors.selectedIdx < 0)
+                        return
+                    colorPickerDialog.openWith(colors.swatches[colors.selectedIdx].hex)
                 }
             }
             Item {

@@ -60,6 +60,7 @@ MAPPING = {
     "upload": "action/import",
     "x": "action/close",
     "zap": "misc/light-bulb-on",
+    "paint-drop": "misc/paint-drop",
 }
 
 BEGIN = "    // BEGIN-GEN"

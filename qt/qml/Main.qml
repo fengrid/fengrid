@@ -1278,6 +1278,35 @@ ApplicationWindow {
             }
             return
         }
+        if (name === "colorPicker") {
+            root.pane = 2
+            if (colorsPane === null && colorsLoader.status === Loader.Ready) {
+                colorsPane = colorsLoader.item
+            }
+            if (colorsPane !== null) {
+                Qt.callLater(function() {
+                    if (colorsPane !== null)
+                        colorsPane.openColorPicker()
+                })
+            } else {
+                colorsLoader.active = true
+                var poll2 = Qt.createQmlObject(
+                    "import QtQuick; Timer { interval: 100; repeat: true;"
+                    + " property var onReady: null;"
+                    + " onTriggered: if (onReady) onReady() }",
+                    colorsLoader, "qaColorPickerPoll")
+                poll2.onReady = function() {
+                    if (colorsLoader.status === Loader.Ready) {
+                        colorsPane = colorsLoader.item
+                        colorsPane.openColorPicker()
+                        poll2.stop()
+                        poll2.destroy()
+                    }
+                }
+                poll2.start()
+            }
+            return
+        }
         if (name === "entity") {
             // first project (or library) in the DB → its inspector
             root.pane = 4
