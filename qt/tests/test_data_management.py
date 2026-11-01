@@ -737,6 +737,41 @@ def test_dataio_jobs_use_worker_owned_connections(tmp_path):
     con.close()
 
 
+def test_admin_telemetry_brackets_jobs_in_crash_log(tmp_path):
+    """#140 measurement: every admin job leaves an 'admin start <op>'
+    line at dispatch and an 'admin done/fail <op> <ms>ms' line when the
+    completion slot runs. A reporter-only crash between the lines
+    implicates the worker job; after 'done', the completion path."""
+    import time as _time
+
+    from PySide6.QtCore import QCoreApplication
+
+    from fengrid.bridges.data import DataIO
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = str(tmp_path / "t.db")
+    con = core_db.connect(db_path)
+
+    dio = DataIO(con, db_path, str(tmp_path))
+    done = []
+    dio.adminDone.connect(lambda op, s: done.append((op, s)))
+
+    dio.adminRun("checkpoint")
+    deadline = _time.time() + 20
+    while not done and _time.time() < deadline:
+        app.processEvents()
+        _time.sleep(0.01)
+
+    log = (tmp_path / "crash.log").read_text().splitlines()
+    starts = [ln for ln in log if "admin start checkpoint" in ln]
+    finishes = [ln for ln in log if "admin done checkpoint" in ln]
+    assert starts and finishes, log
+    # start precedes done, and the done line carries a duration
+    assert log.index(starts[0]) < log.index(finishes[0]), log
+    assert finishes[0].rstrip().endswith("ms"), finishes[0]
+    con.close()
+
+
 def test_setImportOpts_keeps_csv_options(tmp_path):
     """The Settings CSV-name row writes csv_path/csv_column — keys that
     were missing from the defaults dict, so setImportOpts silently

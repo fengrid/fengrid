@@ -104,6 +104,7 @@ class DataIO(QObject):
         self._registry = registry_path
         self._thread = None
         self._worker = None
+        self._admin_t0 = 0.0
         self._import_opts = self._load_json("import_opts",
                                             _default_import_opts())
         self._export_opts = self._load_json("export_opts",
@@ -611,6 +612,14 @@ class DataIO(QObject):
         # bound-method receivers → queued to the main thread (same rule
         # as _start; a plain-closure connect would run in the worker)
         self._pending_admin = (op, th, on_done)
+        self._admin_t0 = time.monotonic()
+        # #140 measurement: 'admin start' + a later 'admin done/fail'
+        # line bracket every admin job in crash.log. A crash BETWEEN the
+        # lines implicates the worker job itself; a crash AFTER 'done'
+        # implicates the completion path (signal emissions / QML
+        # bindings reacting to the result) — the discriminator the
+        # reporter-only crash needs.
+        self._note_admin(f"admin start {op}")
         wk.moveToThread(th)
         th.started.connect(wk.run)
         wk.done.connect(self._admin_done)
@@ -621,10 +630,26 @@ class DataIO(QObject):
         self.busyChanged.emit()
         th.start()
 
+    def _note_admin(self, line: str) -> None:
+        """Append one telemetry line to crash.log (same sink the dialog
+        telemetry uses — next to the database). Never raises."""
+        try:
+            with open(os.path.join(os.path.dirname(self._db_path)
+                                   if self._db_path else ".",
+                                   "crash.log"), "a",
+                      encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} — "
+                        f"{line}\n")
+        except OSError:
+            pass
+
     @Slot(object)
     def _admin_done(self, payload) -> None:
         op, th, on_done = self._pending_admin
         self._clear(th)
+        self._note_admin(
+            f"admin done {op} "
+            f"{int((time.monotonic() - self._admin_t0) * 1000)}ms")
         if on_done is not None:
             on_done(payload)
 
@@ -632,6 +657,9 @@ class DataIO(QObject):
     def _admin_failed(self, err: str) -> None:
         op, th, _ = self._pending_admin
         self._clear(th)
+        self._note_admin(
+            f"admin fail {op} "
+            f"{int((time.monotonic() - self._admin_t0) * 1000)}ms: {err}")
         self.adminDone.emit(op, err)
         self.message.emit(f"{op}: {err}")
 
