@@ -43,6 +43,9 @@ Rectangle {
     property real previewPx: 30
     property bool darkBg: true
     property string sample: "The quick brown fox jumps over the lazy dog"
+    // the SELECTED family's name (font kind) — keys the per-family
+    // custom sample (#151)
+    property string fontFamily: ""
     // auto preview text: one curated passage per size bucket (haiku /
     // poems / speeches from resources/preview_text.json), swapped at
     // THREE breakpoints only; disabled the moment the user types
@@ -52,8 +55,10 @@ Rectangle {
         sample = autoSample
     function resetSample() {
         sampleCustom = false;
-        if (fonts !== null)
-            fonts.set_sample_custom(false);
+        // #151: clearing the field removes this family's custom sample —
+        // the grid falls back to the master text or curated passages
+        if (fonts !== null && fontFamily !== "")
+            fonts.set_family_sample(fontFamily, "");
         sample = autoSample;
     }
 
@@ -81,6 +86,18 @@ Rectangle {
         }
         props = (taxonomy !== null && itemId >= 0) ? taxonomy.item_properties(itemKind, itemId) : null;
         related = (taxonomy !== null && itemId >= 0) ? taxonomy.related_by_tags(itemKind, itemId) : [];
+        // #151: restore this family's custom preview text if it has one;
+        // otherwise the curated per-bucket passage shows
+        if (itemKind === "font" && props) {
+            fontFamily = props.meta.family || "";
+            var fs = fonts !== null ? fonts.familySamples : {};
+            if (fontFamily !== "" && fs[fontFamily]) {
+                sampleCustom = true;
+                sample = fs[fontFamily];
+            } else if (!sampleCustom) {
+                sample = autoSample;
+            }
+        }
         refreshSources();
     }
 
@@ -1163,9 +1180,13 @@ Rectangle {
                     text: panel.sample
                     onTextEdited: {
                         panel.sampleCustom = true;
-                        if (fonts !== null)
-                            fonts.set_sample_custom(true);
                         panel.sample = text;
+                        // #151: the custom sample belongs to the
+                        // SELECTED family — the grid keeps the master
+                        // text (or curated passages) for everyone else
+                        if (fonts !== null && panel.fontFamily !== "")
+                            fonts.set_family_sample(panel.fontFamily,
+                                                    text);
                     }
                     placeholderText: qsTr("Type Your Own Sample…")
                     font.family: theme.monoFont
@@ -1183,7 +1204,7 @@ Rectangle {
                     spacing: 6
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Custom Preview Text — Curated " + "Passages Disabled")
+                        text: qsTr("Custom Preview Text — This Family")
                         font.family: theme.monoFont
                         font.pixelSize: 9
                         color: theme.tokens.textMuted

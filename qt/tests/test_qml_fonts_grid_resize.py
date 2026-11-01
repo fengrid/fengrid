@@ -225,3 +225,52 @@ def test_grid_resize_re_scales_without_bridge_calls(fonts_ui):
     shown = _find_preview_text(fonts_ui["root"], fonts_bridge)
     assert shown is not None
     assert str(shown.property("text")) == fonts_bridge.specimenMedium
+
+
+def test_family_sample_scopes_to_its_card(fonts_ui):
+    """#151: a custom sample belongs to ONE family — its card shows it,
+    every other card keeps the curated passages (never the literal
+    'Fengrid 123' fallback the old pane-wide sampleCustom flag caused),
+    and the master text (gridSample) wins over everything while set."""
+    root, fonts = fonts_ui["root"], fonts_ui["fonts"]
+    _settle(_qapp(), 0.3)
+
+    def card_texts():
+        out = []
+        stack = [root]
+        while stack:
+            o = stack.pop()
+            if "Text" in o.metaObject().className():
+                t = str(o.property("text") or "")
+                # specimen texts are long; skip the grid's empty-state
+                # label and family/count labels
+                if len(t) > 24 and not t.startswith("No families"):
+                    out.append(t)
+            if hasattr(o, "childItems"):
+                stack.extend(o.childItems())
+        return out
+
+    fonts.set_family_sample("Alpha", "Alpha custom specimen passage")
+    _settle(_qapp(), 0.4)
+    texts = card_texts()
+    assert any("Alpha custom specimen passage" in t for t in texts), texts
+    buckets = {fonts.specimenSmall, fonts.specimenMedium,
+               fonts.specimenLarge}
+    others = [t for t in texts if "Alpha custom" not in t]
+    assert others, "other cards must still render specimen text"
+    assert all(t in buckets for t in others), texts
+    assert not any("Fengrid 123" in t for t in texts), texts
+
+    # the master text wins over everything, on every card
+    fonts.set_grid_sample("Master passage for every card")
+    _settle(_qapp(), 0.4)
+    texts = card_texts()
+    assert texts and all(t == "Master passage for every card"
+                         for t in texts), texts
+
+    # clearing the master restores the chain (Alpha keeps its sample)
+    fonts.clear_grid_sample()
+    _settle(_qapp(), 0.4)
+    texts = card_texts()
+    assert any("Alpha custom specimen passage" in t for t in texts), texts
+    assert not any("Fengrid 123" in t for t in texts), texts
