@@ -17,7 +17,7 @@ Dialog {
     property string acceptLabel: qsTr("Save")
     property string cancelLabel: qsTr("Cancel")
     property bool acceptEnabled: true
-    signal apply()
+    signal apply
 
     modal: true
     dim: true
@@ -57,8 +57,8 @@ Dialog {
         acceptEnabled: shell.acceptEnabled
         onCancelClicked: shell.reject()
         onAcceptClicked: {
-            shell.apply()
-            shell.accept()      // closes + emits accepted()
+            shell.apply();
+            shell.accept();      // closes + emits accepted()
         }
     }
 }

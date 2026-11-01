@@ -27,17 +27,17 @@ Rectangle {
     property int activeTab: 0
     // Projects and saved Libraries carry their own repo tree — the
     // Docs / License / Sources tabs exist only for them
-    readonly property bool isEntity: itemKind === "project"
-                                     || itemKind === "library"
+    readonly property bool isEntity: itemKind === "project" || itemKind === "library"
     property var related: []          // cross-kind tag neighbours
     property var srcSum: null         // Sources tab snapshot
     function refreshSources() {
-        srcSum = (taxonomy !== null && isEntity && itemId >= 0)
-                 ? taxonomy.git_summary(itemKind, itemId) : null
+        srcSum = (taxonomy !== null && isEntity && itemId >= 0) ? taxonomy.git_summary(itemKind, itemId) : null;
     }
     // fonts default to Details (the specimen is the money view — this
     // preserves the old click-opens-details behavior); others to Info
-    function defaultTab() { return itemKind === "font" ? 1 : 0 }
+    function defaultTab() {
+        return itemKind === "font" ? 1 : 0;
+    }
 
     // specimen controls (Details tab, font kind)
     property real previewPx: 30
@@ -47,62 +47,69 @@ Rectangle {
     // poems / speeches from resources/preview_text.json), swapped at
     // THREE breakpoints only; disabled the moment the user types
     property bool sampleCustom: false
-    property string autoSample: fonts !== null
-                                ? fonts.preview_text(previewPx) : ""
-    onAutoSampleChanged: if (!sampleCustom) sample = autoSample
-    function resetSample() {
-        sampleCustom = false
-        if (fonts !== null)
-            fonts.set_sample_custom(false)
+    property string autoSample: fonts !== null ? fonts.preview_text(previewPx) : ""
+    onAutoSampleChanged: if (!sampleCustom)
         sample = autoSample
+    function resetSample() {
+        sampleCustom = false;
+        if (fonts !== null)
+            fonts.set_sample_custom(false);
+        sample = autoSample;
     }
 
     onItemIdChanged: reload()
     onItemKindChanged: {
-        reload()
-        activeTab = defaultTab()
+        reload();
+        activeTab = defaultTab();
     }
     onSelectedIdsChanged: reload()
     visible: itemId >= 0 || multi
     Component.onCompleted: {
-        reload()
+        reload();
         if (!sampleCustom && autoSample !== "")
-            sample = autoSample
+            sample = autoSample;
     }
 
     function reload() {
         if (multi) {
             // #115: aggregate summary over the checked families
-            props = (taxonomy !== null)
-                ? taxonomy.selection_properties(itemKind, selectedIds) : null
-            related = []
-            activeTab = 0   // Details tab is hidden in multi mode
-            refreshSources()
-            return
+            props = (taxonomy !== null) ? taxonomy.selection_properties(itemKind, selectedIds) : null;
+            related = [];
+            activeTab = 0;   // Details tab is hidden in multi mode
+            refreshSources();
+            return;
         }
-        props = (taxonomy !== null && itemId >= 0)
-                ? taxonomy.item_properties(itemKind, itemId) : null
-        related = (taxonomy !== null && itemId >= 0)
-                  ? taxonomy.related_by_tags(itemKind, itemId) : []
-        refreshSources()
+        props = (taxonomy !== null && itemId >= 0) ? taxonomy.item_properties(itemKind, itemId) : null;
+        related = (taxonomy !== null && itemId >= 0) ? taxonomy.related_by_tags(itemKind, itemId) : [];
+        refreshSources();
     }
 
     // 100..900 CSS weights → Qt font weights
     function weightEnum(w) {
-        var map = {}
-        map[100] = Font.Thin; map[200] = Font.ExtraLight
-        map[300] = Font.Light; map[400] = Font.Normal
-        map[500] = Font.Medium; map[600] = Font.DemiBold
-        map[700] = Font.Bold; map[800] = Font.ExtraBold
-        map[900] = Font.Black
-        return map[w] !== undefined ? map[w] : Font.Normal
+        var map = {};
+        map[100] = Font.Thin;
+        map[200] = Font.ExtraLight;
+        map[300] = Font.Light;
+        map[400] = Font.Normal;
+        map[500] = Font.Medium;
+        map[600] = Font.DemiBold;
+        map[700] = Font.Bold;
+        map[800] = Font.ExtraBold;
+        map[900] = Font.Black;
+        return map[w] !== undefined ? map[w] : Font.Normal;
     }
 
     Connections {
         target: taxonomy
-        function onFieldsChanged() { panel.reload() }
-        function onLinksChanged() { panel.reload() }
-        function onGitUpdated() { panel.refreshSources() }
+        function onFieldsChanged() {
+            panel.reload();
+        }
+        function onLinksChanged() {
+            panel.reload();
+        }
+        function onGitUpdated() {
+            panel.refreshSources();
+        }
     }
 
     component SectionHeader: Text {
@@ -121,11 +128,12 @@ Rectangle {
         property int tabIdx
         checked: panel.activeTab === tabIdx
         hoverEnabled: true
-        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        HoverHandler {
+            cursorShape: Qt.PointingHandCursor
+        }
         onClicked: panel.activeTab = tabIdx
         // tighter padding so five tabs (entity kinds) fit a 300px dock
-        implicitWidth: ptabLabel.implicitWidth
-                       + (panel.isEntity ? 12 : 24)
+        implicitWidth: ptabLabel.implicitWidth + (panel.isEntity ? 12 : 24)
         implicitHeight: 26
 
         background: Rectangle {
@@ -139,7 +147,11 @@ Rectangle {
                 radius: 1
                 color: theme.tokens.accent
                 opacity: ptab.checked ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 140 } }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 140
+                    }
+                }
             }
         }
         contentItem: Text {
@@ -149,8 +161,7 @@ Rectangle {
             font.pixelSize: 10
             font.letterSpacing: 1.2
             font.capitalization: Font.AllUppercase
-            color: ptab.checked ? theme.tokens.text
-                  : theme.tokens.textMuted
+            color: ptab.checked ? theme.tokens.text : theme.tokens.textMuted
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
@@ -160,7 +171,10 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        Item { Layout.fillWidth: true; Layout.preferredHeight: 8 }
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 8
+        }
 
         Text {
             Layout.fillWidth: true
@@ -178,26 +192,35 @@ Rectangle {
             Layout.leftMargin: 6
             Layout.topMargin: 4
             spacing: 2
-            PanelTab { label: qsTr("Info"); tabIdx: 0 }
             PanelTab {
-                label: qsTr("Details"); tabIdx: 1
+                label: qsTr("Info")
+                tabIdx: 0
+            }
+            PanelTab {
+                label: qsTr("Details")
+                tabIdx: 1
                 // #115: the font specimen / palette colors don't make
                 // sense for a multi-selection aggregate view
                 visible: !panel.multi
             }
             PanelTab {
-                label: qsTr("Docs"); tabIdx: 2
+                label: qsTr("Docs")
+                tabIdx: 2
                 visible: panel.isEntity
             }
             PanelTab {
-                label: qsTr("License"); tabIdx: 3
+                label: qsTr("License")
+                tabIdx: 3
                 visible: panel.isEntity
             }
             PanelTab {
-                label: qsTr("Sources"); tabIdx: 4
+                label: qsTr("Sources")
+                tabIdx: 4
                 visible: panel.isEntity
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
         }
         Rectangle {
             Layout.fillWidth: true
@@ -214,7 +237,7 @@ Rectangle {
             Flickable {
                 contentHeight: infoCol.implicitHeight + 24
                 clip: true
-                ScrollBar.vertical: ScrollBar { }
+                ScrollBar.vertical: ScrollBar {}
 
                 ColumnLayout {
                     id: infoCol
@@ -222,7 +245,10 @@ Rectangle {
                     x: 12
                     spacing: 8
 
-                    Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 2
+                    }
 
                     // ───────────────────────────── aggregate summary (#115)
                     // Shown when ≥2 fonts are checkbox-selected: count +
@@ -232,23 +258,27 @@ Rectangle {
                         visible: panel.multi
                         Layout.fillWidth: true
                         spacing: 6
-                        SectionHeader { text: qsTr("Selection") }
+                        SectionHeader {
+                            text: qsTr("Selection")
+                        }
                         Repeater {
                             model: panel.multi && panel.props ? [
-                                { l: qsTr("Families"),
-                                  v: String(panel.props.meta.families || panel.props.count) },
-                                { l: qsTr("Files"),
-                                  v: String(panel.props.meta.files || 0) },
-                                { l: qsTr("Size"),
-                                  v: panel.props.meta.bytes !== undefined
-                                     ? (panel.props.meta.bytes > 1048576
-                                        ? (panel.props.meta.bytes / 1048576).toFixed(1) + " MB"
-                                        : (panel.props.meta.bytes / 1024).toFixed(0) + " KB")
-                                     : "—" },
-                                { l: qsTr("Formats"),
-                                  v: panel.props.meta.formats !== undefined
-                                     ? Object.keys(panel.props.meta.formats)
-                                       .join(", ") : "—" }
+                                {
+                                    l: qsTr("Families"),
+                                    v: String(panel.props.meta.families || panel.props.count)
+                                },
+                                {
+                                    l: qsTr("Files"),
+                                    v: String(panel.props.meta.files || 0)
+                                },
+                                {
+                                    l: qsTr("Size"),
+                                    v: panel.props.meta.bytes !== undefined ? (panel.props.meta.bytes > 1048576 ? (panel.props.meta.bytes / 1048576).toFixed(1) + " MB" : (panel.props.meta.bytes / 1024).toFixed(0) + " KB") : "—"
+                                },
+                                {
+                                    l: qsTr("Formats"),
+                                    v: panel.props.meta.formats !== undefined ? Object.keys(panel.props.meta.formats).join(", ") : "—"
+                                }
                             ] : []
                             RowLayout {
                                 required property var modelData
@@ -271,8 +301,7 @@ Rectangle {
                             }
                         }
                         Text {
-                            text: qsTr("%1 fonts selected — tags below are shared by every selected font")
-                                  .arg(panel.props ? panel.props.count : 0)
+                            text: qsTr("%1 fonts selected — tags below are shared by every selected font").arg(panel.props ? panel.props.count : 0)
                             font.family: theme.uiFont
                             font.pixelSize: 10
                             color: theme.tokens.textMuted
@@ -320,7 +349,7 @@ Rectangle {
                                 ToolTip.text: qsTr("Copy GUID")
                                 onClicked: {
                                     if (guidText.text !== "" && library !== null)
-                                        library.copy_text(guidText.text)
+                                        library.copy_text(guidText.text);
                                 }
                             }
                         }
@@ -339,9 +368,7 @@ Rectangle {
                                 height: 24
                                 radius: 6
                                 color: theme.tokens.surface2
-                                border.color: slugField.activeFocus
-                                              ? theme.tokens.accent
-                                              : theme.tokens.border
+                                border.color: slugField.activeFocus ? theme.tokens.accent : theme.tokens.border
                                 TextInput {
                                     id: slugField
                                     anchors.fill: parent
@@ -357,12 +384,11 @@ Rectangle {
                                     onEditingFinished: commitSlug()
                                     function commitSlug() {
                                         if (panel.multi || taxonomy === null)
-                                            return
+                                            return;
                                         if (text === (panel.props.slug || ""))
-                                            return
-                                        taxonomy.set_slug(panel.itemKind,
-                                                          panel.itemId, text)
-                                        panel.reload()
+                                            return;
+                                        taxonomy.set_slug(panel.itemKind, panel.itemId, text);
+                                        panel.reload();
                                     }
                                 }
                             }
@@ -377,7 +403,9 @@ Rectangle {
                     }
 
                     // ------------------------------------------------------ TAGS
-                    SectionHeader { text: qsTr("Tags") }
+                    SectionHeader {
+                        text: qsTr("Tags")
+                    }
                     Flow {
                         Layout.fillWidth: true
                         spacing: 5
@@ -407,18 +435,14 @@ Rectangle {
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: taxonomy !== null
-                                                && taxonomy.remove_tag(
-                                                    panel.itemKind,
-                                                    panel.itemId, modelData)
+                                            onClicked: taxonomy !== null && taxonomy.remove_tag(panel.itemKind, panel.itemId, modelData)
                                         }
                                     }
                                 }
                             }
                         }
                         Text {
-                            visible: !panel.props
-                                     || panel.props.tags.length === 0
+                            visible: !panel.props || panel.props.tags.length === 0
                             text: qsTr("No Tags Yet")
                             font.family: theme.uiFont
                             font.pixelSize: 10
@@ -434,9 +458,7 @@ Rectangle {
                             height: 26
                             radius: 6
                             color: theme.tokens.surface2
-                            border.color: tagAddInput.activeFocus
-                                          ? theme.tokens.accent
-                                          : theme.tokens.border
+                            border.color: tagAddInput.activeFocus ? theme.tokens.accent : theme.tokens.border
                             TextInput {
                                 id: tagAddInput
                                 anchors.fill: parent
@@ -448,12 +470,9 @@ Rectangle {
                                 color: theme.tokens.text
                                 clip: true
                                 onAccepted: {
-                                    if (text.trim() !== ""
-                                            && taxonomy !== null) {
-                                        taxonomy.add_tag(panel.itemKind,
-                                                         panel.itemId,
-                                                         text.trim())
-                                        text = ""
+                                    if (text.trim() !== "" && taxonomy !== null) {
+                                        taxonomy.add_tag(panel.itemKind, panel.itemId, text.trim());
+                                        text = "";
                                     }
                                 }
                             }
@@ -476,13 +495,9 @@ Rectangle {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if (tagAddInput.text.trim() !== ""
-                                            && taxonomy !== null) {
-                                        taxonomy.add_tag(panel.itemKind,
-                                                         panel.itemId,
-                                                         tagAddInput.text
-                                                         .trim())
-                                        tagAddInput.text = ""
+                                    if (tagAddInput.text.trim() !== "" && taxonomy !== null) {
+                                        taxonomy.add_tag(panel.itemKind, panel.itemId, tagAddInput.text.trim());
+                                        tagAddInput.text = "";
                                     }
                                 }
                             }
@@ -495,8 +510,7 @@ Rectangle {
                         visible: !panel.multi
                     }
                     Repeater {
-                        model: panel.multi ? []
-                                           : (panel.props ? panel.props.fields : [])
+                        model: panel.multi ? [] : (panel.props ? panel.props.fields : [])
                         RowLayout {
                             id: propRow
                             required property var modelData
@@ -512,11 +526,7 @@ Rectangle {
                             }
                             Loader {
                                 Layout.fillWidth: true
-                                sourceComponent:
-                                    propRow.modelData.type === "bool"
-                                    ? boolEd
-                                    : (propRow.modelData.type === "select"
-                                       ? selectEd : textEd)
+                                sourceComponent: propRow.modelData.type === "bool" ? boolEd : (propRow.modelData.type === "select" ? selectEd : textEd)
                             }
                             Component {
                                 id: textEd
@@ -524,26 +534,19 @@ Rectangle {
                                     implicitHeight: 24
                                     radius: 5
                                     color: theme.tokens.surface2
-                                    border.color: pvInput.activeFocus
-                                                  ? theme.tokens.accent
-                                                  : theme.tokens.border
+                                    border.color: pvInput.activeFocus ? theme.tokens.accent : theme.tokens.border
                                     TextInput {
                                         id: pvInput
                                         anchors.fill: parent
                                         anchors.leftMargin: 6
                                         anchors.rightMargin: 6
-                                        verticalAlignment:
-                                            TextInput.AlignVCenter
+                                        verticalAlignment: TextInput.AlignVCenter
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
                                         color: theme.tokens.text
                                         clip: true
                                         text: propRow.modelData.value
-                                        onEditingFinished: taxonomy !== null
-                                            && taxonomy.set_field_value(
-                                                panel.itemId,
-                                                propRow.modelData.id,
-                                                text, panel.itemKind)
+                                        onEditingFinished: taxonomy !== null && taxonomy.set_field_value(panel.itemId, propRow.modelData.id, text, panel.itemKind)
                                     }
                                 }
                             }
@@ -555,37 +558,21 @@ Rectangle {
                                 FormCheck {
                                     font.family: theme.monoFont
                                     font.pixelSize: 10
-                                    checked:
-                                        propRow.modelData.value === "1"
-                                    onClicked: taxonomy !== null
-                                        && taxonomy.set_field_value(
-                                            panel.itemId,
-                                            propRow.modelData.id,
-                                            checked ? "1" : "0",
-                                            panel.itemKind)
+                                    checked: propRow.modelData.value === "1"
+                                    onClicked: taxonomy !== null && taxonomy.set_field_value(panel.itemId, propRow.modelData.id, checked ? "1" : "0", panel.itemKind)
                                 }
                             }
                             Component {
                                 id: selectEd
                                 ComboBox {
                                     implicitHeight: 24
-                                    model:
-                                        propRow.modelData.options.choices
-                                        || []
+                                    model: propRow.modelData.options.choices || []
                                     currentIndex: {
-                                        var ch =
-                                            propRow.modelData.options
-                                            .choices || []
-                                        return Math.max(0, ch.indexOf(
-                                            propRow.modelData.value))
+                                        var ch = propRow.modelData.options.choices || [];
+                                        return Math.max(0, ch.indexOf(propRow.modelData.value));
                                     }
                                     onActivated: function (idx) {
-                                        taxonomy !== null
-                                            && taxonomy.set_field_value(
-                                                panel.itemId,
-                                                propRow.modelData.id,
-                                                model[idx],
-                                                panel.itemKind)
+                                        taxonomy !== null && taxonomy.set_field_value(panel.itemId, propRow.modelData.id, model[idx], panel.itemKind);
                                     }
                                     background: Rectangle {
                                         radius: 5
@@ -597,32 +584,25 @@ Rectangle {
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
                                         color: theme.tokens.text
-                                        verticalAlignment:
-                                            Text.AlignVCenter
+                                        verticalAlignment: Text.AlignVCenter
                                         leftPadding: 6
                                     }
                                 }
                             }
                             IconButton {
-                                visible:
-                                    propRow.modelData.type === "id"
+                                visible: propRow.modelData.type === "id"
                                 icon_name: "zap"
                                 icon_px: 10
                                 implicitWidth: 20
                                 implicitHeight: 20
                                 ToolTip.text: qsTr("Generate next ID")
-                                onClicked: taxonomy !== null
-                                    && taxonomy.generate_id(
-                                        panel.itemId,
-                                        propRow.modelData.id,
-                                        panel.itemKind)
+                                onClicked: taxonomy !== null && taxonomy.generate_id(panel.itemId, propRow.modelData.id, panel.itemKind)
                             }
                         }
                     }
                     Text {
                         Layout.fillWidth: true
-                        visible: !panel.props
-                                 || panel.props.fields.length === 0
+                        visible: !panel.props || panel.props.fields.length === 0
                         text: qsTr("No custom fields defined yet")
                         font.family: theme.uiFont
                         font.pixelSize: 10
@@ -634,17 +614,19 @@ Rectangle {
                         id: newFieldBtn
                         Layout.fillWidth: true
                         Layout.preferredHeight: 26
-                        HoverHandler { cursorShape: Qt.PointingHandCursor }
+                        HoverHandler {
+                            cursorShape: Qt.PointingHandCursor
+                        }
                         background: Rectangle {
                             radius: 6
-                            color: newFieldMa.containsMouse
-                                   ? theme.tokens.surface2 : "transparent"
+                            color: newFieldMa.containsMouse ? theme.tokens.surface2 : "transparent"
                             border.color: theme.tokens.border
                         }
                         contentItem: Row {
                             spacing: 6
                             IconImage {
-                                name: "plus"; px: 12
+                                name: "plus"
+                                px: 12
                                 tint: theme.tokens.textMuted
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -671,8 +653,7 @@ Rectangle {
                         visible: !panel.multi
                     }
                     Repeater {
-                        model: panel.multi ? []
-                                           : (panel.props ? panel.props.links : [])
+                        model: panel.multi ? [] : (panel.props ? panel.props.links : [])
                         RowLayout {
                             id: linkRow
                             required property var modelData
@@ -680,12 +661,7 @@ Rectangle {
                             Layout.fillWidth: true
                             Text {
                                 Layout.fillWidth: true
-                                text: (linkRow.modelData.direction === "out"
-                                       ? "→ " : "← ")
-                                      + linkRow.modelData.label
-                                      + (linkRow.modelData.role !== ""
-                                         ? "  (" + linkRow.modelData.role
-                                           + ")" : "")
+                                text: (linkRow.modelData.direction === "out" ? "→ " : "← ") + linkRow.modelData.label + (linkRow.modelData.role !== "" ? "  (" + linkRow.modelData.role + ")" : "")
                                 font.family: theme.monoFont
                                 font.pixelSize: 10
                                 color: theme.tokens.textMuted
@@ -693,13 +669,10 @@ Rectangle {
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: taxonomy !== null
-                                        && taxonomy.remove_link(
-                                            linkRow.modelData.id)
+                                    onClicked: taxonomy !== null && taxonomy.remove_link(linkRow.modelData.id)
                                 }
                                 ToolTip.visible: containsMouse
-                                ToolTip.text: qsTr("Click to Remove This"
-                                                   + " Link")
+                                ToolTip.text: qsTr("Click to Remove This" + " Link")
                                 HoverHandler {
                                     cursorShape: Qt.PointingHandCursor
                                 }
@@ -708,12 +681,8 @@ Rectangle {
                     }
                     Text {
                         Layout.fillWidth: true
-                        visible: !panel.props
-                                 || panel.props.links.length === 0
-                        text: qsTr("No links — use an asset's"
-                                   + " right-click menu to link"
-                                   + " collections, libraries or"
-                                   + " projects")
+                        visible: !panel.props || panel.props.links.length === 0
+                        text: qsTr("No links — use an asset's" + " right-click menu to link" + " collections, libraries or" + " projects")
                         font.family: theme.uiFont
                         font.pixelSize: 10
                         color: theme.tokens.textMuted
@@ -768,8 +737,10 @@ Rectangle {
                         }
                     }
 
-                    Item { Layout.fillHeight: true
-                           Layout.minimumHeight: 12 }
+                    Item {
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 12
+                    }
                 }
             }
 
@@ -777,11 +748,7 @@ Rectangle {
             Loader {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                sourceComponent: panel.itemKind === "font" ? fontDetailPage
-                                 : panel.itemKind === "palette"
-                                   ? paletteDetailPage
-                                   : panel.itemKind === "icon"
-                                     ? iconDetailPage : snippetDetailPage
+                sourceComponent: panel.itemKind === "font" ? fontDetailPage : panel.itemKind === "palette" ? paletteDetailPage : panel.itemKind === "icon" ? iconDetailPage : snippetDetailPage
             }
 
             // ================================================ DOCS PAGE
@@ -790,7 +757,7 @@ Rectangle {
             Flickable {
                 contentHeight: docsCol.implicitHeight + 24
                 clip: true
-                ScrollBar.vertical: ScrollBar { }
+                ScrollBar.vertical: ScrollBar {}
 
                 ColumnLayout {
                     id: docsCol
@@ -798,17 +765,15 @@ Rectangle {
                     x: 12
                     spacing: 8
 
-                    Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 2
+                    }
 
                     Text {
                         Layout.fillWidth: true
-                        visible: !panel.props
-                                 || !panel.props.meta.readme
-                                 || !panel.props.meta.readme.exists
-                        text: qsTr("No README.md in this repository yet."
-                                   + " Add one to the repository folder and"
-                                   + " it will show up here — it is the"
-                                   + " Documentation tab's source.")
+                        visible: !panel.props || !panel.props.meta.readme || !panel.props.meta.readme.exists
+                        text: qsTr("No README.md in this repository yet." + " Add one to the repository folder and" + " it will show up here — it is the" + " Documentation tab's source.")
                         font.family: theme.uiFont
                         font.pixelSize: 11
                         color: theme.tokens.textMuted
@@ -816,10 +781,8 @@ Rectangle {
                     }
                     Text {
                         Layout.fillWidth: true
-                        visible: panel.props && panel.props.meta.readme
-                                 && panel.props.meta.readme.path !== ""
-                        text: panel.props && panel.props.meta.readme
-                              ? panel.props.meta.readme.path : ""
+                        visible: panel.props && panel.props.meta.readme && panel.props.meta.readme.path !== ""
+                        text: panel.props && panel.props.meta.readme ? panel.props.meta.readme.path : ""
                         font.family: theme.monoFont
                         font.pixelSize: 9
                         color: theme.tokens.textMuted
@@ -827,18 +790,18 @@ Rectangle {
                     }
                     Text {
                         Layout.fillWidth: true
-                        visible: panel.props && panel.props.meta.readme
-                                 && panel.props.meta.readme.exists
-                        text: panel.props && panel.props.meta.readme
-                              ? panel.props.meta.readme.text : ""
+                        visible: panel.props && panel.props.meta.readme && panel.props.meta.readme.exists
+                        text: panel.props && panel.props.meta.readme ? panel.props.meta.readme.text : ""
                         font.family: theme.monoFont
                         font.pixelSize: 11
                         color: theme.tokens.text
                         wrapMode: Text.WrapAnywhere
                         textFormat: Text.PlainText
                     }
-                    Item { Layout.fillHeight: true
-                           Layout.minimumHeight: 12 }
+                    Item {
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 12
+                    }
                 }
             }
 
@@ -846,7 +809,7 @@ Rectangle {
             Flickable {
                 contentHeight: licCol.implicitHeight + 24
                 clip: true
-                ScrollBar.vertical: ScrollBar { }
+                ScrollBar.vertical: ScrollBar {}
 
                 ColumnLayout {
                     id: licCol
@@ -854,17 +817,15 @@ Rectangle {
                     x: 12
                     spacing: 8
 
-                    Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 2
+                    }
 
                     Text {
                         Layout.fillWidth: true
-                        visible: !panel.props
-                                 || !panel.props.meta.license
-                                 || !panel.props.meta.license.exists
-                        text: qsTr("No LICENSE file in this repository."
-                                   + " Drop a LICENSE.md into the repository"
-                                   + " folder — standard open-source licenses"
-                                   + " are recognized and summarized here.")
+                        visible: !panel.props || !panel.props.meta.license || !panel.props.meta.license.exists
+                        text: qsTr("No LICENSE file in this repository." + " Drop a LICENSE.md into the repository" + " folder — standard open-source licenses" + " are recognized and summarized here.")
                         font.family: theme.uiFont
                         font.pixelSize: 11
                         color: theme.tokens.textMuted
@@ -875,15 +836,11 @@ Rectangle {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 6
-                        visible: panel.props && panel.props.meta.license
-                                 && panel.props.meta.license.exists
-                                 && panel.props.meta.license.standard
+                        visible: panel.props && panel.props.meta.license && panel.props.meta.license.exists && panel.props.meta.license.standard
 
                         Text {
                             Layout.fillWidth: true
-                            text: panel.props && panel.props.meta.license
-                                  && panel.props.meta.license.standard
-                                  ? panel.props.meta.license.standard.name : ""
+                            text: panel.props && panel.props.meta.license && panel.props.meta.license.standard ? panel.props.meta.license.standard.name : ""
                             font.family: theme.headingFont
                             font.pixelSize: 14
                             font.weight: Font.DemiBold
@@ -891,20 +848,13 @@ Rectangle {
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: panel.props && panel.props.meta.license
-                                  && panel.props.meta.license.standard
-                                  ? panel.props.meta.license.standard.spdx
-                                    + "  ·  " + "full text: "
-                                    + panel.props.meta.license.standard.url
-                                  : ""
+                            text: panel.props && panel.props.meta.license && panel.props.meta.license.standard ? panel.props.meta.license.standard.spdx + "  ·  " + "full text: " + panel.props.meta.license.standard.url : ""
                             font.family: theme.monoFont
                             font.pixelSize: 10
                             color: theme.tokens.accent
                         }
                         Repeater {
-                            model: panel.props && panel.props.meta.license
-                                   && panel.props.meta.license.standard
-                                   ? panel.props.meta.license.standard.permissions : []
+                            model: panel.props && panel.props.meta.license && panel.props.meta.license.standard ? panel.props.meta.license.standard.permissions : []
                             Text {
                                 required property var modelData
                                 Layout.fillWidth: true
@@ -915,9 +865,7 @@ Rectangle {
                             }
                         }
                         Repeater {
-                            model: panel.props && panel.props.meta.license
-                                   && panel.props.meta.license.standard
-                                   ? panel.props.meta.license.standard.conditions : []
+                            model: panel.props && panel.props.meta.license && panel.props.meta.license.standard ? panel.props.meta.license.standard.conditions : []
                             Text {
                                 required property var modelData
                                 Layout.fillWidth: true
@@ -928,9 +876,7 @@ Rectangle {
                             }
                         }
                         Repeater {
-                            model: panel.props && panel.props.meta.license
-                                   && panel.props.meta.license.standard
-                                   ? panel.props.meta.license.standard.limitations : []
+                            model: panel.props && panel.props.meta.license && panel.props.meta.license.standard ? panel.props.meta.license.standard.limitations : []
                             Text {
                                 required property var modelData
                                 Layout.fillWidth: true
@@ -945,13 +891,11 @@ Rectangle {
                     // the actual file: path, open, and a raw-text preview
                     RowLayout {
                         Layout.fillWidth: true
-                        visible: panel.props && panel.props.meta.license
-                                 && panel.props.meta.license.exists
+                        visible: panel.props && panel.props.meta.license && panel.props.meta.license.exists
                         spacing: 8
                         Text {
                             Layout.fillWidth: true
-                            text: panel.props && panel.props.meta.license
-                                  ? panel.props.meta.license.path : ""
+                            text: panel.props && panel.props.meta.license ? panel.props.meta.license.path : ""
                             font.family: theme.monoFont
                             font.pixelSize: 9
                             color: theme.tokens.textMuted
@@ -960,28 +904,24 @@ Rectangle {
                         FgButton {
                             text: qsTr("Open file")
                             onClicked: {
-                                if (panel.props && panel.props.meta.license
-                                        && panel.props.meta.license.path)
-                                    Qt.openUrlExternally(
-                                        Icons.fileUrl(
-                                            panel.props.meta.license.path))
+                                if (panel.props && panel.props.meta.license && panel.props.meta.license.path)
+                                    Qt.openUrlExternally(Icons.fileUrl(panel.props.meta.license.path));
                             }
                         }
                     }
                     Text {
                         Layout.fillWidth: true
-                        visible: panel.props && panel.props.meta.license
-                                 && panel.props.meta.license.exists
-                                 && !panel.props.meta.license.standard
-                        text: qsTr("Non-standard license — read the full"
-                                   + " text before redistributing.")
+                        visible: panel.props && panel.props.meta.license && panel.props.meta.license.exists && !panel.props.meta.license.standard
+                        text: qsTr("Non-standard license — read the full" + " text before redistributing.")
                         font.family: theme.uiFont
                         font.pixelSize: 11
                         color: theme.tokens.text
                         wrapMode: Text.Wrap
                     }
-                    Item { Layout.fillHeight: true
-                           Layout.minimumHeight: 12 }
+                    Item {
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 12
+                    }
                 }
             }
 
@@ -989,7 +929,7 @@ Rectangle {
             Flickable {
                 contentHeight: srcCol.implicitHeight + 24
                 clip: true
-                ScrollBar.vertical: ScrollBar { }
+                ScrollBar.vertical: ScrollBar {}
 
                 ColumnLayout {
                     id: srcCol
@@ -997,15 +937,15 @@ Rectangle {
                     x: 12
                     spacing: 8
 
-                    Item { Layout.fillWidth: true; Layout.preferredHeight: 2 }
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 2
+                    }
 
                     Text {
                         Layout.fillWidth: true
                         visible: !panel.srcSum || !panel.srcSum.exists
-                        text: qsTr("No git repository for this item yet —"
-                                   + " initialize one to track changes,"
-                                   + " commit snapshots and sync with a"
-                                   + " remote.")
+                        text: qsTr("No git repository for this item yet —" + " initialize one to track changes," + " commit snapshots and sync with a" + " remote.")
                         font.family: theme.uiFont
                         font.pixelSize: 11
                         color: theme.tokens.textMuted
@@ -1014,8 +954,7 @@ Rectangle {
                     FgButton {
                         visible: panel.srcSum && !panel.srcSum.exists
                         text: qsTr("Initialize repository")
-                        onClicked: taxonomy.git_init(panel.itemKind,
-                                                     panel.itemId)
+                        onClicked: taxonomy.git_init(panel.itemKind, panel.itemId)
                     }
 
                     ColumnLayout {
@@ -1025,11 +964,7 @@ Rectangle {
 
                         Text {
                             Layout.fillWidth: true
-                            text: ((panel.srcSum && panel.srcSum.branch
-                                    ? "#" + panel.srcSum.branch
-                                    : "no branch"))
-                                  + (panel.srcSum && panel.srcSum.clean
-                                     ? "  ·  clean" : "  ·  changes pending")
+                            text: ((panel.srcSum && panel.srcSum.branch ? "#" + panel.srcSum.branch : "no branch")) + (panel.srcSum && panel.srcSum.clean ? "  ·  clean" : "  ·  changes pending")
                             font.family: theme.monoFont
                             font.pixelSize: 11
                             font.weight: Font.DemiBold
@@ -1038,8 +973,7 @@ Rectangle {
                         Text {
                             Layout.fillWidth: true
                             visible: panel.srcSum && panel.srcSum.remote !== ""
-                            text: (panel.srcSum ? panel.srcSum.remote : "")
-                                  || ""
+                            text: (panel.srcSum ? panel.srcSum.remote : "") || ""
                             font.family: theme.monoFont
                             font.pixelSize: 10
                             color: theme.tokens.textMuted
@@ -1047,27 +981,15 @@ Rectangle {
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: ((panel.srcSum && panel.srcSum.staged)
-                                   ? panel.srcSum.staged.length : 0)
-                                  + " staged · "
-                                  + ((panel.srcSum && panel.srcSum.unstaged)
-                                     ? panel.srcSum.unstaged.length : 0)
-                                  + " unstaged · "
-                                  + ((panel.srcSum && panel.srcSum.untracked)
-                                     ? panel.srcSum.untracked.length : 0)
-                                  + " untracked"
+                            text: ((panel.srcSum && panel.srcSum.staged) ? panel.srcSum.staged.length : 0) + " staged · " + ((panel.srcSum && panel.srcSum.unstaged) ? panel.srcSum.unstaged.length : 0) + " unstaged · " + ((panel.srcSum && panel.srcSum.untracked) ? panel.srcSum.untracked.length : 0) + " untracked"
                             font.family: theme.monoFont
                             font.pixelSize: 10
                             color: theme.tokens.textMuted
                         }
                         Text {
                             Layout.fillWidth: true
-                            visible: panel.srcSum
-                                     && !!panel.srcSum.last_commit
-                            text: panel.srcSum && panel.srcSum.last_commit
-                                  ? panel.srcSum.last_commit.sha.slice(0, 10)
-                                    + "  " + panel.srcSum.last_commit.subject
-                                  : ""
+                            visible: panel.srcSum && !!panel.srcSum.last_commit
+                            text: panel.srcSum && panel.srcSum.last_commit ? panel.srcSum.last_commit.sha.slice(0, 10) + "  " + panel.srcSum.last_commit.subject : ""
                             font.family: theme.monoFont
                             font.pixelSize: 10
                             color: theme.tokens.text
@@ -1099,47 +1021,39 @@ Rectangle {
                             text: qsTr("Commit")
                             enabled: srcMsg.text.trim() !== ""
                             onClicked: {
-                                taxonomy.git_commit(panel.itemKind,
-                                                    panel.itemId,
-                                                    srcMsg.text)
-                                srcMsg.text = ""
+                                taxonomy.git_commit(panel.itemKind, panel.itemId, srcMsg.text);
+                                srcMsg.text = "";
                             }
                         }
                         FgButton {
                             text: qsTr("Push")
-                            onClicked: taxonomy.git_push(panel.itemKind,
-                                                         panel.itemId)
+                            onClicked: taxonomy.git_push(panel.itemKind, panel.itemId)
                         }
                         FgButton {
                             text: qsTr("Pull")
-                            onClicked: taxonomy.git_pull(panel.itemKind,
-                                                         panel.itemId)
+                            onClicked: taxonomy.git_pull(panel.itemKind, panel.itemId)
                         }
                         FgButton {
                             text: qsTr("Save & Push")
                             enabled: srcMsg.text.trim() !== ""
                             onClicked: {
-                                taxonomy.git_commit_push(panel.itemKind,
-                                                         panel.itemId,
-                                                         srcMsg.text, true)
-                                srcMsg.text = ""
+                                taxonomy.git_commit_push(panel.itemKind, panel.itemId, srcMsg.text, true);
+                                srcMsg.text = "";
                             }
                         }
                         FgButton {
                             id: discardBtn
                             property bool armed: false
                             text: qsTr("Discard changes")
-                            enabled: panel.srcSum && panel.srcSum.exists
-                                     && !panel.srcSum.clean
+                            enabled: panel.srcSum && panel.srcSum.exists && !panel.srcSum.clean
                             onClicked: {
                                 if (!armed) {
-                                    armed = true
-                                    discardTimer.restart()
-                                    return
+                                    armed = true;
+                                    discardTimer.restart();
+                                    return;
                                 }
-                                armed = false
-                                taxonomy.git_discard(panel.itemKind,
-                                                     panel.itemId)
+                                armed = false;
+                                taxonomy.git_discard(panel.itemKind, panel.itemId);
                             }
                             Timer {
                                 id: discardTimer
@@ -1151,16 +1065,16 @@ Rectangle {
                     Text {
                         Layout.fillWidth: true
                         visible: panel.srcSum && panel.srcSum.exists
-                        text: qsTr("Command line: git -C “"
-                                   + (panel.srcSum ? panel.srcSum.path : "")
-                                   + "” status | log | diff")
+                        text: qsTr("Command line: git -C “" + (panel.srcSum ? panel.srcSum.path : "") + "” status | log | diff")
                         font.family: theme.monoFont
                         font.pixelSize: 9
                         color: theme.tokens.textMuted
                         wrapMode: Text.WrapAnywhere
                     }
-                    Item { Layout.fillHeight: true
-                           Layout.minimumHeight: 12 }
+                    Item {
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 12
+                    }
                 }
             }
         }
@@ -1172,7 +1086,7 @@ Rectangle {
         Flickable {
             contentHeight: fontCol.implicitHeight + 24
             clip: true
-            ScrollBar.vertical: ScrollBar { }
+            ScrollBar.vertical: ScrollBar {}
 
             ColumnLayout {
                 id: fontCol
@@ -1182,7 +1096,10 @@ Rectangle {
                 // card — 27-weight families read as distinct blocks
                 spacing: 14
 
-                Item { Layout.fillWidth: true; Layout.preferredHeight: 4 }
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 4
+                }
 
                 // family rendered in its own face
                 Text {
@@ -1200,19 +1117,23 @@ Rectangle {
                     spacing: 8
                     Text {
                         text: qsTr("Size")
-                        font.family: theme.monoFont; font.pixelSize: 10
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
                         color: theme.tokens.textMuted
                     }
                     FgSlider {
                         id: sizeSlider
                         Layout.preferredWidth: 120
-                        from: 10; to: 96; stepSize: 1
+                        from: 10
+                        to: 96
+                        stepSize: 1
                         value: panel.previewPx
                         onMoved: panel.previewPx = value
                     }
                     Text {
                         text: Math.round(panel.previewPx) + "px"
-                        font.family: theme.monoFont; font.pixelSize: 10
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
                         color: theme.tokens.text
                         Layout.preferredWidth: 30
                     }
@@ -1227,10 +1148,10 @@ Rectangle {
                             border.color: theme.tokens.border
                         }
                         contentItem: Text {
-                            text: parent.checked ? qsTr("Dark BG")
-                                                  : qsTr("Light BG")
+                            text: parent.checked ? qsTr("Dark BG") : qsTr("Light BG")
                             color: parent.checked ? "#F5C25C" : "#16202B"
-                            font.family: theme.monoFont; font.pixelSize: 10
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -1241,19 +1162,19 @@ Rectangle {
                     Layout.fillWidth: true
                     text: panel.sample
                     onTextEdited: {
-                        panel.sampleCustom = true
+                        panel.sampleCustom = true;
                         if (fonts !== null)
-                            fonts.set_sample_custom(true)
-                        panel.sample = text
+                            fonts.set_sample_custom(true);
+                        panel.sample = text;
                     }
                     placeholderText: qsTr("Type Your Own Sample…")
-                    font.family: theme.monoFont; font.pixelSize: 11
+                    font.family: theme.monoFont
+                    font.pixelSize: 11
                     color: theme.tokens.text
                     background: Rectangle {
-                        radius: 6; color: theme.tokens.surface2
-                        border.color: sampleField.activeFocus
-                                      ? theme.tokens.accent
-                                      : theme.tokens.border
+                        radius: 6
+                        color: theme.tokens.surface2
+                        border.color: sampleField.activeFocus ? theme.tokens.accent : theme.tokens.border
                     }
                 }
                 RowLayout {
@@ -1262,8 +1183,7 @@ Rectangle {
                     spacing: 6
                     Text {
                         Layout.fillWidth: true
-                        text: qsTr("Custom Preview Text — Curated "
-                                   + "Passages Disabled")
+                        text: qsTr("Custom Preview Text — Curated " + "Passages Disabled")
                         font.family: theme.monoFont
                         font.pixelSize: 9
                         color: theme.tokens.textMuted
@@ -1272,23 +1192,19 @@ Rectangle {
                     FgButton {
                         text: qsTr("Reset")
                         onClicked: {
-                            panel.resetSample()
-                            sampleField.text = panel.sample
+                            panel.resetSample();
+                            sampleField.text = panel.sample;
                         }
                     }
                 }
 
-                readonly property var variants:
-                    fonts !== null && panel.props
-                    ? fonts.family_files(panel.props.meta.family) : []
+                readonly property var variants: fonts !== null && panel.props ? fonts.family_files(panel.props.meta.family) : []
 
                 Text {
                     Layout.fillWidth: true
-                    text: fontCol.variants.length + " variant"
-                          + (fontCol.variants.length === 1 ? "" : "s")
-                          + " · preview at " + Math.round(panel.previewPx)
-                          + "px"
-                    font.family: theme.monoFont; font.pixelSize: 10
+                    text: fontCol.variants.length + " variant" + (fontCol.variants.length === 1 ? "" : "s") + " · preview at " + Math.round(panel.previewPx) + "px"
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
                     color: theme.tokens.textMuted
                 }
 
@@ -1314,19 +1230,15 @@ Rectangle {
                         Text {
                             width: parent.width
                             text: panel.sample
-                            font.family: panel.props
-                                         ? panel.props.meta.family : ""
+                            font.family: panel.props ? panel.props.meta.family : ""
                             font.pixelSize: Math.min(panel.previewPx, 46)
                             color: panel.darkBg ? "#E7EDF2" : "#16202B"
                             wrapMode: Text.Wrap
                         }
                         Text {
                             width: parent.width
-                            text: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
-                                  + "ghijklmnopqrstuvwxyz0123456789"
-                                  + " &!?%()[]{}@#*"
-                            font.family: panel.props
-                                         ? panel.props.meta.family : ""
+                            text: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef" + "ghijklmnopqrstuvwxyz0123456789" + " &!?%()[]{}@#*"
+                            font.family: panel.props ? panel.props.meta.family : ""
                             font.pixelSize: Math.min(panel.previewPx * 0.6, 22)
                             color: panel.darkBg ? "#8DA0AF" : "#6B7A88"
                             wrapMode: Text.WrapAnywhere
@@ -1361,19 +1273,14 @@ Rectangle {
                             spacing: 8
                             Text {
                                 width: parent.width
-                                text: (varRow.modelData.style || "Regular")
-                                      + " · weight "
-                                      + (varRow.modelData.weight || 400)
-                                      + (varRow.modelData.italic
-                                         ? " · italic" : "")
+                                text: (varRow.modelData.style || "Regular") + " · weight " + (varRow.modelData.weight || 400) + (varRow.modelData.italic ? " · italic" : "")
                                 font.family: theme.monoFont
                                 font.pixelSize: 10
                                 color: panel.darkBg ? "#F5C25C" : "#A16207"
                             }
                             Text {
                                 width: parent.width
-                                text: String(varRow.modelData.path)
-                                      .split("/").pop()
+                                text: String(varRow.modelData.path).split("/").pop()
                                 font.family: theme.monoFont
                                 font.pixelSize: 9
                                 color: panel.darkBg ? "#8DA0AF" : "#6B7A88"
@@ -1383,12 +1290,9 @@ Rectangle {
                                 width: parent.width
                                 text: panel.sample
                                 wrapMode: Text.Wrap
-                                font.family: panel.props
-                                             ? panel.props.meta.family : ""
+                                font.family: panel.props ? panel.props.meta.family : ""
                                 font.pixelSize: panel.previewPx
-                                font.weight: panel.weightEnum(
-                                                 varRow.modelData.weight
-                                                 || 400)
+                                font.weight: panel.weightEnum(varRow.modelData.weight || 400)
                                 font.italic: !!varRow.modelData.italic
                                 color: panel.darkBg ? "#E7EDF2" : "#16202B"
                             }
@@ -1399,11 +1303,15 @@ Rectangle {
                 Text {
                     visible: fontCol.variants.length === 0
                     text: qsTr("No indexed files for this family")
-                    font.family: theme.uiFont; font.pixelSize: 11
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
                     color: theme.tokens.textMuted
                 }
 
-                Item { Layout.fillHeight: true; Layout.minimumHeight: 12 }
+                Item {
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 12
+                }
             }
         }
     }
@@ -1414,7 +1322,7 @@ Rectangle {
         Flickable {
             contentHeight: palCol.implicitHeight + 24
             clip: true
-            ScrollBar.vertical: ScrollBar { }
+            ScrollBar.vertical: ScrollBar {}
 
             ColumnLayout {
                 id: palCol
@@ -1422,7 +1330,10 @@ Rectangle {
                 x: 12
                 spacing: 8
 
-                Item { Layout.fillWidth: true; Layout.preferredHeight: 4 }
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 4
+                }
 
                 Text {
                     Layout.fillWidth: true
@@ -1441,7 +1352,9 @@ Rectangle {
                         spacing: 8
                         Layout.fillWidth: true
                         Rectangle {
-                            width: 34; height: 24; radius: 5
+                            width: 34
+                            height: 24
+                            radius: 5
                             color: colorRow.modelData.hex
                             border.color: theme.tokens.border
                         }
@@ -1452,27 +1365,30 @@ Rectangle {
                             color: theme.tokens.text
                         }
                         Text {
-                            text: colorRow.modelData.locked
-                                  ? "· locked" : ""
+                            text: colorRow.modelData.locked ? "· locked" : ""
                             font.family: theme.monoFont
                             font.pixelSize: 9
                             color: theme.tokens.textMuted
                         }
-                        Item { Layout.fillWidth: true }
+                        Item {
+                            Layout.fillWidth: true
+                        }
                     }
                 }
 
                 Text {
-                    visible: !panel.props
-                             || panel.props.meta.colors.length === 0
-                    text: qsTr("Save the working palette to see its"
-                               + " colors here")
-                    font.family: theme.uiFont; font.pixelSize: 10
+                    visible: !panel.props || panel.props.meta.colors.length === 0
+                    text: qsTr("Save the working palette to see its" + " colors here")
+                    font.family: theme.uiFont
+                    font.pixelSize: 10
                     color: theme.tokens.textMuted
                     wrapMode: Text.Wrap
                 }
 
-                Item { Layout.fillHeight: true; Layout.minimumHeight: 12 }
+                Item {
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 12
+                }
             }
         }
     }
@@ -1483,7 +1399,7 @@ Rectangle {
         Flickable {
             contentHeight: snipCol.implicitHeight + 24
             clip: true
-            ScrollBar.vertical: ScrollBar { }
+            ScrollBar.vertical: ScrollBar {}
 
             ColumnLayout {
                 id: snipCol
@@ -1491,7 +1407,10 @@ Rectangle {
                 x: 12
                 spacing: 8
 
-                Item { Layout.fillWidth: true; Layout.preferredHeight: 4 }
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 4
+                }
 
                 Text {
                     Layout.fillWidth: true
@@ -1504,10 +1423,22 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { k: "language", v: snipCol.snipMeta("language") },
-                        { k: "description", v: snipCol.snipMeta("description") },
-                        { k: "created", v: snipCol.snipMeta("created") },
-                        { k: "updated", v: snipCol.snipMeta("updated") }
+                        {
+                            k: "language",
+                            v: snipCol.snipMeta("language")
+                        },
+                        {
+                            k: "description",
+                            v: snipCol.snipMeta("description")
+                        },
+                        {
+                            k: "created",
+                            v: snipCol.snipMeta("created")
+                        },
+                        {
+                            k: "updated",
+                            v: snipCol.snipMeta("updated")
+                        }
                     ]
                     RowLayout {
                         id: metaRow
@@ -1534,11 +1465,13 @@ Rectangle {
                 }
 
                 function snipMeta(key) {
-                    return panel.props && panel.props.meta[key]
-                           ? String(panel.props.meta[key]) : ""
+                    return panel.props && panel.props.meta[key] ? String(panel.props.meta[key]) : "";
                 }
 
-                Item { Layout.fillHeight: true; Layout.minimumHeight: 12 }
+                Item {
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 12
+                }
             }
         }
     }
@@ -1549,7 +1482,7 @@ Rectangle {
         Flickable {
             contentHeight: iconCol.implicitHeight + 24
             clip: true
-            ScrollBar.vertical: ScrollBar { }
+            ScrollBar.vertical: ScrollBar {}
 
             ColumnLayout {
                 id: iconCol
@@ -1557,7 +1490,10 @@ Rectangle {
                 x: 12
                 spacing: 8
 
-                Item { Layout.fillWidth: true; Layout.preferredHeight: 4 }
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 4
+                }
 
                 // the glyph itself, rendered large
                 Item {
@@ -1565,7 +1501,9 @@ Rectangle {
                     Layout.preferredHeight: 96
                     Rectangle {
                         anchors.centerIn: parent
-                        width: 88; height: 88; radius: 10
+                        width: 88
+                        height: 88
+                        radius: 10
                         color: theme.tokens.surface2
                         border.color: theme.tokens.border
                         IconImage {
@@ -1588,12 +1526,14 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { k: "file", v: panel.props
-                          ? String(panel.props.meta.path || "")
-                            .split("/").pop() : "" },
-                        { k: "folder", v: panel.props
-                          ? String(panel.props.meta.path || "")
-                            .split("/").slice(0, -1).join("/") : "" }
+                        {
+                            k: "file",
+                            v: panel.props ? String(panel.props.meta.path || "").split("/").pop() : ""
+                        },
+                        {
+                            k: "folder",
+                            v: panel.props ? String(panel.props.meta.path || "").split("/").slice(0, -1).join("/") : ""
+                        }
                     ]
                     RowLayout {
                         id: iconMetaRow
@@ -1618,7 +1558,10 @@ Rectangle {
                     }
                 }
 
-                Item { Layout.fillHeight: true; Layout.minimumHeight: 12 }
+                Item {
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 12
+                }
             }
         }
     }
@@ -1634,14 +1577,16 @@ Rectangle {
         parent: Overlay.overlay
         anchors.centerIn: parent
         background: Rectangle {
-            radius: 12; color: theme.tokens.surface
+            radius: 12
+            color: theme.tokens.surface
             border.color: theme.tokens.border
         }
         contentItem: ColumnLayout {
             spacing: 10
             Text {
                 text: qsTr("New field")
-                font.family: theme.headingFont; font.pixelSize: 15
+                font.family: theme.headingFont
+                font.pixelSize: 15
                 font.letterSpacing: 1.4
                 font.capitalization: Font.AllUppercase
                 color: theme.tokens.text
@@ -1652,14 +1597,15 @@ Rectangle {
                 implicitHeight: 30
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: pfName.activeFocus ? theme.tokens.accent
-                                                 : theme.tokens.border
+                border.color: pfName.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: pfName
                     anchors.fill: parent
-                    anchors.leftMargin: 9; anchors.rightMargin: 9
+                    anchors.leftMargin: 9
+                    anchors.rightMargin: 9
                     verticalAlignment: TextInput.AlignVCenter
-                    font.family: theme.monoFont; font.pixelSize: 12
+                    font.family: theme.monoFont
+                    font.pixelSize: 12
                     color: theme.tokens.text
                     clip: true
                     selectByMouse: true
@@ -1673,27 +1619,48 @@ Rectangle {
                 valueRole: "kind"
                 // #105: default the scope to the panel's asset class
                 model: [
-                    { label: qsTr("Icons"), kind: "icon" },
-                    { label: qsTr("Fonts"), kind: "font" },
-                    { label: qsTr("Images"), kind: "image" },
-                    { label: qsTr("Palettes"), kind: "palette" },
-                    { label: qsTr("Snippets"), kind: "snippet" },
-                    { label: qsTr("Projects"), kind: "project" },
-                    { label: qsTr("All Asset Types"), kind: "" }
+                    {
+                        label: qsTr("Icons"),
+                        kind: "icon"
+                    },
+                    {
+                        label: qsTr("Fonts"),
+                        kind: "font"
+                    },
+                    {
+                        label: qsTr("Images"),
+                        kind: "image"
+                    },
+                    {
+                        label: qsTr("Palettes"),
+                        kind: "palette"
+                    },
+                    {
+                        label: qsTr("Snippets"),
+                        kind: "snippet"
+                    },
+                    {
+                        label: qsTr("Projects"),
+                        kind: "project"
+                    },
+                    {
+                        label: qsTr("All Asset Types"),
+                        kind: ""
+                    }
                 ]
                 currentIndex: {
-                    var k = ["icon", "font", "image", "palette",
-                             "snippet", "project"].indexOf(
-                                 panel.itemKind || "icon")
-                    return k >= 0 ? k : 6
+                    var k = ["icon", "font", "image", "palette", "snippet", "project"].indexOf(panel.itemKind || "icon");
+                    return k >= 0 ? k : 6;
                 }
                 background: Rectangle {
-                    radius: 6; color: theme.tokens.surface2
+                    radius: 6
+                    color: theme.tokens.surface2
                     border.color: theme.tokens.border
                 }
                 contentItem: Text {
                     text: pfKind.displayText
-                    font.family: theme.monoFont; font.pixelSize: 12
+                    font.family: theme.monoFont
+                    font.pixelSize: 12
                     color: theme.tokens.text
                     verticalAlignment: Text.AlignVCenter
                     leftPadding: 9
@@ -1705,12 +1672,14 @@ Rectangle {
                 implicitHeight: 30
                 model: ["text", "number", "bool", "date", "select", "id"]
                 background: Rectangle {
-                    radius: 6; color: theme.tokens.surface2
+                    radius: 6
+                    color: theme.tokens.surface2
                     border.color: theme.tokens.border
                 }
                 contentItem: Text {
                     text: pfType.displayText
-                    font.family: theme.monoFont; font.pixelSize: 12
+                    font.family: theme.monoFont
+                    font.pixelSize: 12
                     color: theme.tokens.text
                     verticalAlignment: Text.AlignVCenter
                     leftPadding: 9
@@ -1722,14 +1691,15 @@ Rectangle {
                 implicitHeight: 30
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: pfChoices.activeFocus ? theme.tokens.accent
-                                                    : theme.tokens.border
+                border.color: pfChoices.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: pfChoices
                     anchors.fill: parent
-                    anchors.leftMargin: 9; anchors.rightMargin: 9
+                    anchors.leftMargin: 9
+                    anchors.rightMargin: 9
                     verticalAlignment: TextInput.AlignVCenter
-                    font.family: theme.monoFont; font.pixelSize: 12
+                    font.family: theme.monoFont
+                    font.pixelSize: 12
                     color: theme.tokens.text
                     clip: true
                     selectByMouse: true
@@ -1738,7 +1708,8 @@ Rectangle {
             Text {
                 visible: pfType.currentIndex === 4
                 text: qsTr("Choices (Comma-Separated)")
-                font.family: theme.monoFont; font.pixelSize: 9
+                font.family: theme.monoFont
+                font.pixelSize: 9
                 color: theme.tokens.textMuted
             }
         }
@@ -1747,18 +1718,17 @@ Rectangle {
             acceptEnabled: pfName.text.trim() !== ""
             onCancelClicked: panelFieldDialog.reject()
             onAcceptClicked: {
-                var opts = {}
+                var opts = {};
                 if (pfType.currentIndex === 4)
-                    opts.choices = pfChoices.text.split(",").map(
-                        function (s) { return s.trim() }).filter(
-                        function (s) { return s !== "" })
-                taxonomy.create_field(pfName.text.trim(),
-                                      pfType.currentText,
-                                      JSON.stringify(opts),
-                                      pfKind.currentValue || "")
-                pfName.text = ""
-                pfChoices.text = ""
-                panelFieldDialog.accept()
+                    opts.choices = pfChoices.text.split(",").map(function (s) {
+                        return s.trim();
+                    }).filter(function (s) {
+                        return s !== "";
+                    });
+                taxonomy.create_field(pfName.text.trim(), pfType.currentText, JSON.stringify(opts), pfKind.currentValue || "");
+                pfName.text = "";
+                pfChoices.text = "";
+                panelFieldDialog.accept();
             }
         }
         onClosed: panel.reload()

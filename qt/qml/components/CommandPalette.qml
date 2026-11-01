@@ -17,135 +17,255 @@ Item {
     property bool open: false
     property alias query: field.text
     property int resultCount: 0
-    signal opened()
-    signal closed()
+    signal opened
+    signal closed
     // kind: command | asset | snippet | db | fallback — payload is JSON
     signal activated(string kind, string payload)
 
     function show(initial) {
-        query = initial !== undefined ? initial : ""
-        open = true
-        rebuild()
-        opened()
-        field.forceActiveFocus()
-        field.selectAll()
+        query = initial !== undefined ? initial : "";
+        open = true;
+        rebuild();
+        opened();
+        field.forceActiveFocus();
+        field.selectAll();
     }
     function hide() {
         if (open) {
-            open = false
-            closed()
+            open = false;
+            closed();
         }
     }
 
     // ---- command registry (id is what Main.paletteAction dispatches) ----
-    readonly property var settingsCats: ["general", "appearance", "library",
-                                         "storage", "editor", "colors",
-                                         "updates", "about"]
+    readonly property var settingsCats: ["general", "appearance", "library", "storage", "editor", "colors", "updates", "about"]
     readonly property var commands: {
         var list = [
-            { id: "go-icons", t: qsTr("Go to Icons pane"), g: qsTr("Navigate"), k: "pane switch grid assets icons" },
-            { id: "go-fonts", t: qsTr("Go to Fonts pane"), g: qsTr("Navigate"), k: "pane switch families ttf otf" },
-            { id: "go-colors", t: qsTr("Go to Colors pane"), g: qsTr("Navigate"), k: "pane switch palette harmonies" },
-            { id: "go-code", t: qsTr("Go to Code pane"), g: qsTr("Navigate"), k: "pane switch snippets editor" },
-            { id: "go-projects", t: qsTr("Go to Projects pane"), g: qsTr("Navigate"), k: "pane switch configurator css" },
-            { id: "rescan-library", t: qsTr("Rescan library"), g: qsTr("Actions"), k: "scan refresh index rebuild assets" },
-            { id: "rescan-fonts", t: qsTr("Rescan fonts"), g: qsTr("Actions"), k: "scan refresh index rebuild font" },
-            { id: "toggle-theme", t: qsTr("Toggle dark / light theme"), g: qsTr("Actions"), k: "theme dark light appearance mode color" },
-            { id: "generate-palette", t: qsTr("Generate a color palette"), g: qsTr("Actions"), k: "colors palette generate harmony random" },
-            { id: "new-snippet", t: qsTr("New snippet"), g: qsTr("Actions"), k: "snippet create new code editor language slash command markdown python" },
-            { id: "check-updates", t: qsTr("Check for updates"), g: qsTr("Actions"), k: "update release version upgrade" },
-            { id: "open-settings", t: qsTr("Open settings"), g: qsTr("Preferences"), k: "settings preferences config options" },
-            { id: "run-setup", t: qsTr("Run first-time setup again"), g: qsTr("Preferences"), k: "setup first-run wizard configure paths folders" },
-            { id: "command-shortcut", t: qsTr("Change slash menu shortcut"), g: qsTr("Preferences"), k: "hotkey keyboard shortcut keybinding slash menu" },
-            { id: "new-db", t: qsTr("New database…"), g: qsTr("Databases"), k: "database new create file" },
-            { id: "open-db", t: qsTr("Open database…"), g: qsTr("Databases"), k: "database open file load" },
-            { id: "star-db", t: qsTr("Star / unstar current database"), g: qsTr("Databases"), k: "star favorite quick access pin" },
-            { id: "clear-recent", t: qsTr("Clear recent databases"), g: qsTr("Databases"), k: "recent clear forget history" }
-        ]
-        var titles = { general: qsTr("General"), appearance: qsTr("Appearance"),
-                       library: qsTr("Library"), storage: qsTr("Storage"),
-                       editor: qsTr("Editor"), colors: qsTr("Colors"),
-                       updates: qsTr("Updates"), about: qsTr("About") }
+            {
+                id: "go-icons",
+                t: qsTr("Go to Icons pane"),
+                g: qsTr("Navigate"),
+                k: "pane switch grid assets icons"
+            },
+            {
+                id: "go-fonts",
+                t: qsTr("Go to Fonts pane"),
+                g: qsTr("Navigate"),
+                k: "pane switch families ttf otf"
+            },
+            {
+                id: "go-colors",
+                t: qsTr("Go to Colors pane"),
+                g: qsTr("Navigate"),
+                k: "pane switch palette harmonies"
+            },
+            {
+                id: "go-code",
+                t: qsTr("Go to Code pane"),
+                g: qsTr("Navigate"),
+                k: "pane switch snippets editor"
+            },
+            {
+                id: "go-projects",
+                t: qsTr("Go to Projects pane"),
+                g: qsTr("Navigate"),
+                k: "pane switch configurator css"
+            },
+            {
+                id: "rescan-library",
+                t: qsTr("Rescan library"),
+                g: qsTr("Actions"),
+                k: "scan refresh index rebuild assets"
+            },
+            {
+                id: "rescan-fonts",
+                t: qsTr("Rescan fonts"),
+                g: qsTr("Actions"),
+                k: "scan refresh index rebuild font"
+            },
+            {
+                id: "toggle-theme",
+                t: qsTr("Toggle dark / light theme"),
+                g: qsTr("Actions"),
+                k: "theme dark light appearance mode color"
+            },
+            {
+                id: "generate-palette",
+                t: qsTr("Generate a color palette"),
+                g: qsTr("Actions"),
+                k: "colors palette generate harmony random"
+            },
+            {
+                id: "new-snippet",
+                t: qsTr("New snippet"),
+                g: qsTr("Actions"),
+                k: "snippet create new code editor language slash command markdown python"
+            },
+            {
+                id: "check-updates",
+                t: qsTr("Check for updates"),
+                g: qsTr("Actions"),
+                k: "update release version upgrade"
+            },
+            {
+                id: "open-settings",
+                t: qsTr("Open settings"),
+                g: qsTr("Preferences"),
+                k: "settings preferences config options"
+            },
+            {
+                id: "run-setup",
+                t: qsTr("Run first-time setup again"),
+                g: qsTr("Preferences"),
+                k: "setup first-run wizard configure paths folders"
+            },
+            {
+                id: "command-shortcut",
+                t: qsTr("Change slash menu shortcut"),
+                g: qsTr("Preferences"),
+                k: "hotkey keyboard shortcut keybinding slash menu"
+            },
+            {
+                id: "new-db",
+                t: qsTr("New database…"),
+                g: qsTr("Databases"),
+                k: "database new create file"
+            },
+            {
+                id: "open-db",
+                t: qsTr("Open database…"),
+                g: qsTr("Databases"),
+                k: "database open file load"
+            },
+            {
+                id: "star-db",
+                t: qsTr("Star / unstar current database"),
+                g: qsTr("Databases"),
+                k: "star favorite quick access pin"
+            },
+            {
+                id: "clear-recent",
+                t: qsTr("Clear recent databases"),
+                g: qsTr("Databases"),
+                k: "recent clear forget history"
+            }
+        ];
+        var titles = {
+            general: qsTr("General"),
+            appearance: qsTr("Appearance"),
+            library: qsTr("Library"),
+            storage: qsTr("Storage"),
+            editor: qsTr("Editor"),
+            colors: qsTr("Colors"),
+            updates: qsTr("Updates"),
+            about: qsTr("About")
+        };
         for (var i = 0; i < settingsCats.length; i++) {
-            var c = settingsCats[i]
-            list.push({ id: "settings-" + c,
-                        t: qsTr("Settings: %1").arg(titles[c]),
-                        g: qsTr("Preferences"),
-                        k: "settings preferences " + c })
+            var c = settingsCats[i];
+            list.push({
+                id: "settings-" + c,
+                t: qsTr("Settings: %1").arg(titles[c]),
+                g: qsTr("Preferences"),
+                k: "settings preferences " + c
+            });
         }
-        return list
+        return list;
     }
 
     // ---- model ----
-    ListModel { id: resultsModel }
+    ListModel {
+        id: resultsModel
+    }
 
     function rebuild() {
-        resultsModel.clear()
-        var q = field.text.trim().toLowerCase()
+        resultsModel.clear();
+        var q = field.text.trim().toLowerCase();
 
         for (var i = 0; i < commands.length; i++) {
-            var c = commands[i]
-            if (q === "" || c.t.toLowerCase().indexOf(q) >= 0
-                    || c.k.indexOf(q) >= 0) {
-                resultsModel.append({ group: c.g, title: c.t, sub: "",
-                                       kind: "command",
-                                       value: JSON.stringify({ id: c.id }) })
+            var c = commands[i];
+            if (q === "" || c.t.toLowerCase().indexOf(q) >= 0 || c.k.indexOf(q) >= 0) {
+                resultsModel.append({
+                    group: c.g,
+                    title: c.t,
+                    sub: "",
+                    kind: "command",
+                    value: JSON.stringify({
+                        id: c.id
+                    })
+                });
             }
         }
         if (dbs !== null) {
-            var rec = dbs.recent
+            var rec = dbs.recent;
             for (var d = 0; d < rec.length; d++) {
-                var r = rec[d]
+                var r = rec[d];
                 if (q !== "" && r.label.toLowerCase().indexOf(q) < 0)
-                    continue
+                    continue;
                 resultsModel.append({
-                    group: qsTr("Databases"), title: r.label,
+                    group: qsTr("Databases"),
+                    title: r.label,
                     sub: r.exists ? r.when : qsTr("Missing"),
                     kind: "db",
-                    value: JSON.stringify({ path: r.path }) })
+                    value: JSON.stringify({
+                        path: r.path
+                    })
+                });
             }
         }
         if (q !== "") {
-            var assets = library !== null ? library.palette_search(field.text, 10) : []
+            var assets = library !== null ? library.palette_search(field.text, 10) : [];
             for (var a = 0; a < assets.length; a++) {
-                var as_ = assets[a]
+                var as_ = assets[a];
                 resultsModel.append({
-                    group: qsTr("Assets"), title: as_.name, sub: as_.path,
+                    group: qsTr("Assets"),
+                    title: as_.name,
+                    sub: as_.path,
                     kind: "asset",
-                    value: JSON.stringify({ path: as_.path, kind: as_.kind,
-                                            family: as_.family }) })
+                    value: JSON.stringify({
+                        path: as_.path,
+                        kind: as_.kind,
+                        family: as_.family
+                    })
+                });
             }
-            var snips = code !== null ? code.palette_search(field.text, 6) : []
+            var snips = code !== null ? code.palette_search(field.text, 6) : [];
             for (var s = 0; s < snips.length; s++) {
-                var sn = snips[s]
+                var sn = snips[s];
                 resultsModel.append({
-                    group: qsTr("Snippets"), title: sn.title,
-                    sub: sn.language, kind: "snippet",
-                    value: JSON.stringify({ id: sn.id }) })
+                    group: qsTr("Snippets"),
+                    title: sn.title,
+                    sub: sn.language,
+                    kind: "snippet",
+                    value: JSON.stringify({
+                        id: sn.id
+                    })
+                });
             }
         }
-        resultCount = resultsModel.count
-        results.currentIndex = resultsModel.count > 0 ? 0 : -1
+        resultCount = resultsModel.count;
+        results.currentIndex = resultsModel.count > 0 ? 0 : -1;
     }
 
     function activate(i) {
-        var m = resultsModel.get(i)
+        var m = resultsModel.get(i);
         if (!m)
-            return
-        activated(m.kind, m.value)
-        hide()
+            return;
+        activated(m.kind, m.value);
+        hide();
     }
     function activateCurrent() {
-        var q = field.text.trim()
+        var q = field.text.trim();
         if (resultsModel.count === 0) {
             // nothing matched — hand the query to the grid's quick
             // search (the pre-existing flow, verbatim)
             if (q !== "")
-                activated("fallback", JSON.stringify({ query: q }))
-            hide()
-            return
+                activated("fallback", JSON.stringify({
+                    query: q
+                }));
+            hide();
+            return;
         }
-        activate(results.currentIndex < 0 ? 0 : results.currentIndex)
+        activate(results.currentIndex < 0 ? 0 : results.currentIndex);
     }
 
     // ---- backdrop ----
@@ -198,29 +318,26 @@ Item {
                     selectByMouse: true
                     // the tip for the (re)opening hotkey lives in the
                     // placeholder — it follows the configured sequence
-                    placeholderText: prefs !== null
-                        ? qsTr("Search or run a command — %1")
-                              .arg(prefs.formattedShortcut)
-                        : qsTr("Search or run a command")
+                    placeholderText: prefs !== null ? qsTr("Search or run a command — %1").arg(prefs.formattedShortcut) : qsTr("Search or run a command")
                     onTextChanged: debounce.restart()
                     Keys.onPressed: function (event) {
                         if (event.key === Qt.Key_Down) {
-                            results.incrementCurrentIndex()
-                            event.accepted = true
+                            results.incrementCurrentIndex();
+                            event.accepted = true;
                         } else if (event.key === Qt.Key_Up) {
-                            results.decrementCurrentIndex()
-                            event.accepted = true
-                        } else if (event.key === Qt.Key_Return
-                                   || event.key === Qt.Key_Enter) {
-                            pal.activateCurrent()
-                            event.accepted = true
+                            results.decrementCurrentIndex();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            pal.activateCurrent();
+                            event.accepted = true;
                         } else if (event.key === Qt.Key_Escape) {
-                            pal.hide()
-                            event.accepted = true
+                            pal.hide();
+                            event.accepted = true;
                         }
                     }
                 }
-                Rectangle {   // current-shortcut chip in the bar
+                Rectangle {
+                    // current-shortcut chip in the bar
                     visible: prefs !== null
                     Layout.preferredHeight: 18
                     Layout.preferredWidth: shortcutHint.implicitWidth + 12
@@ -281,9 +398,7 @@ Item {
                     required property string sub
                     width: results.width
                     height: 36
-                    color: ListView.isCurrentItem ? theme.tokens.accent
-                          : (rowMa.containsMouse ? theme.tokens.surface2
-                                                 : "transparent")
+                    color: ListView.isCurrentItem ? theme.tokens.accent : (rowMa.containsMouse ? theme.tokens.surface2 : "transparent")
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 12
@@ -294,19 +409,14 @@ Item {
                             text: rowRect.title
                             font.family: theme.uiFont
                             font.pixelSize: 13
-                            color: ListView.isCurrentItem ? theme.tokens.bg
-                                  : theme.tokens.text
+                            color: ListView.isCurrentItem ? theme.tokens.bg : theme.tokens.text
                             elide: Text.ElideRight
                         }
                         Text {
                             text: rowRect.sub
                             font.family: theme.monoFont
                             font.pixelSize: 10
-                            color: ListView.isCurrentItem
-                                   ? Qt.rgba(theme.tokens.bg.r,
-                                             theme.tokens.bg.g,
-                                             theme.tokens.bg.b, 0.75)
-                                   : theme.tokens.textMuted
+                            color: ListView.isCurrentItem ? Qt.rgba(theme.tokens.bg.r, theme.tokens.bg.g, theme.tokens.bg.b, 0.75) : theme.tokens.textMuted
                             elide: Text.ElideRight
                             Layout.maximumWidth: 260
                             horizontalAlignment: Text.AlignRight
@@ -318,8 +428,8 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            results.currentIndex = rowRect.index
-                            pal.activate(rowRect.index)
+                            results.currentIndex = rowRect.index;
+                            pal.activate(rowRect.index);
                         }
                     }
                 }

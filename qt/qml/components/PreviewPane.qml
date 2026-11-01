@@ -25,7 +25,7 @@ WebEngineView {
     property string assetPath: ""
     onAssetPathChanged: {
         if (assetPath !== "")
-            pane.url = "fengrid-asset://" + assetPath
+            pane.url = "fengrid-asset://" + assetPath;
     }
 
     property string document: ""
@@ -33,7 +33,7 @@ WebEngineView {
         if (document !== "")
             // baseUrl keeps relative resolution inside the sandboxed scheme;
             // the interceptor still blocks everything unlisted
-            pane.loadHtml(pane.document, "fengrid-asset://playground/")
+            pane.loadHtml(pane.document, "fengrid-asset://playground/");
     }
 
     settings.showScrollBars: true
@@ -45,10 +45,10 @@ WebEngineView {
 
     // previewed components are untrusted content: no context-menu powers,
     // no downloads, no window.open
-    onContextMenuRequested: function(request) {
-        request.accepted = true
+    onContextMenuRequested: function (request) {
+        request.accepted = true;
     }
-    onRenderProcessTerminated: function(status, code) {
-        console.warn("preview renderer terminated:", status, code)
+    onRenderProcessTerminated: function (status, code) {
+        console.warn("preview renderer terminated:", status, code);
     }
 }

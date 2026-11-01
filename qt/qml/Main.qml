@@ -65,11 +65,11 @@ ApplicationWindow {
     // displays) engaging it segfaults (user report) — never enable it
     // there
     readonly property bool blurUi: softwareRenderer === false
-                                   && ((presetsDialog !== null
+                                    && ((presetsDialog !== null
                                         && presetsDialog.visible)
-                                       || (entityInspector !== null
-                                           && entityInspector.visible)
-                                       || root.settingsOpen)
+                                    || (entityInspector !== null
+                                        && entityInspector.visible)
+                                    || root.settingsOpen)
     function openEntityInspector(kind, id) {
         entityKind = String(kind)
         entityId = parseInt(id)
@@ -82,7 +82,7 @@ ApplicationWindow {
     // computed in __main__ (flag unset && not a screenshot run); flipped
     // afterwards by prefs.firstRunNeededChanged
     property bool setupOpen: typeof initialFirstRun !== "undefined"
-                             && initialFirstRun
+                            && initialFirstRun
     property string pendingCategory: ""
     // ── status-bar tip ticker + short-lived notices. Details win: while
     // a notice (scan summaries, export results, errors) is live the tips
@@ -157,7 +157,7 @@ ApplicationWindow {
                 // binding would go stale after the first layout pass
                 onAboutToShow: {
                     var p = menuBtn.mapToItem(Overlay.overlay, 0,
-                                              menuBtn.height)
+                                            menuBtn.height)
                     x = p.x
                     y = p.y + 6
                 }
@@ -173,8 +173,8 @@ ApplicationWindow {
                     font.letterSpacing: 1.2
                     font.capitalization: Font.AllUppercase
                     text: dbs !== null
-                          ? qsTr("Database — %1").arg(dbs.currentLabel)
-                          : qsTr("Database")
+                        ? qsTr("Database — %1").arg(dbs.currentLabel)
+                        : qsTr("Database")
                 }
                 FgMenuItem {
                     visible: dbs !== null && dbs.quick.length > 0
@@ -188,7 +188,7 @@ ApplicationWindow {
                         required property var modelData
                         enabled: modelData.exists
                         text: modelData.label + (modelData.exists ? ""
-                                                                  : qsTr(" (missing)"))
+                                                                : qsTr(" (missing)"))
                         onClicked: dbs.switchTo(modelData.path)
                     }
                 }
@@ -204,20 +204,20 @@ ApplicationWindow {
                         required property var modelData
                         enabled: modelData.exists
                         text: modelData.label + " · " + modelData.when
-                              + (modelData.exists ? "" : qsTr(" (missing)"))
+                            + (modelData.exists ? "" : qsTr(" (missing)"))
                         onClicked: dbs.switchTo(modelData.path)
                     }
                 }
                 FgMenuSeparator {
                     visible: dbs !== null && (dbs.quick.length > 0
-                                              || dbs.recent.length > 0)
+                                            || dbs.recent.length > 0)
                     height: visible ? implicitHeight : 0
                 }
                 FgMenuItem {
                     visible: dbs !== null
                     text: dbs !== null && dbs.currentStarred
-                          ? qsTr("Unstar current database")
-                          : qsTr("Star current database")
+                        ? qsTr("Unstar current database")
+                        : qsTr("Star current database")
                     onTriggered: dbs.starCurrent()
                 }
                 FgMenuItem {
@@ -323,7 +323,7 @@ ApplicationWindow {
                 function syncIndex() {
                     currentIndex = ["smart", "fuzzy", "regex", "content"]
                         .indexOf(library !== null ? library.searchMode
-                                                  : "smart")
+                                                : "smart")
                 }
                 Component.onCompleted: syncIndex()
                 Connections {
@@ -356,7 +356,7 @@ ApplicationWindow {
                 radius: 6
                 color: theme.tokens.surface2
                 border.color: searchField.activeFocus ? theme.tokens.accent
-                                                      : theme.tokens.border
+                                                    : theme.tokens.border
 
                 RowLayout {
                     anchors.fill: parent
@@ -388,7 +388,7 @@ ApplicationWindow {
                         // the placeholder and follows the user's binding
                         placeholderText: qsTr("Search Assets  ( / )  ·  %1")
                             .arg(prefs !== null ? prefs.formattedShortcut
-                                                 : "Alt + /")
+                                                : "Alt + /")
                         color: theme.tokens.text
                         placeholderTextColor: theme.tokens.textMuted
                         background: null
@@ -443,7 +443,7 @@ ApplicationWindow {
                 // moved() = user-driven only (no feedback loop with the
                 // sync below); set_icon_size dedupes per-step writes
                 onMoved: prefs !== null
-                         && prefs.set_icon_size(Math.round(value))
+                        && prefs.set_icon_size(Math.round(value))
                 Connections {
                     // a drag writes `value` imperatively, killing the
                     // binding above — re-sync from Settings while idle
@@ -466,7 +466,7 @@ ApplicationWindow {
             IconButton {
                 icon_name: theme.isDark ? "sun" : "moon"
                 ToolTip.text: theme.isDark ? qsTr("Switch to light")
-                                           : qsTr("Switch to dark")
+                                        : qsTr("Switch to dark")
                 onClicked: theme.toggle()
             }
             IconButton {
@@ -583,7 +583,7 @@ ApplicationWindow {
             // checkbox multi-selection → aggregate summary + bulk export
             selectedIds: grid.selectedIds
             visible: root.pane === 0
-                     && (grid.currentIndex >= 0 || grid.selectedIds.length > 0)
+                    && (grid.currentIndex >= 0 || grid.selectedIds.length > 0)
         }
         // universal Properties panel for the other asset kinds (fonts,
         // color schemes, code snippets) — tags, custom fields, links
@@ -594,18 +594,18 @@ ApplicationWindow {
             itemKind: root.pane === 1 ? "font" : "palette"
             itemId: root.pane === 1
                     ? (fonts !== null
-                       ? fonts.family_primary_id(fonts.selectedFamily) : -1)
+                    ? fonts.family_primary_id(fonts.selectedFamily) : -1)
                     : (colors !== null ? colors.paletteId : -1)
             // #115: checkbox multi-selection on the Fonts pane → the
             // panel shows an aggregate summary instead of single-item
             // detail (same pattern as the Icons pane's InspectorPanel)
             selectedIds: root.pane === 1 && fontsPane !== null && fonts !== null
-                         ? fonts.checkedFamilyIds(fontsPane.checkedFams) : []
+                    ? fonts.checkedFamilyIds(fontsPane.checkedFams) : []
             // pane 3 hosts its own PropertiesPanel in the editor row —
             // the snippet preview spans the FULL lower band, so the
             // Main-level inspector would push it out of the window
             visible: root.pane >= 1 && root.pane <= 2
-                     && (itemId >= 0 || selectedIds.length > 1)
+                    && (itemId >= 0 || selectedIds.length > 1)
         }
     }
     }   // blurHost
@@ -680,7 +680,7 @@ ApplicationWindow {
             height: 26
             radius: 13
             color: closeMa.containsMouse ? theme.tokens.surface2
-                                         : "transparent"
+                                        : "transparent"
             z: 2
             Text {
                 anchors.centerIn: parent
@@ -713,10 +713,10 @@ ApplicationWindow {
                 text: {
                     if (root.pane === 0 && library !== null)
                         return library.scanning
-                               ? qsTr("Indexing… %1").arg(library.scanCount)
-                               : qsTr("%1 assets%2").arg(library.totalAssets)
-                                 .arg(library.lastScan !== ""
-                                      ? qsTr(" · indexed ")
+                                ? qsTr("Indexing… %1").arg(library.scanCount)
+                                : qsTr("%1 assets%2").arg(library.totalAssets)
+                                .arg(library.lastScan !== ""
+                                    ? qsTr(" · indexed ")
                                         + library.lastScan : "")
                     if (root.pane === 1 && fonts !== null)
                         return qsTr("%1 font files · %2 families").arg(
@@ -738,7 +738,7 @@ ApplicationWindow {
             Text {
                 id: uncommittedNote
                 text: sc !== null && sc.hasUncommitted
-                      ? qsTr("● %1: uncommitted changes — commit or stash")
+                    ? qsTr("● %1: uncommitted changes — commit or stash")
                         .arg(sc.currentBranch) : ""
                 visible: text !== ""
                 font.family: theme.monoFont
@@ -758,8 +758,8 @@ ApplicationWindow {
                 // indexed details it must never displace
                 text: "| " + root.statusTip
                 visible: library !== null && !library.scanning
-                         && root.statusNotice === ""
-                         && !(updater !== null && updater.updateAvailable)
+                        && root.statusNotice === ""
+                        && !(updater !== null && updater.updateAvailable)
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: theme.tokens.textMuted
@@ -792,13 +792,13 @@ ApplicationWindow {
                 // background release probe finds something newer — click
                 // either state to re-check / open the releases page
                 text: updater !== null && updater.updateAvailable
-                      ? qsTr("Update Available: ") + updater.latestVersion
-                      + " — Click to Open"
-                      : "fengrid " + appVersion
+                        ? qsTr("Update Available: ") + updater.latestVersion
+                        + " — Click to Open"
+                        : "fengrid " + appVersion
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: updater !== null && updater.updateAvailable
-                       ? theme.tokens.hlInk : theme.tokens.textMuted
+                        ? theme.tokens.hlInk : theme.tokens.textMuted
                 MouseArea {
                     anchors.fill: parent
                     hoverEnabled: true
@@ -1039,14 +1039,14 @@ ApplicationWindow {
         sequence: prefs !== null ? prefs.commandShortcut : "Alt+/"
         enabled: !root.setupOpen && !Shell.capturing
         onActivated: commandPalette.open ? commandPalette.hide()
-                                         : commandPalette.show("")
+                                        : commandPalette.show("")
     }
 
     Shortcut {
         sequence: "/"
         enabled: !searchField.activeFocus && !root.settingsOpen
-                 && !root.setupOpen && !root.paletteOpen
-                 && !Shell.capturing
+                && !root.setupOpen && !root.paletteOpen
+                && !Shell.capturing
         onActivated: {
             searchField.forceActiveFocus()
             searchField.selectAll()
@@ -1055,15 +1055,15 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+C"
         enabled: grid.currentIndex >= 0 && !root.settingsOpen
-                 && !root.setupOpen && !root.paletteOpen
-                 && !Shell.capturing
+                && !root.setupOpen && !root.paletteOpen
+                && !Shell.capturing
         onActivated: library.copy_name(grid.currentIndex)
     }
     Shortcut {
         sequence: "Escape"
         enabled: grid.currentIndex >= 0 && !root.settingsOpen
-                 && !root.setupOpen && !root.paletteOpen
-                 && !Shell.capturing
+                && !root.setupOpen && !root.paletteOpen
+                && !Shell.capturing
         onActivated: grid.currentIndex = -1
     }
     // Ctrl+, — settings (toggle); blocked while setup is modal
@@ -1087,22 +1087,22 @@ ApplicationWindow {
     Shortcut {
         sequences: [StandardKey.Undo]
         enabled: !root.settingsOpen && !root.paletteOpen
-                 && ((root.pane === 4 && undoProjects !== null
-                      && undoProjects.canUndo)
-                     || (root.pane === 2 && undoColors !== null
-                         && undoColors.canUndo))
+                && ((root.pane === 4 && undoProjects !== null
+                    && undoProjects.canUndo)
+                    || (root.pane === 2 && undoColors !== null
+                && undoColors.canUndo))
         onActivated: root.pane === 4 ? undoProjects.undo()
-                                     : undoColors.undo()
+                                    : undoColors.undo()
     }
     Shortcut {
         sequences: [StandardKey.Redo]
         enabled: !root.settingsOpen && !root.paletteOpen
-                 && ((root.pane === 4 && undoProjects !== null
-                      && undoProjects.canRedo)
-                     || (root.pane === 2 && undoColors !== null
-                         && undoColors.canRedo))
+                && ((root.pane === 4 && undoProjects !== null
+                    && undoProjects.canRedo)
+                    || (root.pane === 2 && undoColors !== null
+                        && undoColors.canRedo))
         onActivated: root.pane === 4 ? undoProjects.redo()
-                                     : undoColors.redo()
+                                    : undoColors.redo()
     }
     // uncommitted changes pending at close — prompt commit or stash first
     onClosing: function (close) {
@@ -1130,8 +1130,8 @@ ApplicationWindow {
             }
             Text {
                 text: qsTr("The current project has uncommitted changes.")
-                      + " Commit them before closing, or stash them"
-                      + " to return later."
+                        + " Commit them before closing, or stash them"
+                        + " to return later."
                 wrapMode: Text.Wrap
                 font.family: theme.uiFont; font.pixelSize: 11
                 color: theme.tokens.text
@@ -1163,11 +1163,11 @@ ApplicationWindow {
                     text: qsTr("Stash & close")
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Set the changes aside — restore " +
-                                       "them with «Restore stash» in the " +
-                                       "Projects source panel")
+                                        "them with «Restore stash» in the " +
+                                        "Projects source panel")
                     onClicked: {
                         sc.stash(closeMsg.text.trim() !== ""
-                                 ? closeMsg.text : "WIP before close")
+                                ? closeMsg.text : "WIP before close")
                         closePrompt.stashAndClose()
                     }
                 }
@@ -1209,9 +1209,9 @@ ApplicationWindow {
         title: qsTr("Open database")
         fileMode: FileDialog.OpenFile
         nameFilters: [qsTr("Fengrid database (*.db)"),
-                      qsTr("All files (*)")]
+                        qsTr("All files (*)")]
         onAccepted: dbs !== null
-                     && dbs.openDatabase(Icons.toLocalPath(selectedFile))
+                    && dbs.openDatabase(Icons.toLocalPath(selectedFile))
     }
     FileDialog {
         id: newDbDialog
@@ -1221,7 +1221,7 @@ ApplicationWindow {
         defaultSuffix: "db"
         currentFolder: dbs !== null ? dbs.defaultDir : ""
         onAccepted: dbs !== null
-                     && dbs.createDatabase(Icons.toLocalPath(selectedFile))
+                    && dbs.createDatabase(Icons.toLocalPath(selectedFile))
     }
 
     // QA: --dialog <name> opens a registered modal after load — delayed so
@@ -1331,10 +1331,10 @@ ApplicationWindow {
             return
         }
         var dlg = (sideRail && sideRail.qaModals
-                   && sideRail.qaModals[name])
-                  ? sideRail.qaModals[name]
-                  : (inspectorPanel && inspectorPanel.qaModals
-                     ? inspectorPanel.qaModals[name] : null)
+                    && sideRail.qaModals[name])
+                    ? sideRail.qaModals[name]
+                    : (inspectorPanel && inspectorPanel.qaModals
+                        ? inspectorPanel.qaModals[name] : null)
         if (dlg)
             dlg.open()
     }
@@ -1358,7 +1358,7 @@ ApplicationWindow {
     Timer {
         interval: 6000
         running: root.statusNotice === "" && !root.paletteOpen
-                 && !root.settingsOpen && !root.setupOpen
+                && !root.settingsOpen && !root.setupOpen
         repeat: true
         onTriggered: root.statusTipIdx++
     }

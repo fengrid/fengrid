@@ -20,16 +20,16 @@ Item {
     property var checkedFams: []
     readonly property bool anyChecked: checkedFams.length > 0
     function toggleSelect(family) {
-        var next = []
+        var next = [];
         for (var i = 0; i < checkedFams.length; i++)
             if (checkedFams[i] !== family)
-                next.push(checkedFams[i])
+                next.push(checkedFams[i]);
         if (next.length === checkedFams.length)
-            next.push(family)
-        checkedFams = next
+            next.push(family);
+        checkedFams = next;
     }
     function isSelected(family) {
-        return checkedFams.indexOf(family) >= 0
+        return checkedFams.indexOf(family) >= 0;
     }
 
     // `fonts !== null` guards mirror SideRail's: context properties are
@@ -48,7 +48,11 @@ Item {
             anchors.rightMargin: 10
             spacing: 10
 
-            IconImage { name: "file-text"; px: 14; tint: theme.tokens.textMuted }
+            IconImage {
+                name: "file-text"
+                px: 14
+                tint: theme.tokens.textMuted
+            }
 
             Rectangle {
                 id: filterBox
@@ -56,8 +60,7 @@ Item {
                 Layout.preferredHeight: 28
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: filterField.activeFocus ? theme.tokens.accent
-                                                      : theme.tokens.border
+                border.color: filterField.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: filterField
                     anchors.fill: parent
@@ -83,64 +86,27 @@ Item {
             }
 
             Text {
-                text: fonts !== null
-                      ? (fonts.scanning
-                         ? qsTr("Indexing… %1").arg(fonts.scanCount)
-                         : qsTr("%1 Families · %2 Files")
-                             .arg(fonts.totalFamilies).arg(fonts.totalFonts))
-                      : ""
+                text: fonts !== null ? (fonts.scanning ? qsTr("Indexing… %1").arg(fonts.scanCount) : qsTr("%1 Families · %2 Files").arg(fonts.totalFamilies).arg(fonts.totalFonts)) : ""
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: theme.tokens.textMuted
             }
 
-            Item { Layout.fillWidth: true }
-
-            component ExportButton: AbstractButton {
-                id: expBtn
-                property string label
-                implicitHeight: 26
-                enabled: fonts !== null && !fonts.scanning
-                         && (fontsRoot.anyChecked
-                             || fonts.selectedFamily !== "")
-                contentItem: Text {
-                    text: expBtn.label
-                    color: expBtn.enabled ? theme.tokens.text : theme.tokens.textMuted
-                    font.family: theme.uiFont
-                    font.pixelSize: 11
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    leftPadding: 10; rightPadding: 10
-                }
-                background: Rectangle {
-                    radius: 6
-                    color: expBtn.pressed ? theme.tokens.surface2
-                                          : (expBtn.hovered ? theme.tokens.surface2
-                                                            : "transparent")
-                    border.color: theme.tokens.border
-                }
+            Item {
+                Layout.fillWidth: true
             }
             // #119: pane-wide grid preview text — opens the editor popup;
             // highlights while a custom text is active
             IconButton {
                 icon_name: "type"
-                ToolTip.text: fonts !== null && fonts.gridSample !== ""
-                              ? qsTr("Preview text — custom (click to edit)")
-                              : qsTr("Preview text — curated passages (click to customize)")
+                ToolTip.text: fonts !== null && fonts.gridSample !== "" ? qsTr("Preview text — custom (click to edit)") : qsTr("Preview text — curated passages (click to customize)")
                 onClicked: gridSamplePopup.open()
             }
             ExportButton {
                 // #114: the .zip button is redundant — the CSS dialog's
                 // «Save as ZIP…» covers the same flow; one entry point
-                label: fontsRoot.anyChecked
-                       ? qsTr("Export Font(s) — %1 families")
-                             .arg(fontsRoot.checkedFams.length)
-                       : (fonts !== null && fonts.selectedFamily !== ""
-                          ? qsTr("Export Font(s) — %1").arg(fonts.selectedFamily)
-                          : qsTr("Export Font(s)"))
-                onClicked: cssDialog.openWith(fontsRoot.anyChecked
-                                              ? fontsRoot.checkedFams
-                                              : fonts.selectedFamily)
+                label: fontsRoot.anyChecked ? qsTr("Export Font(s) — %1 families").arg(fontsRoot.checkedFams.length) : (fonts !== null && fonts.selectedFamily !== "" ? qsTr("Export Font(s) — %1").arg(fonts.selectedFamily) : qsTr("Export Font(s)"))
+                onClicked: cssDialog.openWith(fontsRoot.anyChecked ? fontsRoot.checkedFams : fonts.selectedFamily)
             }
             IconButton {
                 icon_name: "refresh"
@@ -148,6 +114,28 @@ Item {
                 ToolTip.text: qsTr("Re-scan font folders")
                 onClicked: fonts.rescan()
             }
+        }
+    }
+
+    component ExportButton: AbstractButton {
+        id: expBtn
+        property string label
+        implicitHeight: 26
+        enabled: fonts !== null && !fonts.scanning && (fontsRoot.anyChecked || fonts.selectedFamily !== "")
+        contentItem: Text {
+            text: expBtn.label
+            color: expBtn.enabled ? theme.tokens.text : theme.tokens.textMuted
+            font.family: theme.uiFont
+            font.pixelSize: 11
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            leftPadding: 10
+            rightPadding: 10
+        }
+        background: Rectangle {
+            radius: 6
+            color: expBtn.pressed ? theme.tokens.surface2 : (expBtn.hovered ? theme.tokens.surface2 : "transparent")
+            border.color: theme.tokens.border
         }
     }
 
@@ -170,13 +158,13 @@ Item {
         // font-card scale (1.0 at the 64px default), clamped so the cards
         // stay usable at the slider's extremes
         readonly property real fontScale: {
-            var raw = prefs !== null ? prefs.iconSize : 64
-            return Math.max(0.45, Math.min(3.0, raw / 64))
+            var raw = prefs !== null ? prefs.iconSize : 64;
+            return Math.max(0.45, Math.min(3.0, raw / 64));
         }
         cellWidth: Math.round(220 * fontScale)
         cellHeight: Math.round(120 * fontScale)
 
-        ScrollBar.vertical: ScrollBar { }
+        ScrollBar.vertical: ScrollBar {}
 
         delegate: Item {
             width: famGrid.cellWidth
@@ -187,14 +175,9 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 4
                 radius: 8
-                color: famMa.containsMouse ? theme.tokens.surface2
-                                           : theme.tokens.surface
-                border.color: fonts !== null && fonts.selectedFamily === model.family
-                              ? theme.tokens.accentFont
-                              : (famMa.containsMouse ? theme.tokens.accentFont
-                                                     : theme.tokens.border)
-                border.width: fonts !== null && fonts.selectedFamily === model.family
-                              ? 2 : 1
+                color: famMa.containsMouse ? theme.tokens.surface2 : theme.tokens.surface
+                border.color: fonts !== null && fonts.selectedFamily === model.family ? theme.tokens.accentFont : (famMa.containsMouse ? theme.tokens.accentFont : theme.tokens.border)
+                border.width: fonts !== null && fonts.selectedFamily === model.family ? 2 : 1
 
                 Text {
                     id: preview
@@ -218,17 +201,8 @@ Item {
                     // the per-asset custom sample field disables the
                     // curated passages (#118: the class follows the grid
                     // scale — specimenPx).
-                    readonly property int specimenPx: Math.max(
-                        12, Math.round(26 * famGrid.fontScale))
-                    text: fonts !== null && fonts.gridSample !== ""
-                          ? fonts.gridSample
-                          : (fonts !== null && !fonts.sampleCustom
-                             ? (specimenPx <= fonts.smallMaxPx
-                                ? fonts.specimenSmall
-                                : specimenPx <= fonts.mediumMaxPx
-                                ? fonts.specimenMedium
-                                : fonts.specimenLarge)
-                             : qsTr("Fengrid 123"))
+                    readonly property int specimenPx: Math.max(12, Math.round(26 * famGrid.fontScale))
+                    text: fonts !== null && fonts.gridSample !== "" ? fonts.gridSample : (fonts !== null && !fonts.sampleCustom ? (specimenPx <= fonts.smallMaxPx ? fonts.specimenSmall : specimenPx <= fonts.mediumMaxPx ? fonts.specimenMedium : fonts.specimenLarge) : qsTr("Fengrid 123"))
                     font.family: model.family
                     font.pixelSize: specimenPx
                     elide: Text.ElideRight
@@ -258,8 +232,7 @@ Item {
                     // files count only — the weights list moved to the
                     // property inspector's Details tab (it overflowed the
                     // cells and crowded out the family name)
-                    text: model.files === 1 ? qsTr("1 file")
-                          : qsTr("%1 files").arg(model.files)
+                    text: model.files === 1 ? qsTr("1 file") : qsTr("%1 files").arg(model.files)
                     font.family: theme.monoFont
                     font.pixelSize: 9
                     color: theme.tokens.textMuted
@@ -276,11 +249,8 @@ Item {
                     anchors.left: parent.left
                     anchors.margins: 5
                     visible: famMa.containsMouse || fontsRoot.anyChecked
-                    color: fontsRoot.isSelected(model.family)
-                           ? theme.tokens.accentFont : theme.tokens.surface
-                    border.color: fontsRoot.isSelected(model.family)
-                                  ? theme.tokens.accentFont
-                                  : theme.tokens.textMuted
+                    color: fontsRoot.isSelected(model.family) ? theme.tokens.accentFont : theme.tokens.surface
+                    border.color: fontsRoot.isSelected(model.family) ? theme.tokens.accentFont : theme.tokens.textMuted
                     border.width: 1
                     z: 3
                     IconImage {
@@ -304,40 +274,37 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function (mouse) {
                         if (fonts === null)
-                            return
+                            return;
                         if (mouse.button === Qt.LeftButton) {
-                            if (mouse.modifiers & (Qt.ControlModifier
-                                                   | Qt.ShiftModifier)) {
+                            if (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) {
                                 // Ctrl toggles this card; Shift fills a
                                 // range from the anchor card (AssetGrid
                                 // semantics — #39/#52)
-                                var start = famGrid.currentIndex >= 0
-                                            ? famGrid.currentIndex : index
+                                var start = famGrid.currentIndex >= 0 ? famGrid.currentIndex : index;
                                 if (mouse.modifiers & Qt.ShiftModifier) {
-                                    var lo = Math.min(start, index)
-                                    var hi = Math.max(start, index)
-                                    var next = fontsRoot.checkedFams.slice()
+                                    var lo = Math.min(start, index);
+                                    var hi = Math.max(start, index);
+                                    var next = fontsRoot.checkedFams.slice();
                                     for (var r = lo; r <= hi; r++) {
-                                        var fam = fonts.model.family_at(r)
-                                        if (fam !== ""
-                                            && next.indexOf(fam) < 0)
-                                            next.push(fam)
+                                        var fam = fonts.model.family_at(r);
+                                        if (fam !== "" && next.indexOf(fam) < 0)
+                                            next.push(fam);
                                     }
-                                    fontsRoot.checkedFams = next
+                                    fontsRoot.checkedFams = next;
                                 } else {
-                                    fontsRoot.toggleSelect(model.family)
+                                    fontsRoot.toggleSelect(model.family);
                                 }
-                                famGrid.currentIndex = index
+                                famGrid.currentIndex = index;
                             } else {
-                                fontsRoot.checkedFams = []
-                                famGrid.currentIndex = index
-                                fonts.select(model.family)
+                                fontsRoot.checkedFams = [];
+                                famGrid.currentIndex = index;
+                                fonts.select(model.family);
                             }
-                            famGrid.forceActiveFocus()
+                            famGrid.forceActiveFocus();
                         } else {
                             // right-click opens the menu for the CURRENT
                             // selection without moving it
-                            famMenu.popup()
+                            famMenu.popup();
                         }
                     }
                 }
@@ -353,12 +320,11 @@ Item {
             width: 210
             padding: 4
             background: Rectangle {
-                radius: 8; color: theme.tokens.surface
+                radius: 8
+                color: theme.tokens.surface
                 border.color: theme.tokens.border
             }
-            onAboutToShow: starItem.starred =
-                           fonts !== null && fonts.selectedFamily !== ""
-                           && fonts.family_starred(fonts.selectedFamily)
+            onAboutToShow: starItem.starred = fonts !== null && fonts.selectedFamily !== "" && fonts.family_starred(fonts.selectedFamily)
 
             // ── pane-specific ──
             FgMenuItem {
@@ -367,16 +333,18 @@ Item {
                 onTriggered: cssDialog.openWith(fonts.selectedFamily)
             }
             FgMenuSeparator {
-                topPadding: 3; bottomPadding: 3
-                contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
+                topPadding: 3
+                bottomPadding: 3
+                contentItem: Rectangle {
+                    implicitHeight: 1
+                    color: theme.tokens.border
+                }
             }
             // ── common: edit ──
             FgMenuItem {
                 text: qsTr("Copy name")
                 height: 28
-                onTriggered: library !== null && fonts !== null
-                             && fonts.selectedFamily !== ""
-                             && library.copy_text(fonts.selectedFamily)
+                onTriggered: library !== null && fonts !== null && fonts.selectedFamily !== "" && library.copy_text(fonts.selectedFamily)
             }
             // ── common: star ──
             FgMenuItem {
@@ -385,24 +353,22 @@ Item {
                 text: starred ? qsTr("Unstar family") : qsTr("Star family")
                 height: 28
                 enabled: fonts !== null && fonts.selectedFamily !== ""
-                onTriggered: fonts.star_family(fonts.selectedFamily,
-                                               !starred)
+                onTriggered: fonts.star_family(fonts.selectedFamily, !starred)
             }
             // ── common: taxonomy — collections (submenu) ──
             FgMenuItem {
                 id: famCollItem
                 text: qsTr("Add to collection…")
                 height: 28
-                enabled: library !== null
-                         && library.collections.length > 0
-                         && fonts !== null && fonts.selectedFamily !== ""
+                enabled: library !== null && library.collections.length > 0 && fonts !== null && fonts.selectedFamily !== ""
                 Menu {
                     id: famCollSub
                     cascade: true
                     width: 220
                     padding: 4
                     background: Rectangle {
-                        radius: 8; color: theme.tokens.surface
+                        radius: 8
+                        color: theme.tokens.surface
                         border.color: theme.tokens.border
                     }
                     Repeater {
@@ -412,14 +378,9 @@ Item {
                             required property var modelData
                             height: 28
                             onTriggered: {
-                                if (fonts === null
-                                        || fonts.selectedFamily === "")
-                                    return
-                                library.add_item_to_collection(
-                                    famCollTarget.modelData.id, "font",
-                                    fonts.family_primary_id(
-                                        fonts.selectedFamily),
-                                    fonts.selectedFamily)
+                                if (fonts === null || fonts.selectedFamily === "")
+                                    return;
+                                library.add_item_to_collection(famCollTarget.modelData.id, "font", fonts.family_primary_id(fonts.selectedFamily), fonts.selectedFamily);
                             }
                             contentItem: Text {
                                 text: famCollTarget.modelData.name
@@ -431,9 +392,7 @@ Item {
                                 leftPadding: 10
                             }
                             background: Rectangle {
-                                color: famCollTarget.hovered
-                                       ? theme.tokens.surface2
-                                       : "transparent"
+                                color: famCollTarget.hovered ? theme.tokens.surface2 : "transparent"
                                 radius: 5
                             }
                         }
@@ -445,35 +404,27 @@ Item {
                 id: famLinkItem
                 text: qsTr("Link to…")
                 height: 28
-                enabled: taxonomy !== null
-                         && taxonomy.link_targets().length > 0
-                         && fonts !== null && fonts.selectedFamily !== ""
+                enabled: taxonomy !== null && taxonomy.link_targets().length > 0 && fonts !== null && fonts.selectedFamily !== ""
                 Menu {
                     id: famLinkSub
                     cascade: true
                     width: 230
                     padding: 4
                     background: Rectangle {
-                        radius: 8; color: theme.tokens.surface
+                        radius: 8
+                        color: theme.tokens.surface
                         border.color: theme.tokens.border
                     }
                     Repeater {
-                        model: taxonomy !== null
-                               ? taxonomy.link_targets() : []
+                        model: taxonomy !== null ? taxonomy.link_targets() : []
                         FgMenuItem {
                             id: famLinkTarget
                             required property var modelData
                             height: 28
                             onTriggered: {
-                                if (fonts === null
-                                        || fonts.selectedFamily === "")
-                                    return
-                                taxonomy.add_link(
-                                    "font",
-                                    fonts.family_primary_id(
-                                        fonts.selectedFamily),
-                                    famLinkTarget.modelData.kind,
-                                    famLinkTarget.modelData.id, "")
+                                if (fonts === null || fonts.selectedFamily === "")
+                                    return;
+                                taxonomy.add_link("font", fonts.family_primary_id(fonts.selectedFamily), famLinkTarget.modelData.kind, famLinkTarget.modelData.id, "");
                             }
                             contentItem: Text {
                                 text: famLinkTarget.modelData.label
@@ -485,9 +436,7 @@ Item {
                                 leftPadding: 10
                             }
                             background: Rectangle {
-                                color: famLinkTarget.hovered
-                                       ? theme.tokens.surface2
-                                       : "transparent"
+                                color: famLinkTarget.hovered ? theme.tokens.surface2 : "transparent"
                                 radius: 5
                             }
                         }
@@ -512,12 +461,7 @@ Item {
             spacing: 14
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: fonts !== null && fonts.scanning
-                      ? qsTr("Indexing your font folders…")
-                      : (fonts !== null && fonts.totalFonts === 0
-                         ? qsTr("No fonts indexed yet — run a scan to "
-                                + "populate the Types and Families lists")
-                         : qsTr("No families match the filter"))
+                text: fonts !== null && fonts.scanning ? qsTr("Indexing your font folders…") : (fonts !== null && fonts.totalFonts === 0 ? qsTr("No fonts indexed yet — run a scan to " + "populate the Types and Families lists") : qsTr("No families match the filter"))
                 color: theme.tokens.text
                 font.family: theme.uiFont
                 font.pixelSize: 14
@@ -526,13 +470,11 @@ Item {
                 id: fontCta
                 anchors.horizontalCenter: parent.horizontalCenter
                 enabled: fonts === null ? false : !fonts.scanning
-                text: fonts !== null && fonts.scanning ? qsTr("Scanning…")
-                      : qsTr("Scan now")
+                text: fonts !== null && fonts.scanning ? qsTr("Scanning…") : qsTr("Scan now")
                 onClicked: fonts.rescan()
                 background: Rectangle {
                     radius: 6
-                    color: fontCta.enabled ? theme.tokens.accent
-                                           : theme.tokens.border
+                    color: fontCta.enabled ? theme.tokens.accent : theme.tokens.border
                 }
                 contentItem: Text {
                     text: fontCta.text
@@ -546,9 +488,15 @@ Item {
     }
 
     // export dialogs (unified interface) + result feedback
-    function openExportCss() { cssDialog.openWith(fonts.selectedFamily) }
-    FontsCssDialog { id: cssDialog }
-    Toast { id: exportToast }
+    function openExportCss() {
+        cssDialog.openWith(fonts.selectedFamily);
+    }
+    FontsCssDialog {
+        id: cssDialog
+    }
+    Toast {
+        id: exportToast
+    }
 
     // #119: pane-wide grid preview text editor
     Popup {
@@ -585,12 +533,12 @@ Item {
                 height: 30
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: gridSampleInput.activeFocus
-                              ? theme.tokens.accent : theme.tokens.border
+                border.color: gridSampleInput.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: gridSampleInput
                     anchors.fill: parent
-                    anchors.leftMargin: 9; anchors.rightMargin: 9
+                    anchors.leftMargin: 9
+                    anchors.rightMargin: 9
                     verticalAlignment: TextInput.AlignVCenter
                     font.family: theme.uiFont
                     font.pixelSize: 12
@@ -599,8 +547,8 @@ Item {
                     selectByMouse: true
                     text: fonts !== null ? fonts.gridSample : ""
                     onAccepted: {
-                        fonts !== null && fonts.set_grid_sample(text)
-                        gridSamplePopup.close()
+                        fonts !== null && fonts.set_grid_sample(text);
+                        gridSamplePopup.close();
                     }
                 }
             }
@@ -609,21 +557,22 @@ Item {
                 Button {
                     text: qsTr("Apply")
                     onClicked: {
-                        fonts !== null && fonts.set_grid_sample(
-                            gridSampleInput.text)
-                        gridSamplePopup.close()
+                        fonts !== null && fonts.set_grid_sample(gridSampleInput.text);
+                        gridSamplePopup.close();
                     }
                 }
                 Button {
                     text: qsTr("Reset to curated")
                     enabled: fonts !== null && fonts.gridSample !== ""
                     onClicked: {
-                        fonts !== null && fonts.clear_grid_sample()
-                        gridSampleInput.text = ""
-                        gridSamplePopup.close()
+                        fonts !== null && fonts.clear_grid_sample();
+                        gridSampleInput.text = "";
+                        gridSamplePopup.close();
                     }
                 }
-                Item { Layout.fillWidth: true }
+                Item {
+                    Layout.fillWidth: true
+                }
                 Button {
                     text: qsTr("Cancel")
                     onClicked: gridSamplePopup.close()
@@ -634,10 +583,10 @@ Item {
     Connections {
         target: fonts
         function onExportDone(path) {
-            exportToast.show(qsTr("Exported: %1").arg(path))
+            exportToast.show(qsTr("Exported: %1").arg(path));
         }
         function onExportFailed(err) {
-            exportToast.show(qsTr("Export failed: %1").arg(err))
+            exportToast.show(qsTr("Export failed: %1").arg(err));
         }
     }
 }

@@ -12,8 +12,7 @@ Item {
 
     // false = harmony generator (the 0.x port), true = terminal designer;
     // --term (QA) opens straight into the designer
-    property bool termMode: typeof initialTerm !== "undefined"
-                            ? initialTerm : false
+    property bool termMode: typeof initialTerm !== "undefined" ? initialTerm : false
 
     // `colors !== null` guards: context properties are nulled during app
     // teardown while lingering bindings re-evaluate (same as SideRail)
@@ -45,14 +44,12 @@ Item {
                         onClicked: colorsRoot.termMode = index === 1
                         background: Rectangle {
                             radius: 5
-                            color: (colorsRoot.termMode === modeBtn.index)
-                                   ? theme.tokens.accentColor : "transparent"
+                            color: (colorsRoot.termMode === modeBtn.index) ? theme.tokens.accentColor : "transparent"
                             border.color: theme.tokens.border
                         }
                         contentItem: Text {
                             text: modeBtn.modelData
-                            color: (colorsRoot.termMode === modeBtn.index)
-                                   ? "#101418" : theme.tokens.textMuted
+                            color: (colorsRoot.termMode === modeBtn.index) ? "#101418" : theme.tokens.textMuted
                             font.family: theme.monoFont
                             font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
@@ -60,7 +57,11 @@ Item {
                     }
                 }
             }
-            Rectangle { width: 1; height: 18; color: theme.tokens.border }
+            Rectangle {
+                width: 1
+                height: 18
+                color: theme.tokens.border
+            }
 
             // ── HARMONY MODE: rule picker + generator + palette naming ──
             // (hidden in Terminal mode — the top bar switches contexts and
@@ -70,20 +71,15 @@ Item {
                 visible: !colorsRoot.termMode
                 Layout.preferredWidth: 160
                 Layout.preferredHeight: 28
-                model: [qsTr("Pleasing mix"), qsTr("Analogous"),
-                        qsTr("Complementary"), qsTr("Triadic"),
-                        qsTr("Monochrome"), qsTr("Random")]
+                model: [qsTr("Pleasing mix"), qsTr("Analogous"), qsTr("Complementary"), qsTr("Triadic"), qsTr("Monochrome"), qsTr("Random")]
                 currentIndex: {
-                    var rules = ["pleasing", "analogous", "complementary",
-                                 "triadic", "monochrome", "random"]
-                    return colors !== null
-                           ? Math.max(0, rules.indexOf(colors.rule)) : 0
+                    var rules = ["pleasing", "analogous", "complementary", "triadic", "monochrome", "random"];
+                    return colors !== null ? Math.max(0, rules.indexOf(colors.rule)) : 0;
                 }
                 onActivated: function (idx) {
-                    var rules = ["pleasing", "analogous", "complementary",
-                                 "triadic", "monochrome", "random"]
+                    var rules = ["pleasing", "analogous", "complementary", "triadic", "monochrome", "random"];
                     if (colors !== null)
-                        colors.set_rule(rules[idx])
+                        colors.set_rule(rules[idx]);
                 }
                 background: Rectangle {
                     radius: 6
@@ -119,7 +115,8 @@ Item {
                     font.pixelSize: 12
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    leftPadding: 12; rightPadding: 12
+                    leftPadding: 12
+                    rightPadding: 12
                 }
             }
 
@@ -130,8 +127,7 @@ Item {
                 Layout.preferredHeight: 28
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: nameField.activeFocus ? theme.tokens.accent
-                                                    : theme.tokens.border
+                border.color: nameField.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: nameField
                     anchors.fill: parent
@@ -163,8 +159,7 @@ Item {
                 Layout.preferredHeight: 28
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: tagsField.activeFocus ? theme.tokens.accent
-                                                    : theme.tokens.border
+                border.color: tagsField.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: tagsField
                     anchors.fill: parent
@@ -196,8 +191,7 @@ Item {
                 Layout.preferredHeight: 28
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: termNameField.activeFocus
-                              ? theme.tokens.accent : theme.tokens.border
+                border.color: termNameField.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: termNameField
                     anchors.fill: parent
@@ -208,8 +202,7 @@ Item {
                     font.pixelSize: 11
                     color: theme.tokens.text
                     clip: true
-                    text: terms !== null && terms.theme
-                          ? (terms.theme.name || "") : ""
+                    text: terms !== null && terms.theme ? (terms.theme.name || "") : ""
                     onEditingFinished: terms !== null && terms.set_name(text)
                 }
                 Text {
@@ -223,37 +216,34 @@ Item {
                     color: theme.tokens.textMuted
                 }
             }
-            component GenButton: AbstractButton {
-                id: genB
-                property string label
-                implicitHeight: 26
-                contentItem: Text {
-                    text: genB.label
-                    color: genB.hovered ? theme.tokens.text : theme.tokens.textMuted
-                    font.family: theme.uiFont
-                    font.pixelSize: 11
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    leftPadding: 8; rightPadding: 8
-                }
-                background: Rectangle {
-                    radius: 6
-                    color: genB.pressed ? theme.tokens.surface2
-                                        : (genB.hovered ? theme.tokens.surface2
-                                                        : "transparent")
-                    border.color: genB.hovered ? theme.tokens.accentColor
-                                               : theme.tokens.border
-                }
-            }
             // ── ONE save/export drop-down for both interfaces ──
             // (per user request: every individual save/export button is
             // folded into this single menu; the items follow the mode)
             GenButton {
                 id: saveExportBtn
                 label: qsTr("Save / Export ▾")
-                onClicked: saveExportMenu.popup(saveExportBtn, 0,
-                                                saveExportBtn.height + 2)
+                onClicked: saveExportMenu.popup(saveExportBtn, 0, saveExportBtn.height + 2)
             }
+        }
+    }
+    component GenButton: AbstractButton {
+        id: genB
+        property string label
+        implicitHeight: 26
+        contentItem: Text {
+            text: genB.label
+            color: genB.hovered ? theme.tokens.text : theme.tokens.textMuted
+            font.family: theme.uiFont
+            font.pixelSize: 11
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            leftPadding: 8
+            rightPadding: 8
+        }
+        background: Rectangle {
+            radius: 6
+            color: genB.pressed ? theme.tokens.surface2 : (genB.hovered ? theme.tokens.surface2 : "transparent")
+            border.color: genB.hovered ? theme.tokens.accentColor : theme.tokens.border
         }
     }
 
@@ -265,7 +255,8 @@ Item {
         width: 220
         padding: 4
         background: Rectangle {
-            radius: 8; color: theme.tokens.surface
+            radius: 8
+            color: theme.tokens.surface
             border.color: theme.tokens.border
         }
         // ── harmony generator mode ──
@@ -277,29 +268,57 @@ Item {
         }
         FgMenuSeparator {
             visible: !colorsRoot.termMode
-            topPadding: 3; bottomPadding: 3
-            contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
+            topPadding: 3
+            bottomPadding: 3
+            contentItem: Rectangle {
+                implicitHeight: 1
+                color: theme.tokens.border
+            }
         }
         Repeater {
-            model: !colorsRoot.termMode
-                   ? [{ label: qsTr("Export CSS…"), kind: "css" },
-                      { label: qsTr("Export JSON…"), kind: "json" },
-                      { label: qsTr("Export SVG board…"), kind: "svg" },
-                      { label: qsTr("Export PNG board…"), kind: "png" }]
-                   : []
+            model: !colorsRoot.termMode ? [
+                {
+                    label: qsTr("Export CSS…"),
+                    kind: "css"
+                },
+                {
+                    label: qsTr("Export JSON…"),
+                    kind: "json"
+                },
+                {
+                    label: qsTr("Export SVG board…"),
+                    kind: "svg"
+                },
+                {
+                    label: qsTr("Export PNG board…"),
+                    kind: "png"
+                }
+            ] : []
             FgMenuItem {
                 required property var modelData
                 text: modelData.label
                 height: 28
                 onTriggered: {
-                    colorExport.openWith(
-                        [{ id: "css", label: "CSS" },
-                         { id: "json", label: "JSON" },
-                         { id: "svg", label: "SVG board" },
-                         { id: "png", label: "PNG board" }],
-                        colorsRoot.exportDest)
+                    colorExport.openWith([
+                        {
+                            id: "css",
+                            label: "CSS"
+                        },
+                        {
+                            id: "json",
+                            label: "JSON"
+                        },
+                        {
+                            id: "svg",
+                            label: "SVG board"
+                        },
+                        {
+                            id: "png",
+                            label: "PNG board"
+                        }
+                    ], colorsRoot.exportDest);
                     // preselect the kind that opened the dialog
-                    colorExport.selectedFormats = [modelData.kind]
+                    colorExport.selectedFormats = [modelData.kind];
                 }
             }
         }
@@ -311,19 +330,16 @@ Item {
             onTriggered: terms !== null && terms.save_as_snippet()
         }
         Repeater {
-            model: colorsRoot.termMode
-                   && terms !== null ? terms.formats() : []
+            model: colorsRoot.termMode && terms !== null ? terms.formats() : []
             FgMenuItem {
                 required property var modelData
-                text: qsTr("Export %1…").arg(
-                          String(modelData.label || modelData))
+                text: qsTr("Export %1…").arg(String(modelData.label || modelData))
                 height: 28
                 onTriggered: {
                     if (terms === null)
-                        return
-                    colorsRoot.termExportKind = String(modelData.key
-                                                       || modelData)
-                    termExportDialog.open()
+                        return;
+                    colorsRoot.termExportKind = String(modelData.key || modelData);
+                    termExportDialog.open();
                 }
             }
         }
@@ -331,8 +347,7 @@ Item {
     property string termExportKind: "json"
     FolderDialog {
         id: termExportDialog
-        onAccepted: terms !== null && terms.export(
-            Icons.toLocalPath(selectedFolder), colorsRoot.termExportKind)
+        onAccepted: terms !== null && terms.export(Icons.toLocalPath(selectedFolder), colorsRoot.termExportKind)
     }
 
     // editor sync: dragged sliders lose their `val` bindings, so values are
@@ -341,30 +356,32 @@ Item {
     // (the 0.x editor kept the field intact while typing, colors.html:429-431)
     function syncSliders() {
         if (colors === null || colors.selectedIdx < 0)
-            return
-        var s = colors.swatches[colors.selectedIdx]
-        hSlider.val = s.h
-        sSlider.val = s.s
-        lSlider.val = s.l
+            return;
+        var s = colors.swatches[colors.selectedIdx];
+        hSlider.val = s.h;
+        sSlider.val = s.s;
+        lSlider.val = s.l;
     }
     function syncEditor() {
-        syncSliders()
+        syncSliders();
         if (colors !== null && colors.selectedIdx >= 0)
-            hexField.text = colors.swatches[colors.selectedIdx].hex
+            hexField.text = colors.swatches[colors.selectedIdx].hex;
     }
     function applyHsl() {
         if (colors === null || colors.selectedIdx < 0)
-            return
-        colors.set_hsl(colors.selectedIdx, hSlider.val, sSlider.val,
-                       lSlider.val)
+            return;
+        colors.set_hsl(colors.selectedIdx, hSlider.val, sSlider.val, lSlider.val);
     }
     Connections {
         target: colors
-        function onSelectionChanged() { syncEditor() }
+        function onSelectionChanged() {
+            syncEditor();
+        }
         function onSwatchesChanged() {
             if (hSlider.pressed || sSlider.pressed || lSlider.pressed)
-                return  // mid-drag: keep the user's values
-            syncSliders()
+                // mid-drag: keep the user's values
+                return;
+            syncSliders();
         }
     }
 
@@ -374,11 +391,11 @@ Item {
         id: colorExport
         headline: qsTr("Export palette")
         onDoExport: function (formats, dest) {
-            colorsRoot.exportDest = dest
+            colorsRoot.exportDest = dest;
             if (colors === null)
-                return
+                return;
             for (var i = 0; i < formats.length; i++)
-                colors.export(formats[i], dest)
+                colors.export(formats[i], dest);
         }
     }
 
@@ -426,11 +443,7 @@ Item {
                         required property int index
                         // chip run sized to the ACTUAL color count — 5 is
                         // the default but schemes may hold up to 7
-                        width: palCard.modelData.colors.length > 0
-                               ? (strip.width
-                                  - (palCard.modelData.colors.length - 1) * 2)
-                                 / palCard.modelData.colors.length
-                               : strip.width
+                        width: palCard.modelData.colors.length > 0 ? (strip.width - (palCard.modelData.colors.length - 1) * 2) / palCard.modelData.colors.length : strip.width
                         height: parent.height
                         radius: 3
                         color: palCard.modelData.colors[index]
@@ -454,8 +467,7 @@ Item {
                 anchors.bottomMargin: 6
                 anchors.left: parent.left
                 anchors.leftMargin: 8
-                text: modelData.colors.length + qsTr(" colors · ") +
-                      (modelData.tags || "")
+                text: modelData.colors.length + qsTr(" colors · ") + (modelData.tags || "")
                 font.family: theme.monoFont
                 font.pixelSize: 9
                 color: theme.tokens.textMuted
@@ -475,8 +487,7 @@ Item {
                 implicitWidth: 22
                 implicitHeight: 22
                 ToolTip.text: qsTr("Delete palette")
-                onClicked: colors !== null
-                           && colors.delete_palette(modelData.id)
+                onClicked: colors !== null && colors.delete_palette(modelData.id)
             }
             MouseArea {
                 anchors.fill: parent
@@ -488,7 +499,7 @@ Item {
                     // opens the menu for the CURRENTLY OPEN palette —
                     // the generator and inspector stay untouched
                     if (mouse.button !== Qt.LeftButton)
-                        palMenu.popup()
+                        palMenu.popup();
                 }
                 z: -1
             }
@@ -523,73 +534,31 @@ Item {
             IconButton {
                 icon_name: "chevron-left"
                 ToolTip.text: qsTr("Move left")
-                onClicked: colors !== null && colors.move_swatch(
-                    colors.selectedIdx, colors.selectedIdx - 1)
+                onClicked: colors !== null && colors.move_swatch(colors.selectedIdx, colors.selectedIdx - 1)
             }
             IconButton {
                 icon_name: "chevron-right"
                 ToolTip.text: qsTr("Move right")
-                onClicked: colors !== null && colors.move_swatch(
-                    colors.selectedIdx, colors.selectedIdx + 1)
-            }
-
-            component EditSlider: RowLayout {
-                property string label
-                property string tip: ""
-                property real val
-                property real maxVal
-                signal edited(real v)
-                Text {
-                    text: parent.label
-                    font.family: theme.monoFont
-                    font.pixelSize: 10
-                    color: theme.tokens.textMuted
-                    MouseArea {
-                        id: hslTipArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                    }
-                    ToolTip.visible: parent.tip !== "" && hslTipArea.containsMouse
-                    ToolTip.delay: 350
-                    ToolTip.text: parent.tip
-                }
-                FgSlider {
-                    id: es
-                    Layout.preferredWidth: 140
-                    from: 0; to: parent.maxVal
-                    value: parent.val
-                    // dragging breaks the value: parent.val binding (Qt
-                    // slider gotcha) — without this imperative assign,
-                    // applyHsl kept reading the STALE pre-drag val and the
-                    // swatch never changed: "the HSL sliders don't work"
-                    onMoved: {
-                        parent.val = value
-                        parent.edited(value)
-                    }
-                }
-                Text {
-                    text: Math.round(parent.val)
-                    font.family: theme.monoFont
-                    font.pixelSize: 10
-                    color: theme.tokens.text
-                    Layout.preferredWidth: 26
-                }
+                onClicked: colors !== null && colors.move_swatch(colors.selectedIdx, colors.selectedIdx + 1)
             }
             EditSlider {
                 id: hSlider
-                label: "H"; maxVal: 360
+                label: "H"
+                maxVal: 360
                 tip: qsTr("Hue — 0–360° around the color wheel")
                 onEdited: val => applyHsl()
             }
             EditSlider {
                 id: sSlider
-                label: "S"; maxVal: 100
+                label: "S"
+                maxVal: 100
                 tip: qsTr("Saturation — 0 = gray, 100 = fully saturated")
                 onEdited: val => applyHsl()
             }
             EditSlider {
                 id: lSlider
-                label: "L"; maxVal: 100
+                label: "L"
+                maxVal: 100
                 tip: qsTr("Lightness — 0 = black, 100 = white")
                 onEdited: val => applyHsl()
             }
@@ -599,8 +568,7 @@ Item {
                 Layout.preferredHeight: 28
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: hexField.activeFocus ? theme.tokens.accent
-                                                   : theme.tokens.border
+                border.color: hexField.activeFocus ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: hexField
                     anchors.fill: parent
@@ -611,16 +579,61 @@ Item {
                     font.pixelSize: 11
                     color: theme.tokens.text
                     clip: true
-                    onAccepted: colors !== null && colors.selectedIdx >= 0
-                                && colors.set_hex(colors.selectedIdx, text)
+                    onAccepted: colors !== null && colors.selectedIdx >= 0 && colors.set_hex(colors.selectedIdx, text)
                 }
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
             IconButton {
                 icon_name: "x"
                 ToolTip.text: qsTr("Close editor")
                 onClicked: colors !== null && colors.select(colors.selectedIdx)
             }
+        }
+    }
+
+    component EditSlider: RowLayout {
+        property string label
+        property string tip: ""
+        property real val
+        property real maxVal
+        signal edited(real v)
+        Text {
+            text: parent.label
+            font.family: theme.monoFont
+            font.pixelSize: 10
+            color: theme.tokens.textMuted
+            MouseArea {
+                id: hslTipArea
+                anchors.fill: parent
+                hoverEnabled: true
+            }
+            ToolTip.visible: parent.tip !== "" && hslTipArea.containsMouse
+            ToolTip.delay: 350
+            ToolTip.text: parent.tip
+        }
+        FgSlider {
+            id: es
+            Layout.preferredWidth: 140
+            from: 0
+            to: parent.maxVal
+            value: parent.val
+            // dragging breaks the value: parent.val binding (Qt
+            // slider gotcha) — without this imperative assign,
+            // applyHsl kept reading the STALE pre-drag val and the
+            // swatch never changed: "the HSL sliders don't work"
+            onMoved: {
+                parent.val = value;
+                parent.edited(value);
+            }
+        }
+        Text {
+            text: Math.round(parent.val)
+            font.family: theme.monoFont
+            font.pixelSize: 10
+            color: theme.tokens.text
+            Layout.preferredWidth: 26
         }
     }
 
@@ -651,14 +664,14 @@ Item {
                 // and snaps to the slot under the drop point on release.
                 transform: Translate {
                     x: swMa.dragging ? swMa.dragDX : 0
-                    Behavior on x { NumberAnimation { duration: 40 } }
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: 40
+                        }
+                    }
                 }
                 z: swMa.dragging ? 3 : 0
-                border.color: swMa.dragging
-                              ? theme.tokens.accent
-                              : (colors !== null && colors.selectedIdx
-                                 === swCard.index
-                                 ? theme.tokens.litPane : "transparent")
+                border.color: swMa.dragging ? theme.tokens.accent : (colors !== null && colors.selectedIdx === swCard.index ? theme.tokens.litPane : "transparent")
                 border.width: 2
 
                 Column {
@@ -682,9 +695,7 @@ Item {
                         opacity: 0.75
                     }
                     Text {
-                        text: "C/W " + modelData.cw.toFixed(1) + " "
-                              + modelData.wcagW + " · C/B "
-                              + modelData.cb.toFixed(1) + " " + modelData.wcagB
+                        text: "C/W " + modelData.cw.toFixed(1) + " " + modelData.wcagW + " · C/B " + modelData.cb.toFixed(1) + " " + modelData.wcagB
                         font.family: theme.monoFont
                         font.pixelSize: 9
                         color: modelData.ink
@@ -709,32 +720,6 @@ Item {
                     // hover or prior swatch selection (hover-only reveal
                     // proved fragile in QT6 and hid the affordance).
                     z: 2
-
-                    component SwTool: AbstractButton {
-                        id: st
-                        property string icon_name
-                        property color tint: "#FFFFFF"
-                        width: 20; height: 20
-                        contentItem: IconImage {
-                            name: st.icon_name
-                            // #97: glyph stays at its native 16px render
-                            // (no scaling either way); the chip shrinks
-                            // to 20px — 2px breathing room per side.
-                            // Stroke uses the app-wide hairline cadence
-                            // (no opt-in) to match every other
-                            // interface glyph.
-                            px: 16
-                            tint: st.tint
-                            anchors.centerIn: parent
-                        }
-                        background: Rectangle {
-                            radius: 6
-                            // theme-token scrims (hardcoded overlays broke
-                            // light-theme parity)
-                            color: st.hovered ? theme.tokens.scrim
-                                              : theme.tokens.scrimSoft
-                        }
-                    }
                     SwTool {
                         icon_name: swCard.modelData.locked ? "lock" : "unlock"
                         // locked state is tinted amber so it reads even at
@@ -743,16 +728,11 @@ Item {
                         // falls back to the swatch's best ink. The other
                         // tool glyphs use best ink too (hardcoded white was
                         // invisible on pale swatches)
-                        tint: swCard.modelData.locked
-                              ? swCard.modelData.lock_ink
-                              : swCard.modelData.ink
+                        tint: swCard.modelData.locked ? swCard.modelData.lock_ink : swCard.modelData.ink
                         ToolTip.visible: hovered
                         ToolTip.delay: 350
-                        ToolTip.text: swCard.modelData.locked
-                              ? qsTr("Locked — this color stays fixed when Generate runs (click to unlock)")
-                              : qsTr("Lock this color so it stays fixed when Generate runs")
-                        onClicked: colors !== null && colors.toggle_lock(
-                            swCard.index)
+                        ToolTip.text: swCard.modelData.locked ? qsTr("Locked — this color stays fixed when Generate runs (click to unlock)") : qsTr("Lock this color so it stays fixed when Generate runs")
+                        onClicked: colors !== null && colors.toggle_lock(swCard.index)
                     }
                     SwTool {
                         icon_name: "x"
@@ -760,8 +740,7 @@ Item {
                         ToolTip.visible: hovered
                         ToolTip.delay: 350
                         ToolTip.text: qsTr("Remove this swatch from the palette")
-                        onClicked: colors !== null && colors.remove_swatch(
-                            swCard.index)
+                        onClicked: colors !== null && colors.remove_swatch(swCard.index)
                     }
                 }
 
@@ -771,38 +750,36 @@ Item {
                     hoverEnabled: true
                     // standard drag indicators: open hand = grabbable,
                     // closed hand = dragging
-                    cursorShape: swMa.dragging ? Qt.ClosedHandCursor
-                                               : Qt.OpenHandCursor
+                    cursorShape: swMa.dragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                     property bool dragging: false
                     property real pressX: 0
                     property real dragDX: 0
                     onPressed: function (mouse) {
-                        pressX = mouse.x
-                        dragDX = 0
-                        dragging = false
+                        pressX = mouse.x;
+                        dragDX = 0;
+                        dragging = false;
                     }
                     onPositionChanged: function (mouse) {
                         if (!pressed)
-                            return
-                        dragDX = mouse.x - pressX
+                            return;
+                        dragDX = mouse.x - pressX;
                         if (!dragging && Math.abs(dragDX) > 8)
-                            dragging = true
+                            dragging = true;
                     }
                     onReleased: {
                         // one reorder per gesture, on release — calling
                         // move_swatch mid-drag would recreate the delegates
                         // and drop the mouse grab
                         if (dragging && colors !== null) {
-                            var n = colors.swatches.length
-                            var slot = (paletteRow.width - 8 * (n - 1)) / n
-                            var target = swCard.index
-                                         + Math.round(dragDX / (slot + 8))
-                            target = Math.max(0, Math.min(n - 1, target))
+                            var n = colors.swatches.length;
+                            var slot = (paletteRow.width - 8 * (n - 1)) / n;
+                            var target = swCard.index + Math.round(dragDX / (slot + 8));
+                            target = Math.max(0, Math.min(n - 1, target));
                             if (target !== swCard.index)
-                                colors.move_swatch(swCard.index, target)
+                                colors.move_swatch(swCard.index, target);
                         }
-                        dragging = false
-                        dragDX = 0
+                        dragging = false;
+                        dragDX = 0;
                     }
                     onClicked: colors !== null && colors.select(swCard.index)
                 }
@@ -817,10 +794,8 @@ Item {
             Layout.preferredWidth: 44
             Layout.fillHeight: true
             radius: 10
-            color: addSwatchMa.containsMouse ? theme.tokens.surface2
-                                             : theme.tokens.surface
-            border.color: addSwatchMa.containsMouse
-                          ? theme.tokens.accentColor : theme.tokens.border
+            color: addSwatchMa.containsMouse ? theme.tokens.surface2 : theme.tokens.surface
+            border.color: addSwatchMa.containsMouse ? theme.tokens.accentColor : theme.tokens.border
             border.width: 1
             IconImage {
                 name: "plus"
@@ -832,8 +807,7 @@ Item {
                 anchors.top: parent.verticalCenter
                 anchors.topMargin: 8
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: (colors !== null ? colors.swatches.length : 0)
-                      + "/7"
+                text: (colors !== null ? colors.swatches.length : 0) + "/7"
                 font.family: theme.monoFont
                 font.pixelSize: 9
                 color: theme.tokens.textMuted
@@ -848,12 +822,36 @@ Item {
         }
     }
 
+    component SwTool: AbstractButton {
+        id: st
+        property string icon_name
+        property color tint: "#FFFFFF"
+        width: 20
+        height: 20
+        contentItem: IconImage {
+            name: st.icon_name
+            // #97: glyph stays at its native 16px render
+            // (no scaling either way); the chip shrinks
+            // to 20px — 2px breathing room per side.
+            // Stroke uses the app-wide hairline cadence
+            // (no opt-in) to match every other
+            // interface glyph.
+            px: 16
+            tint: st.tint
+            anchors.centerIn: parent
+        }
+        background: Rectangle {
+            radius: 6
+            // theme-token scrims (hardcoded overlays broke
+            // light-theme parity)
+            color: st.hovered ? theme.tokens.scrim : theme.tokens.scrimSoft
+        }
+    }
+
     // space = reroll (only when this pane is visible and no field is in edit)
     Shortcut {
         sequence: "Space"
-        enabled: colorsRoot.visible && !nameField.activeFocus
-                 && !tagsField.activeFocus && !hexField.activeFocus
-                 && !Shell.overlayOpen
+        enabled: colorsRoot.visible && !nameField.activeFocus && !tagsField.activeFocus && !hexField.activeFocus && !Shell.overlayOpen
         onActivated: colors !== null && colors.generate()
     }
 
@@ -864,7 +862,8 @@ Item {
         width: 190
         padding: 4
         background: Rectangle {
-            radius: 8; color: theme.tokens.surface
+            radius: 8
+            color: theme.tokens.surface
             border.color: theme.tokens.border
         }
         FgMenuItem {
@@ -874,36 +873,45 @@ Item {
             height: 28
             enabled: colors !== null && colors.paletteId > 0
             onTriggered: {
-                colorExport.openWith(
-                    [{ id: "css", label: "CSS" },
-                     { id: "json", label: "JSON" },
-                     { id: "svg", label: "SVG board" },
-                     { id: "png", label: "PNG board" }],
-                    colorsRoot.exportDest)
-                colorExport.selectedFormats = ["css"]
+                colorExport.openWith([
+                    {
+                        id: "css",
+                        label: "CSS"
+                    },
+                    {
+                        id: "json",
+                        label: "JSON"
+                    },
+                    {
+                        id: "svg",
+                        label: "SVG board"
+                    },
+                    {
+                        id: "png",
+                        label: "PNG board"
+                    }
+                ], colorsRoot.exportDest);
+                colorExport.selectedFormats = ["css"];
             }
         }
         FgMenuItem {
             text: qsTr("Star / Unstar")
             height: 28
-            enabled: colors !== null && colors.paletteId > 0
-                     && library !== null
-            onTriggered: library.star_item(
-                "palette", colors.paletteId,
-                !library.is_item_starred("palette", colors.paletteId))
+            enabled: colors !== null && colors.paletteId > 0 && library !== null
+            onTriggered: library.star_item("palette", colors.paletteId, !library.is_item_starred("palette", colors.paletteId))
         }
         FgMenuItem {
             text: qsTr("Add to collection…")
             height: 28
-            enabled: colors !== null && colors.paletteId > 0
-                     && library !== null && library.collections.length > 0
+            enabled: colors !== null && colors.paletteId > 0 && library !== null && library.collections.length > 0
             Menu {
                 id: palCollSub
-                    cascade: true
+                cascade: true
                 width: 220
                 padding: 4
                 background: Rectangle {
-                    radius: 8; color: theme.tokens.surface
+                    radius: 8
+                    color: theme.tokens.surface
                     border.color: theme.tokens.border
                 }
                 Repeater {
@@ -912,22 +920,18 @@ Item {
                         id: palCollTarget
                         required property var modelData
                         height: 28
-                        onTriggered: library !== null && colors !== null
-                                     && library.add_item_to_collection(
-                                         modelData.id, "palette",
-                                         colors.paletteId,
-                                         colors.paletteName)
+                        onTriggered: library !== null && colors !== null && library.add_item_to_collection(modelData.id, "palette", colors.paletteId, colors.paletteName)
                         contentItem: Text {
                             text: palCollTarget.modelData.name
-                            font.family: theme.uiFont; font.pixelSize: 11
+                            font.family: theme.uiFont
+                            font.pixelSize: 11
                             color: theme.tokens.text
                             elide: Text.ElideRight
                             verticalAlignment: Text.AlignVCenter
                             leftPadding: 10
                         }
                         background: Rectangle {
-                            color: palCollTarget.hovered
-                                   ? theme.tokens.surface2 : "transparent"
+                            color: palCollTarget.hovered ? theme.tokens.surface2 : "transparent"
                             radius: 5
                         }
                     }
@@ -935,8 +939,12 @@ Item {
             }
         }
         FgMenuSeparator {
-            topPadding: 3; bottomPadding: 3
-            contentItem: Rectangle { implicitHeight: 1; color: theme.tokens.border }
+            topPadding: 3
+            bottomPadding: 3
+            contentItem: Rectangle {
+                implicitHeight: 1
+                color: theme.tokens.border
+            }
         }
         FgMenuItem {
             text: qsTr("Delete palette")

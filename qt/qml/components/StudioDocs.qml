@@ -14,13 +14,12 @@ Item {
         color: theme.tokens.accent
     }
 
-
     property var st: null
     property var u: ({})
 
     function refresh() {
         if (st)
-            u = st.usage
+            u = st.usage;
     }
 
     ColumnLayout {
@@ -28,34 +27,39 @@ Item {
         anchors.margins: 8
         spacing: 10
 
-        SectionLabel { text: qsTr("Project report") }
+        SectionLabel {
+            text: qsTr("Project report")
+        }
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: docsRoot.u.pages !== undefined
-                      ? qsTr("%1 pages · %2 blocks").arg(docsRoot.u.pages)
-                        .arg(docsRoot.u.blocks)
-                      : qsTr("No Project Open")
-                font.family: theme.monoFont; font.pixelSize: 11
+                text: docsRoot.u.pages !== undefined ? qsTr("%1 pages · %2 blocks").arg(docsRoot.u.pages).arg(docsRoot.u.blocks) : qsTr("No Project Open")
+                font.family: theme.monoFont
+                font.pixelSize: 11
                 color: theme.tokens.text
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
             FgButton {
                 text: qsTr("Refresh")
                 onClicked: docsRoot.refresh()
             }
         }
 
-        SectionLabel { text: qsTr("Attached assets") }
+        SectionLabel {
+            text: qsTr("Attached assets")
+        }
         Flow {
             Layout.fillWidth: true
             spacing: 6
             Repeater {
                 model: {
-                    var a = docsRoot.u.attached_assets || {}
-                    var out = []
-                    for (var k in a) out.push(k + " (" + a[k] + ")")
-                    return out
+                    var a = docsRoot.u.attached_assets || {};
+                    var out = [];
+                    for (var k in a)
+                        out.push(k + " (" + a[k] + ")");
+                    return out;
                 }
                 Rectangle {
                     radius: 9
@@ -67,23 +71,27 @@ Item {
                         id: chip
                         anchors.centerIn: parent
                         text: modelData
-                        font.family: theme.monoFont; font.pixelSize: 10
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
                         color: theme.tokens.text
                     }
                 }
             }
         }
 
-        SectionLabel { text: qsTr("Block types used") }
+        SectionLabel {
+            text: qsTr("Block types used")
+        }
         Flow {
             Layout.fillWidth: true
             spacing: 6
             Repeater {
                 model: {
-                    var t = docsRoot.u.block_types || {}
-                    var out = []
-                    for (var k in t) out.push(k + " ×" + t[k])
-                    return out
+                    var t = docsRoot.u.block_types || {};
+                    var out = [];
+                    for (var k in t)
+                        out.push(k + " ×" + t[k]);
+                    return out;
                 }
                 Rectangle {
                     radius: 9
@@ -95,50 +103,63 @@ Item {
                         id: chip2
                         anchors.centerIn: parent
                         text: modelData
-                        font.family: theme.monoFont; font.pixelSize: 10
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
                         color: theme.tokens.text
                     }
                 }
             }
         }
 
-        SectionLabel { text: qsTr("Link health") }
+        SectionLabel {
+            text: qsTr("Link health")
+        }
         Text {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            font.family: theme.uiFont; font.pixelSize: 10
-            color: (docsRoot.u.unresolved_refs || []).length > 0
-                   ? theme.tokens.litPane : theme.tokens.success
+            font.family: theme.uiFont
+            font.pixelSize: 10
+            color: (docsRoot.u.unresolved_refs || []).length > 0 ? theme.tokens.litPane : theme.tokens.success
             text: {
-                var bad = docsRoot.u.unresolved_refs || []
+                var bad = docsRoot.u.unresolved_refs || [];
                 if (bad.length === 0)
-                    return qsTr("All [[ refs ]] resolve ✓")
-                return qsTr("Unresolved refs: %1").arg(bad.join(", "))
+                    return qsTr("All [[ refs ]] resolve ✓");
+                return qsTr("Unresolved refs: %1").arg(bad.join(", "));
             }
         }
 
-        SectionLabel { text: qsTr("Refs in use") }
+        SectionLabel {
+            text: qsTr("Refs in use")
+        }
         Text {
             Layout.fillWidth: true
-            font.family: theme.monoFont; font.pixelSize: 10
+            font.family: theme.monoFont
+            font.pixelSize: 10
             color: theme.tokens.textMuted
             text: {
-                var r = docsRoot.u.refs || {}
-                var out = []
-                for (var k in r) out.push("[[ " + k + " ]] ×" + r[k])
-                return out.join("\n") || qsTr("None Yet")
+                var r = docsRoot.u.refs || {};
+                var out = [];
+                for (var k in r)
+                    out.push("[[ " + k + " ]] ×" + r[k]);
+                return out.join("\n") || qsTr("None Yet");
             }
         }
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+        }
     }
 
     Component.onCompleted: refresh()
     Connections {
         target: st
-        function onPagesChanged() { docsRoot.refresh() }
+        function onPagesChanged() {
+            docsRoot.refresh();
+        }
     }
     Connections {
         target: projects
-        function onCurrentChanged() { docsRoot.refresh() }
+        function onCurrentChanged() {
+            docsRoot.refresh();
+        }
     }
 }

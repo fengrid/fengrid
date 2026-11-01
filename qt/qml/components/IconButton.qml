@@ -17,20 +17,25 @@ ToolButton {
     implicitHeight: 30
     contentItem: IconImage {
         name: btn.icon_name
-        tint: btn.active ? theme.tokens.litPane
-                         : (btn.hovered || btn.pressed ? theme.tokens.text
-                                                       : theme.tokens.textMuted)
+        tint: btn.active ? theme.tokens.litPane : (btn.hovered || btn.pressed ? theme.tokens.text : theme.tokens.textMuted)
         // smooth the hover tint swap — instant muted<->text flips read as
         // "flicker" when the mouse sweeps across a toolbar
-        Behavior on tint { ColorAnimation { duration: 90 } }
+        Behavior on tint {
+            ColorAnimation {
+                duration: 90
+            }
+        }
         px: btn.icon_px
         anchors.centerIn: parent
     }
     background: Rectangle {
         radius: 6
-        color: btn.pressed ? theme.tokens.surface2
-                           : (btn.hovered ? theme.tokens.surface2 : "transparent")
-        Behavior on color { ColorAnimation { duration: 90 } }
+        color: btn.pressed ? theme.tokens.surface2 : (btn.hovered ? theme.tokens.surface2 : "transparent")
+        Behavior on color {
+            ColorAnimation {
+                duration: 90
+            }
+        }
     }
     // A11Y-2: icon-only controls must announce themselves to screen
     // readers — the icon glyph is the name, the ToolTip (if any) the
@@ -44,7 +49,9 @@ ToolButton {
 
     // attention pulse — after first-run setup the shell points at the
     // main-menu button so the user knows where Settings lives
-    function flash() { flashSeq.restart() }
+    function flash() {
+        flashSeq.restart();
+    }
     SequentialAnimation {
         id: flashSeq
         loops: 3

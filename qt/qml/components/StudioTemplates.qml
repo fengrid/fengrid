@@ -15,7 +15,6 @@ Item {
         color: theme.tokens.accent
     }
 
-
     property var st: null               // Studio bridge
 
     ColumnLayout {
@@ -23,15 +22,16 @@ Item {
         anchors.margins: 8
         spacing: 10
 
-        SectionLabel { text: qsTr("Template variables") }
+        SectionLabel {
+            text: qsTr("Template variables")
+        }
         Text {
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            font.family: theme.uiFont; font.pixelSize: 10
+            font.family: theme.uiFont
+            font.pixelSize: 10
             color: theme.tokens.textMuted
-            text: qsTr("Use {{name}} in any block text — instances " +
-                       "substitute their own values when created. " +
-                       "Exports can bake a chosen value in.")
+            text: qsTr("Use {{name}} in any block text — instances " + "substitute their own values when created. " + "Exports can bake a chosen value in.")
         }
 
         Repeater {
@@ -42,7 +42,8 @@ Item {
                 spacing: 6
                 Text {
                     text: modelData.name
-                    font.family: theme.monoFont; font.pixelSize: 11
+                    font.family: theme.monoFont
+                    font.pixelSize: 11
                     color: theme.tokens.accent
                     Layout.preferredWidth: 120
                     elide: Text.ElideRight
@@ -53,7 +54,7 @@ Item {
                     text: modelData.value
                     onEditingFinished: {
                         if (text !== modelData.value)
-                            tplRoot.st.setVar(modelData.name, text)
+                            tplRoot.st.setVar(modelData.name, text);
                     }
                 }
                 IconButton {
@@ -79,46 +80,50 @@ Item {
                 Layout.alignment: Qt.AlignBottom
                 enabled: newName.text.trim() !== ""
                 onClicked: {
-                    tplRoot.st.setVar(newName.text.trim(), "")
-                    newName.text = ""
+                    tplRoot.st.setVar(newName.text.trim(), "");
+                    newName.text = "";
                 }
             }
         }
 
-        SectionLabel { text: qsTr("Create instance") }
+        SectionLabel {
+            text: qsTr("Create instance")
+        }
         FormDialog {
             id: instDialog
             heading: qsTr("New instance")
             acceptEnabled: instName.text.trim() !== ""
             property var stashVars: ({})
             fields: [
-                FormInput { id: instName; label: qsTr("Instance Name") },
+                FormInput {
+                    id: instName
+                    label: qsTr("Instance Name")
+                },
                 FormInput {
                     id: instOverrides
                     label: qsTr("Overrides — Name=Value, Comma-Separated")
                 }
             ]
             onOpened: {
-                instName.text = ""
-                var parts = []
-                var vars = tplRoot.st.templateVars
+                instName.text = "";
+                var parts = [];
+                var vars = tplRoot.st.templateVars;
                 for (var i = 0; i < vars.length; i++)
-                    parts.push(vars[i].name + "=" + vars[i].value)
-                instOverrides.text = parts.join(", ")
-                instName.forceActiveFocus()
+                    parts.push(vars[i].name + "=" + vars[i].value);
+                instOverrides.text = parts.join(", ");
+                instName.forceActiveFocus();
             }
             onApply: {
-                var overrides = {}
-                var bits = instOverrides.text.split(",")
+                var overrides = {};
+                var bits = instOverrides.text.split(",");
                 for (var i = 0; i < bits.length; i++) {
-                    var kv = bits[i].split("=")
+                    var kv = bits[i].split("=");
                     if (kv.length === 2 && kv[0].trim())
-                        overrides[kv[0].trim()] = kv[1].trim()
+                        overrides[kv[0].trim()] = kv[1].trim();
                 }
-                var newId = tplRoot.st.instantiate(
-                    instName.text, JSON.stringify(overrides))
+                var newId = tplRoot.st.instantiate(instName.text, JSON.stringify(overrides));
                 if (newId > 0 && projects !== null)
-                    projects.open(newId)
+                    projects.open(newId);
             }
         }
         RowLayout {
@@ -126,12 +131,13 @@ Item {
                 text: qsTr("Create instance…")
                 onClicked: instDialog.open()
                 ToolTip.visible: hovered
-                ToolTip.text: qsTr("Copies pages + settings into a new " +
-                                   "project with {{vars}} applied")
+                ToolTip.text: qsTr("Copies pages + settings into a new " + "project with {{vars}} applied")
             }
         }
 
-        SectionLabel { text: qsTr("Instances of this project") }
+        SectionLabel {
+            text: qsTr("Instances of this project")
+        }
         Repeater {
             model: st ? st.instancesList : []
             RowLayout {
@@ -140,25 +146,28 @@ Item {
                 FgButton {
                     text: qsTr("Open") + " · " + modelData.name
                     onClicked: if (projects !== null)
-                                   projects.open(modelData.id)
+                        projects.open(modelData.id)
                 }
             }
         }
         Text {
             visible: !st || st.instancesList.length === 0
-            text: qsTr("No instances yet — this project is not used " +
-                       "as a template (that's fine; the variables " +
-                       "are still usable in exports)")
-            font.family: theme.uiFont; font.pixelSize: 10
+            text: qsTr("No instances yet — this project is not used " + "as a template (that's fine; the variables " + "are still usable in exports)")
+            font.family: theme.uiFont
+            font.pixelSize: 10
             color: theme.tokens.textMuted
             wrapMode: Text.Wrap
             Layout.fillWidth: true
         }
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+        }
     }
 
     Connections {
         target: st
-        function onPagesChanged() { st.refreshInstances() }
+        function onPagesChanged() {
+            st.refreshInstances();
+        }
     }
 }

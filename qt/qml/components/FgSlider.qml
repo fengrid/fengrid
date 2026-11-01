@@ -34,8 +34,16 @@ Slider {
         radius: 3
         color: ctl.pressed ? theme.tokens.accent : theme.tokens.surface2
         border.color: ctl.pressed ? theme.tokens.accent : theme.tokens.border
-        Behavior on color { ColorAnimation { duration: 90 } }
-        Behavior on border.color { ColorAnimation { duration: 90 } }
+        Behavior on color {
+            ColorAnimation {
+                duration: 90
+            }
+        }
+        Behavior on border.color {
+            ColorAnimation {
+                duration: 90
+            }
+        }
     }
     Accessible.role: Accessible.Slider
     Accessible.name: ctl.ToolTip.text

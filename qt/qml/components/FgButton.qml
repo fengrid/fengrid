@@ -14,11 +14,13 @@ Button {
     hoverEnabled: true
     background: Rectangle {
         radius: 6
-        color: btn.down ? theme.tokens.bg
-               : btn.hovered ? theme.tokens.surface2
-               : theme.tokens.surface2
+        color: btn.down ? theme.tokens.bg : btn.hovered ? theme.tokens.surface2 : theme.tokens.surface2
         border.color: theme.tokens.border
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color {
+            ColorAnimation {
+                duration: 90
+            }
+        }
     }
     contentItem: Text {
         text: btn.text
