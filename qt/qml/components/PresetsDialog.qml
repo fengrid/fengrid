@@ -533,6 +533,10 @@ Dialog {
                                     entryMenu.popup();
                                     return;
                                 }
+                                // #141: a download/index in flight must
+                                // not be re-triggered by a click
+                                if (entryCard.progActive)
+                                    return;
                                 if (entryCard.modelData.libraryKind === "palette") {
                                     presets.apply_preset(entryCard.modelData.id);
                                 } else if (entryCard.modelData.downloaded) {
@@ -554,6 +558,7 @@ Dialog {
                             FgMenuItem {
                                 visible: entryCard.modelData.libraryKind !== "palette"
                                 text: entryCard.modelData.downloaded ? qsTr("Update (git pull)") : qsTr("Download (git clone)")
+                                enabled: entryCard.progActive !== true
                                 height: 28
                                 onTriggered: presets.download(entryCard.modelData.id)
                             }
