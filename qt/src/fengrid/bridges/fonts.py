@@ -9,6 +9,7 @@ registered with QFontDatabase, so no WebEngine is involved in this pane.
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -324,6 +325,48 @@ class Fonts(QObject):
 
     # -------------------------------------------------- specimen text
     sampleCustomChanged = Signal()
+
+    # #151: per-family custom preview text. The inspector's specimen
+    # field edits the SELECTED family's sample; the grid reads the whole
+    # map as ONE property (a QVariantMap lookup per card — plain C++
+    # reads, the #137 discipline: no per-card slot calls). Persisted in
+    # settings as a JSON map keyed by family name.
+    familySamplesChanged = Signal()
+
+    def _load_family_samples(self) -> dict:
+        cached = getattr(self, "_family_samples", None)
+        if cached is None:
+            try:
+                raw = settings.get(self._con, "family_samples", "")
+                cached = json.loads(raw) if raw else {}
+            except ValueError:
+                cached = {}
+            if not isinstance(cached, dict):
+                cached = {}
+            self._family_samples = cached
+        return cached
+
+    @Property("QVariantMap", notify=familySamplesChanged)
+    def familySamples(self) -> dict:
+        return self._load_family_samples()
+
+    @Slot(str, str)
+    def set_family_sample(self, family: str, text: str) -> None:
+        """Set (or, with empty text, clear) one family's custom preview
+        text. Other families keep the master text or the curated
+        passages — never the literal fallback."""
+        family = str(family or "").strip()
+        if not family:
+            return
+        samples = dict(self._load_family_samples())
+        text = str(text or "")
+        if text.strip():
+            samples[family] = text
+        else:
+            samples.pop(family, None)
+        settings.set(self._con, "family_samples", json.dumps(samples))
+        self._family_samples = samples
+        self.familySamplesChanged.emit()
 
     # #119: pane-wide custom preview text — applies to every card in the
     # grid (the inspector's per-font specimen field is separate and stays)

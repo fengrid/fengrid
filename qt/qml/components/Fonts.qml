@@ -95,11 +95,11 @@ Item {
             Item {
                 Layout.fillWidth: true
             }
-            // #119: pane-wide grid preview text — opens the editor popup;
-            // highlights while a custom text is active
+            // #119/#151: MASTER preview text editor — applies to every
+            // card in the grid; highlights while a custom text is active
             IconButton {
                 icon_name: "type"
-                ToolTip.text: fonts !== null && fonts.gridSample !== "" ? qsTr("Preview text — custom (click to edit)") : qsTr("Preview text — curated passages (click to customize)")
+                ToolTip.text: fonts !== null && fonts.gridSample !== "" ? qsTr("Master Preview Text — Custom (Click To Edit)") : qsTr("Master Preview Text — Curated Passages (Click To Customize)")
                 onClicked: gridSamplePopup.open()
             }
             ExportButton {
@@ -197,12 +197,26 @@ Item {
                     // visible card on every grid resize (measured: a
                     // multi-second binding storm per slider notch on a
                     // 500-family library — the reported freeze/slowness).
-                    // #119: pane-wide custom preview text wins when set;
-                    // the per-asset custom sample field disables the
-                    // curated passages (#118: the class follows the grid
-                    // scale — specimenPx).
+                    // #119: pane-wide master preview text wins when set;
+                    // #151: a per-family custom sample (inspector field)
+                    // applies to THAT family's card only — every other
+                    // card keeps the master text or the curated per-
+                    // bucket passages (#118: the class follows the grid
+                    // scale — specimenPx). No "Fengrid 123" fallback in
+                    // the grid: an unset chain shows the curated text.
                     readonly property int specimenPx: Math.max(12, Math.round(26 * famGrid.fontScale))
-                    text: fonts !== null && fonts.gridSample !== "" ? fonts.gridSample : (fonts !== null && !fonts.sampleCustom ? (specimenPx <= fonts.smallMaxPx ? fonts.specimenSmall : specimenPx <= fonts.mediumMaxPx ? fonts.specimenMedium : fonts.specimenLarge) : qsTr("Fengrid 123"))
+                    readonly property string famSample: fonts !== null
+                        && fonts.familySamples
+                        ? (fonts.familySamples[model.family] || "") : ""
+                    text: fonts !== null && fonts.gridSample !== ""
+                          ? fonts.gridSample
+                          : (famSample !== ""
+                             ? famSample
+                             : (specimenPx <= fonts.smallMaxPx
+                                ? fonts.specimenSmall
+                                : specimenPx <= fonts.mediumMaxPx
+                                ? fonts.specimenMedium
+                                : fonts.specimenLarge))
                     font.family: model.family
                     font.pixelSize: specimenPx
                     elide: Text.ElideRight
@@ -515,7 +529,7 @@ Item {
             anchors.margins: 14
             spacing: 10
             Text {
-                text: qsTr("Grid Preview Text")
+                text: qsTr("Master Preview Text")
                 font.family: theme.headingFont
                 font.pixelSize: 13
                 color: theme.tokens.text
