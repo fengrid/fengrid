@@ -44,6 +44,21 @@ def test_prefs_persist_and_clamp(tmp_path):
     assert p.iconSize == 64
     assert str(settings.get(con, "icon_size")) in ("64", "64.0")
 
+    # #153: the Fonts pane keeps its OWN grid size — independent of
+    # icon_size, persisted, clamped to the same 16..256 range, and
+    # seeded from icon_size on first read so the split doesn't jump
+    p2 = Prefs(con, str(tmp_path / "t.db"))
+    assert p2.fontGridSize == 64          # seeded from icon_size
+    p2.set_font_grid_size(128)
+    assert p2.fontGridSize == 128
+    p.set_icon_size(48)
+    assert p2.fontGridSize == 128         # independent
+    assert str(settings.get(con, "font_grid_size")) in ("128", "128.0")
+    p2.set_font_grid_size(999)
+    assert p2.fontGridSize == 256
+    p2.set_font_grid_size(8)
+    assert p2.fontGridSize == 16
+
     p.set_startup_pane(3)
     assert p.startupPane == 3
     p.set_startup_pane(99)               # clamped to pane range

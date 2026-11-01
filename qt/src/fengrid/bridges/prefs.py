@@ -42,6 +42,11 @@ class Prefs(QObject):
         self._con = con
         self._db_path = db_path
         self._icon_size = int(settings.get(con, "icon_size", 32) or 32)
+        # #153: fonts keep their own grid size; first read seeds from
+        # icon_size so the split doesn't shift the fonts grid once
+        _fgs = str(settings.get(con, "font_grid_size", "") or "")
+        self._font_grid_size = (int(_fgs) if _fgs.strip().isdigit()
+                                else self._icon_size)
         self._startup_pane = int(settings.get(con, "startup_pane", 0) or 0)
         # ships enabled: a missing row means "check for releases at start"
         self._update_check = settings.get_bool(con, "update_check", True)
@@ -84,6 +89,24 @@ class Prefs(QObject):
         self._icon_size = size
         settings.set(self._con, "icon_size", size)
         self.iconSizeChanged.emit()
+
+    # #153: the header grid slider drives the ACTIVE pane's grid — the
+    # Fonts pane gets its own persisted size (seeded from icon_size on
+    # first read so the split doesn't jump the fonts grid)
+    fontGridSizeChanged = Signal()
+
+    @Property(int, notify=fontGridSizeChanged)
+    def fontGridSize(self) -> int:
+        return self._font_grid_size
+
+    @Slot(int)
+    def set_font_grid_size(self, size: int) -> None:
+        size = max(16, min(256, int(size)))
+        if size == self._font_grid_size:
+            return
+        self._font_grid_size = size
+        settings.set(self._con, "font_grid_size", size)
+        self.fontGridSizeChanged.emit()
 
     # ---------------------------------------------------------- startup pane
     @Property(int, notify=startupPaneChanged)
