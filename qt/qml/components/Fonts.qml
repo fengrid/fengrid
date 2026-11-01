@@ -513,42 +513,65 @@ Item {
         id: exportToast
     }
 
-    // #119: pane-wide grid preview text editor
-    Popup {
+    // #119/#151: MASTER preview text editor — applies to every card in
+    // the grid. Themed per the app dialog idiom (#156): the old Popup
+    // carried three unstyled default Buttons (light-palette fallback on
+    // dark themes), no padding discipline and a mis-spaced footer.
+    Dialog {
         id: gridSamplePopup
         parent: Overlay.overlay
         anchors.centerIn: parent
-        width: 360
+        width: 400
         modal: true
+        padding: 16
         background: Rectangle {
-            radius: 8
+            radius: 12
             color: theme.tokens.surface
             border.color: theme.tokens.border
         }
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 14
-            spacing: 10
+
+        contentItem: ColumnLayout {
+            spacing: 12
+
             Text {
                 text: qsTr("Master Preview Text")
                 font.family: theme.headingFont
-                font.pixelSize: 13
+                font.pixelSize: 14
+                font.letterSpacing: 1.2
+                font.capitalization: Font.AllUppercase
                 color: theme.tokens.text
             }
-            Text {
-                text: qsTr("Applies to every font card in the grid. Leave empty to use the curated passages.")
-                font.family: theme.uiFont
-                font.pixelSize: 10
-                color: theme.tokens.textMuted
-                wrapMode: Text.Wrap
+
+            RowLayout {
+                spacing: 8
                 Layout.fillWidth: true
+
+                Text {
+                    Layout.fillWidth: true
+                    text: qsTr("Applies to every font card in the grid. Leave empty to use the curated passages.")
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
+                    color: theme.tokens.textMuted
+                    wrapMode: Text.Wrap
+                }
+                FgButton {
+                    text: qsTr("Reset To Curated")
+                    enabled: fonts !== null && fonts.gridSample !== ""
+                    onClicked: {
+                        fonts !== null && fonts.clear_grid_sample();
+                        gridSampleInput.text = "";
+                        // stay open so the reset state is visible
+                    }
+                }
             }
+
             Rectangle {
                 Layout.fillWidth: true
-                height: 30
+                implicitHeight: 30
                 radius: 6
                 color: theme.tokens.surface2
-                border.color: gridSampleInput.activeFocus ? theme.tokens.accent : theme.tokens.border
+                border.color: gridSampleInput.activeFocus
+                              ? theme.tokens.accent : theme.tokens.border
                 TextInput {
                     id: gridSampleInput
                     anchors.fill: parent
@@ -567,31 +590,16 @@ Item {
                     }
                 }
             }
-            RowLayout {
-                Layout.fillWidth: true
-                Button {
-                    text: qsTr("Apply")
-                    onClicked: {
-                        fonts !== null && fonts.set_grid_sample(gridSampleInput.text);
-                        gridSamplePopup.close();
-                    }
-                }
-                Button {
-                    text: qsTr("Reset to curated")
-                    enabled: fonts !== null && fonts.gridSample !== ""
-                    onClicked: {
-                        fonts !== null && fonts.clear_grid_sample();
-                        gridSampleInput.text = "";
-                        gridSamplePopup.close();
-                    }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                Button {
-                    text: qsTr("Cancel")
-                    onClicked: gridSamplePopup.close()
-                }
+        }
+
+        footer: FgDialogFooter {
+            cancelLabel: qsTr("Cancel")
+            acceptLabel: qsTr("Apply")
+            onCancelClicked: gridSamplePopup.close()
+            onAcceptClicked: {
+                fonts !== null
+                        && fonts.set_grid_sample(gridSampleInput.text);
+                gridSamplePopup.close();
             }
         }
     }
