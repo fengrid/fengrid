@@ -389,38 +389,9 @@ Item {
                 font.pixelSize: 11
             }
 
-            // collapsed: count under the dot, then a rotated label
-            // reading top → bottom. The label lives in its own holder
-            // below the dot/count rows — a rotated Text's long axis
-            // spans its unrotated WIDTH around the center, so without
-            // the holder it collides with the header content.
-            Text {
-                visible: !col.expanded && col.stageData.cards.length > 0
-                anchors.top: parent.top
-                anchors.topMargin: 30
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: col.stageData.cards.length
-                color: theme.tokens.textMuted
-                font.family: theme.monoFont
-                font.pixelSize: 10
-            }
-            Item {
-                visible: !col.expanded
-                width: 34
-                anchors.top: parent.top
-                anchors.topMargin: 56
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 8
-                Text {
-                    anchors.centerIn: parent
-                    rotation: 90
-                    text: col.stageData.label.toUpperCase()
-                    color: theme.tokens.textMuted
-                    font.family: theme.uiFont
-                    font.pixelSize: 12
-                    font.letterSpacing: 1.1
-                }
-            }
+            // collapsed: the count + rotated label render at COLUMN
+            // level (below this header) — see the collapsed rail
+            // content block under headerBar
 
             HoverHandler {
                 cursorShape: Qt.PointingHandCursor
@@ -435,6 +406,39 @@ Item {
             Accessible.role: Accessible.Button
             Accessible.name: col.stageData.label
                              + (col.expanded ? " (expanded)" : " (collapsed)")
+        }
+
+        // collapsed rail content — anchored to the COLUMN, not the 44px
+        // header bar: the rotated label's holder needs the full bar
+        // height below the dot/count rows, and anchoring top+bottom
+        // with topMargin 56 inside a 44px parent was a degenerate
+        // layout that threw the label back up over the dot (#132)
+        Text {
+            visible: !col.expanded && col.stageData.cards.length > 0
+            anchors.top: parent.top
+            anchors.topMargin: 30
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: col.stageData.cards.length
+            color: theme.tokens.textMuted
+            font.family: theme.monoFont
+            font.pixelSize: 10
+        }
+        Item {
+            visible: !col.expanded
+            width: 34
+            anchors.top: parent.top
+            anchors.topMargin: 56
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 8
+            Text {
+                anchors.centerIn: parent
+                rotation: 90
+                text: col.stageData.label.toUpperCase()
+                color: theme.tokens.textMuted
+                font.family: theme.uiFont
+                font.pixelSize: 12
+                font.letterSpacing: 1.1
+            }
         }
 
         // expanded content: scrollable card stack
