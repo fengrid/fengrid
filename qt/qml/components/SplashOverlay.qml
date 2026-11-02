@@ -75,7 +75,7 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 text: "FENGRID"
                 font.family: theme.headingFont
-                font.pixelSize: 13
+                font.pixelSize: 18
                 font.letterSpacing: 6
                 color: theme.tokens.text
             }
