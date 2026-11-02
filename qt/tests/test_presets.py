@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from fengrid.bridges.presets import Presets           # noqa: E402
+from fengrid.core import colors as core_colors        # noqa: E402
 from fengrid.core import db as core_db                # noqa: E402
 from fengrid.core import presets as core_presets      # noqa: E402
 from fengrid.core import taxonomy as core_tax         # noqa: E402
@@ -574,3 +575,80 @@ def test_sync_default_library_idempotent(env):
         "SELECT COUNT(*) AS n FROM collection_ref WHERE collection_id = ?",
         (default_id,)).fetchone()["n"]
     assert members == 12
+
+
+# --------------------------------------------- #162: palette download parity
+def test_apply_preset_marks_the_entry_local(env):
+    """Applying a palette scheme IS its download: the entry flips local
+    so the dialog badges the card and the library tab counts it — the
+    same vocabulary a cloned icon/font pack gets."""
+    bridge, con, tmp = env
+    ch = [l for l in bridge.libraries if l["kind"] == "palette"][0]
+    row = bridge.entries(ch["id"])[0]
+    assert row["downloaded"] is False
+    bridge.apply_preset(row["id"])
+    assert con.execute(
+        "SELECT downloaded FROM preset_entry WHERE id = ?",
+        (row["id"],)).fetchone()[0] == 1
+    # the dialog's live views reflect it
+    assert bridge.entries(ch["id"])[0]["downloaded"] is True
+    live = [l for l in bridge.libraries if l["kind"] == "palette"][0]
+    assert live["downloaded"] == 1
+
+
+def test_file_applied_palette_files_parity_collections(env):
+    """Core-level: filing an applied palette preset creates the
+    per-type 'Downloaded' + pack-named + Default palette collections
+    with the ref, backrefs the entry, and is idempotent."""
+    bridge, con, tmp = env
+    ch = [l for l in bridge.libraries if l["kind"] == "palette"][0]
+    row = bridge.entries(ch["id"])[0]
+    pid = core_colors.save_palette(con, row["name"], ["#111111"], "preset")
+    core_presets.file_applied_palette(con, row["id"], pid)
+    filed = {r["name"] for r in con.execute(
+        "SELECT c.name FROM collection_ref cr"
+        " JOIN collection c ON c.id = cr.collection_id"
+        " WHERE cr.item_kind = 'palette' AND cr.item_id = ?", (pid,))}
+    assert filed >= {"Downloaded", ch["name"], "Default"}, filed
+    # backref: the startup default-library sync reuses THIS row
+    # instead of materialising a second palette for the entry
+    assert con.execute(
+        "SELECT palette_id FROM preset_entry WHERE id = ?",
+        (row["id"],)).fetchone()[0] == pid
+    # idempotent — a second filing adds no duplicate refs
+    core_presets.file_applied_palette(con, row["id"], pid)
+    n = con.execute(
+        "SELECT COUNT(*) FROM collection_ref"
+        " WHERE item_kind = 'palette' AND item_id = ?", (pid,)).fetchone()[0]
+    assert n == 3
+
+
+# --------------------------------------- #162: startup visibility order
+def test_colors_bridge_sees_startup_materialised_schemes(env):
+    """#162: with the preset syncs ordered before bridge construction
+    (main), a Colors bridge built on the synced DB snapshots the
+    materialised harmony schemes immediately — the saved strip is
+    populated at boot, not empty until the first apply."""
+    _bridge, con, tmp = env
+    core_presets.ensure_presets(con)
+    core_presets.sync_default_library(con)
+    from fengrid.bridges.colors import Colors
+    bridge = Colors(con)
+    assert len(bridge.palettes) == 12
+    assert bridge.presetPaletteCount == 0
+
+def test_startup_preset_sync_runs_before_bridges(env):
+    """#162 recurrence guard: Library refreshes its rail lists and
+    Colors snapshots its saved-palette list at CONSTRUCTION, so the
+    preset syncs (which materialise the harmony palettes and create the
+    Default/Downloaded collections) must run BEFORE any bridge is
+    constructed — otherwise the saved strip starts empty and the typed
+    collections stay invisible until the next mutation. Pins the order
+    in main() against regression."""
+    import inspect
+    import fengrid.__main__ as main_mod
+    src = inspect.getsource(main_mod.main)
+    sync_at = src.index("core_presets.sync_default_library(con)")
+    assert sync_at < src.index("library = Library(con")
+    assert sync_at < src.index("colors_bridge = Colors(con)")
+    assert src.index("core_presets.ensure_presets(con)") < sync_at

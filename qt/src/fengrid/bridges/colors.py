@@ -15,6 +15,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 from ..core import colors as core_colors
 from ..core import db as core_db
 from ..core import paths as core_paths
+from ..core import presets as core_presets
 from ..core import settings
 
 
@@ -61,6 +62,9 @@ class Colors(QObject):
         # every editor-scale mutation snapshots the swatch list so
         # Ctrl+Z can walk it back (spec: undo for fields/options)
         self._undo_ref = None
+        # #162: the Library bridge (rail collections snapshot) — bound at
+        # startup so preset filing pokes its rail refresh
+        self._library = None
         self._refresh_palettes()
         # seed the pane with one roll so it never opens empty
         self._swatches = core_colors.generate(self._rule, [], mode="dark")
@@ -68,6 +72,13 @@ class Colors(QObject):
     # ---------------------------------------------------------------- undo
     def bind_undo(self, undo) -> None:
         self._undo_ref = undo
+
+    def bind_library(self, library) -> None:
+        """#162: the rail's collections list is the Library bridge's
+        snapshot — filing an applied preset pokes its coalesced refresh
+        (same bind pattern as bind_undo), so the new Downloaded/pack
+        collection rows appear without a restart."""
+        self._library = library
 
     def _snapshot(self) -> dict:
         return {
@@ -345,14 +356,19 @@ class Colors(QObject):
         self._refresh_palettes()
         self.message.emit(f"Saved: {name}")
 
-    @Slot(str)
-    def save_as_preset(self, name: str) -> None:
+    def save_as_preset(self, name: str, entry_id: int | None = None) -> None:
         """#141: file an applied palette preset — save (or update, when
         a palette of that preset name already exists) the working
         swatches as a palette tagged 'preset', so it lands in the
         Colors pane's list and the rail's Saved Presets row can count
         and browse it. Automatic: applying a preset from the Preset
-        Libraries dialog needs no further user action."""
+        Libraries dialog needs no further user action.
+
+        #162: with a preset entry id (the apply flow) the saved palette
+        is also FILED like a downloaded pack — into the per-type
+        'Downloaded' collection and a collection named after its preset
+        library — and the entry gains the palette backref. A manual
+        save (no entry) only tags."""
         name = (name or "").strip() or "Preset palette"
         hexes = [s["hex"] for s in self._swatches]
         if not hexes:
@@ -364,6 +380,13 @@ class Colors(QObject):
             self._con, name, hexes, "preset", pid)
         core_db._sync_item_tags(self._con, self._palette_id,
                                 "palette", "preset")
+        if entry_id is not None:
+            core_presets.file_applied_palette(
+                self._con, int(entry_id), self._palette_id)
+            if self._library is not None:
+                # the rail's collections snapshot must learn about the
+                # filed rows — mutations poke the coalesced refresh
+                self._library._mark_lists_dirty()
         self._name = name
         self.nameChanged.emit()
         self._refresh_palettes()
