@@ -172,6 +172,9 @@ def main(argv=None) -> int:
     parser.add_argument("--term", action="store_true",
                         help="open the Colors pane on the Terminal designer"
                              " (QA screenshots)")
+    parser.add_argument("--explorer", action="store_true",
+                        help="open the Colors pane on the Explorer tab"
+                             " (QA screenshots)")
     parser.add_argument("--version", action="version",
                         version=f"fengrid {__version__}")
     parser.add_argument("--webengine-probe", action="store_true",
@@ -399,6 +402,15 @@ def main(argv=None) -> int:
         lambda d: colors_bridge.restore_state(d),
         lambda d: colors_bridge.restore_state(d))
     colors_bridge.bind_undo(colors_undo)
+    # Explorer tab (Color palette wheel) — same undo bridge, own handler;
+    # the global Ctrl+Z routes by pane, so both editors share the stack
+    from fengrid.bridges.color_explorer import ColorExplorer
+    explorer_bridge = ColorExplorer(con)
+    colors_undo.register(
+        "colors.explorer",
+        lambda d: explorer_bridge.restore_state(d),
+        lambda d: explorer_bridge.restore_state(d))
+    explorer_bridge.bind_undo(colors_undo)
     # demo suite: files under the data dir so removal never touches user folders
     demo_bridge = Demo(con, os.path.join(data_dir, "demo-assets"),
                        _asset_dir("fonts"))
@@ -411,11 +423,18 @@ def main(argv=None) -> int:
         if _offline_qa or not prefs_bridge.updateCheck else 4000)
 
     engine = QQmlApplicationEngine()
+    # Explorer tab scheme-button sprites (theme-remapped slices of the
+    # vendored sheet) — registered before any QML can bind the source
+    from fengrid.bridges.explorer_sprites import SchemeSpriteProvider
+    engine.addImageProvider(
+        "fgscheme", SchemeSpriteProvider(
+            _asset_dir("resources", "icons", "sprites.png")))
     ctx = engine.rootContext()
     ctx.setContextProperty("theme", theme)
     ctx.setContextProperty("library", library)
     ctx.setContextProperty("fonts", fonts)
     ctx.setContextProperty("colors", colors_bridge)
+    ctx.setContextProperty("colorex", explorer_bridge)
     ctx.setContextProperty("terms", term_bridge)
     ctx.setContextProperty("code", code_bridge)
     # real QSyntaxHighlighter for the snippet editor — one layout for
@@ -504,6 +523,7 @@ def main(argv=None) -> int:
         "initialPane",
         args.pane if args.pane is not None else prefs_bridge.startupPane)
     ctx.setContextProperty("initialTerm", args.term)
+    ctx.setContextProperty("initialExplorer", args.explorer)
     # first-run setup shows when the flag is unset — but never in
     # --screenshot runs (pane shots must stay clean on a fresh DB;
     # QA forces the screen with --dialog firstRun)

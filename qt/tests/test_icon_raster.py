@@ -95,7 +95,7 @@ def _svg_of(data_url):
 _APP_NAMES = [
     "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up",
     "code", "copy", "download", "droplet", "external-link", "file-text",
-    "folder-plus", "git-branch", "grid", "hard-drive", "help", "image",
+    "folder-plus", "git-branch", "grid", "hard-drive", "help", "eye", "image",
     "kanban",
     "layers", "lock", "menu", "moon", "package", "paint-drop", "play",
     "plus", "refresh",

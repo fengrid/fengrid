@@ -31,6 +31,7 @@ GLOBAL_KEYS = frozenset({
     "search_mode",
     "editor_keymap",
     "colors_rule",
+    "colors_explorer",
     "startup_pane",
     "update_check",
     "last_export_dir",
