@@ -143,6 +143,12 @@ class Fonts(QObject):
         self._smart_id = 0
         # rail Starred row (fonts pane, #40)
         self._starred_only = False
+        # #141: saved-library tag filter (rail Libraries row on this
+        # pane) — a library view's tag set filters families to those
+        # owning at least one font asset carrying the tags (mirrors
+        # colors.set_library_tags)
+        self._lib_tags: list[str] = []
+        self._lib_match_all = True
         self._types: list = []
         self._selected = ""
         self._specimens: dict | None = None
@@ -308,6 +314,27 @@ class Fonts(QObject):
         self.starredChanged.emit()
         self._refresh()
 
+    # ── #141: rail Libraries row on the fonts pane — a library view's
+    # tag set filters families through their font assets' tags ──
+    libTagsChanged = Signal()
+
+    @Property(str, notify=libTagsChanged)
+    def libraryTagFilter(self) -> str:
+        return ",".join(self._lib_tags)
+
+    @Slot(str, bool)
+    def set_library_tags(self, tags_csv: str, match_all: bool = True) -> None:
+        """Toggle the library-view tag filter on the fonts pane (second
+        call with the same list clears it — mirrors colors)."""
+        wanted = [t.strip() for t in str(tags_csv or "").split(",")
+                  if t.strip()]
+        if wanted and wanted == self._lib_tags:
+            wanted = []
+        self._lib_tags = wanted
+        self._lib_match_all = bool(match_all)
+        self.libTagsChanged.emit()
+        self._refresh()
+
     @Property(int, notify=starredChanged)
     def starredCount(self) -> int:
         """Families with at least one starred file — the rail's Starred
@@ -322,6 +349,29 @@ class Fonts(QObject):
             " WHERE t.name = 'starred' AND it.item_kind = 'font'"
             " AND a.kind = 'font' AND a.family IS NOT NULL").fetchall()
         return {r[0] for r in rows}
+
+    def _families_with_tags(self, tags: list[str],
+                            match_all: bool) -> set[str]:
+        """#141: family names owning at least one font asset whose tags
+        satisfy the library view (per-asset all/any — the same
+        semantics taxonomy.library_view_assets applies to icon assets)."""
+        marks = ",".join("?" * len(tags))
+        if match_all:
+            sql = ("SELECT DISTINCT family FROM asset WHERE kind = 'font'"
+                   " AND id IN (SELECT a.id FROM asset a"
+                   " JOIN item_tag it ON it.item_id = a.id"
+                   " AND it.item_kind = a.kind"
+                   " JOIN tag t ON t.id = it.tag_id"
+                   " WHERE a.kind = 'font' AND t.name IN (%s)"
+                   " GROUP BY a.id HAVING COUNT(DISTINCT t.name) = ?)" % marks)
+            params = [*tags, len(tags)]
+        else:
+            sql = ("SELECT DISTINCT family FROM asset WHERE kind = 'font'"
+                   " AND id IN (SELECT it.item_id FROM item_tag it"
+                   " JOIN tag t ON t.id = it.tag_id"
+                   " WHERE it.item_kind = 'font' AND t.name IN (%s))" % marks)
+            params = list(tags)
+        return {r[0] for r in self._con.execute(sql, params)}
 
     # -------------------------------------------------- specimen text
     sampleCustomChanged = Signal()
@@ -739,11 +789,19 @@ class Fonts(QObject):
         star_fams: set[str] | None = None
         if self._starred_only:
             star_fams = self._starred_families()
+        # #141: library-view tag filter (rail Libraries row) — families
+        # owning at least one font asset whose tags satisfy the view
+        lib_fams: set[str] | None = None
+        if self._lib_tags:
+            lib_fams = self._families_with_tags(self._lib_tags,
+                                                self._lib_match_all)
         fams = all_fams
         if coll_fams is not None:
             fams = [f for f in all_fams if f["family"] in coll_fams]
         if star_fams is not None:
             fams = [f for f in fams if f["family"] in star_fams]
+        if lib_fams is not None:
+            fams = [f for f in fams if f["family"] in lib_fams]
         if self._smart_id:
             fams = [f for f in fams if self._family_matches_smart(
                 f["family"])]
@@ -771,6 +829,8 @@ class Fonts(QObject):
             if coll_fams is not None and fam["family"] not in coll_fams:
                 continue
             if star_fams is not None and fam["family"] not in star_fams:
+                continue
+            if lib_fams is not None and fam["family"] not in lib_fams:
                 continue
             if self._smart_id and not self._family_matches_smart(
                     fam["family"]):
