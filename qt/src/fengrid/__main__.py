@@ -366,6 +366,9 @@ def main(argv=None) -> int:
     term_bridge = TermColors(con)
     code_bridge = Code(con)
     projects_bridge = Projects(con)
+    # planning board (#132): Kanban tasks over the project-task model
+    from fengrid.bridges.planning import Planning
+    planning_bridge = Planning(con)
     # studio workspace (Design/Templates/Docker/Docs screens)
     from fengrid.bridges.studio import Studio
     studio_bridge = Studio(con)
@@ -426,6 +429,7 @@ def main(argv=None) -> int:
     css_highlighter = EditorHighlighter(theme)
     ctx.setContextProperty("cssHl", css_highlighter)
     ctx.setContextProperty("projects", projects_bridge)
+    ctx.setContextProperty("planning", planning_bridge)
     ctx.setContextProperty("studio", studio_bridge)
     ctx.setContextProperty("sc", sc_bridge)
     ctx.setContextProperty("undoProjects", projects_undo)
@@ -447,6 +451,10 @@ def main(argv=None) -> int:
     # covers entries downloaded by older builds or on another machine;
     # _start_initial_scans rescans exactly the kinds that registered
     preset_sources = core_presets.sync_downloaded_sources(con)
+    core_presets.sync_default_library(con)
+    # #141 round 2: packs downloaded by earlier builds get their
+    # discrete libraries on startup too
+    core_presets.sync_pack_libraries(con)
     presets_bridge = Presets(con, data_dir)
     ctx.setContextProperty("presets", presets_bridge)
 
@@ -508,6 +516,15 @@ def main(argv=None) -> int:
     ctx.setContextProperty(
         "qaInspectorScroll",
         int(os.environ.get("FENGRID_QA_INSPECTOR_SCROLL", "0") or 0))
+    # QA affordance: FENGRID_QA_SELECT_IDS="1,2,3" pre-checks grid
+    # checkboxes — the inspector renders its aggregate multi-selection
+    # view in screenshots (ids are asset rowids; unknown ids drop out)
+    _qa_select_ids = []
+    for _tok in (os.environ.get("FENGRID_QA_SELECT_IDS", "") or "").split(","):
+        _tok = _tok.strip()
+        if _tok.isdigit():
+            _qa_select_ids.append(int(_tok))
+    ctx.setContextProperty("qaSelectIds", _qa_select_ids)
     # false on hardware-GL displays; true after the software fallback —
     # QML gates its shader effects on this (crash guard). Must precede
     # engine.load: Main.qml reads it in a root binding.
@@ -558,6 +575,8 @@ def main(argv=None) -> int:
                 (f"%{args.qa_select}%",)).fetchone()
             if row:
                 projects_bridge.open(row["id"])
+        elif args.pane == 5:
+            planning_bridge.open_task(args.qa_select)
 
     def _start_initial_scans():
         if args.no_scan:

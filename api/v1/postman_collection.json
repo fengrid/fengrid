@@ -2,7 +2,7 @@
  "info": {
   "name": "Fengrid REST API v1",
   "_postman_id": "fengrid-api-v1-0001",
-  "description": "Fengrid asset manager — REST API v1. Set {{base}} (e.g. http://127.0.0.1:8642/api/v1) and {{token}} as collection variables. Long operations return 202 + a job id; poll /jobs/{id}.",
+  "description": "Fengrid asset manager \u2014 REST API v1. Set {{base}} (e.g. http://127.0.0.1:8642/api/v1) and {{token}} as collection variables. Long operations return 202 + a job id; poll /jobs/{id}.",
   "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
  },
  "variable": [
@@ -994,7 +994,7 @@
         "expand"
        ]
       },
-      "description": "Expand every [[ … ]] reference in a text block; returns text + unresolved list.",
+      "description": "Expand every [[ \u2026 ]] reference in a text block; returns text + unresolved list.",
       "body": {
        "mode": "raw",
        "raw": "{\n  \"text\": \"<img src=\\\"[[ my-icon ]]\\\">\"\n}",
@@ -1497,6 +1497,307 @@
        "path": [
         "projects",
         "{{pid}}"
+       ]
+      },
+      "description": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "Planning",
+   "item": [
+    {
+     "name": "Board",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/board",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "board"
+       ]
+      },
+      "description": ""
+     }
+    },
+    {
+     "name": "Board (filtered)",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/board?q=footer",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "board?q=footer"
+       ]
+      },
+      "description": ""
+     }
+    },
+    {
+     "name": "Stages",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/stages",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "stages"
+       ]
+      },
+      "description": ""
+     }
+    },
+    {
+     "name": "Create task",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/tasks",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "tasks"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"title\": \"New task\", \"stage\": \"todo\", \"project_id\": 1, \"description\": \"\", \"priority\": \"normal\", \"due_date\": \"\", \"status_note\": \"\"}"
+      }
+     }
+    },
+    {
+     "name": "Describe task",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/tasks/{{tid}}",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "tasks",
+        "{{tid}}"
+       ]
+      },
+      "description": ""
+     }
+    },
+    {
+     "name": "Update task",
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/tasks/{{tid}}",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "tasks",
+        "{{tid}}"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"title\": \"Renamed\", \"status_note\": \"needs input\"}"
+      }
+     }
+    },
+    {
+     "name": "Move task",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/tasks/{{tid}}/move",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "tasks",
+        "{{tid}}",
+        "move"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"stage\": \"running\", \"index\": 0}"
+      }
+     }
+    },
+    {
+     "name": "Link asset",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/tasks/{{tid}}/assets",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "tasks",
+        "{{tid}}",
+        "assets"
+       ]
+      },
+      "description": "",
+      "body": {
+       "mode": "raw",
+       "raw": "{\"kind\": \"icon\", \"asset_id\": 1}"
+      }
+     }
+    },
+    {
+     "name": "Unlink asset",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/tasks/{{tid}}/assets/{{row_id}}",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "tasks",
+        "{{tid}}",
+        "assets",
+        "{{row_id}}"
+       ]
+      },
+      "description": ""
+     }
+    },
+    {
+     "name": "Delete task",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{token}}"
+       },
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base}}/planning/tasks/{{tid}}",
+       "host": [
+        "{{base}}"
+       ],
+       "path": [
+        "planning",
+        "tasks",
+        "{{tid}}"
        ]
       },
       "description": ""

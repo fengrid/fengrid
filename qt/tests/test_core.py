@@ -1160,12 +1160,14 @@ def test_collections_v2_tree_and_refs(lib, tmp_path):
     from fengrid.core import colors as core_colors
     pal = core_colors.save_palette(lib, "P", ["#101418"])
 
-    parent = db.create_sub_collection(lib, "UI Kit")
+    parent = db.create_sub_collection(lib, "UI Kit", kind="icon")
     child = db.create_sub_collection(lib, "Buttons", parent_id=parent,
                                      tags="buttons, kit")
     assert db.add_collection_ref(lib, parent, "icon", aid)
-    assert db.add_collection_ref(lib, parent, "snippet", snip)
-    assert db.add_collection_ref(lib, child, "palette", pal)
+    # collections are single-type (#141): a snippet/palette cannot join
+    # an icon collection
+    assert db.add_collection_ref(lib, parent, "snippet", snip) is False
+    assert db.add_collection_ref(lib, parent, "palette", pal) is False
     # unknown kind / missing row rejected
     assert db.add_collection_ref(lib, parent, "car", 1) is False
     assert db.add_collection_ref(lib, parent, "icon", 99999) is False
@@ -1173,8 +1175,10 @@ def test_collections_v2_tree_and_refs(lib, tmp_path):
     tree = db.collection_tree(lib)
     p = next(c for c in tree if c["id"] == parent)
     ch = next(c for c in tree if c["id"] == child)
-    assert p["counts"] == {"icon": 1, "snippet": 1}
-    assert p["total"] == 2
+    assert p["kind"] == "icon"
+    assert ch["kind"] == "icon"       # sub-collections inherit the type
+    assert p["counts"] == {"icon": 1}
+    assert p["total"] == 1
     assert ch["parent_id"] == parent
     assert ch["tags"] == "buttons, kit"
 
@@ -1182,9 +1186,10 @@ def test_collections_v2_tree_and_refs(lib, tmp_path):
     assert next(c for c in db.collection_tree(lib)
                 if c["id"] == parent)["tags"] == "ui, shared"
 
-    ref = db.refs_for(lib, parent, "snippet")[0]
+    # the snippet/palette refs were rejected above — remove the icon ref
+    ref = db.refs_for(lib, parent, "icon")[0]
     db.remove_collection_ref(lib, ref["id"])
-    assert db.refs_for(lib, parent, "snippet") == []
+    assert db.refs_for(lib, parent, "icon") == []
 
     # deleting a parent re-parents children instead of orphaning them
     db.delete_collection(lib, parent)
@@ -1301,7 +1306,7 @@ def test_demo_install_roundtrip(lib, tmp_path):
     assert summary["installed"] is True
     assert summary["projects"] == 14
     assert summary["palettes"] == 8
-    assert summary["snippets"] == 12
+    assert summary["snippets"] == 14
     assert summary["icons"] == 20
     assert summary["font"] is True
 

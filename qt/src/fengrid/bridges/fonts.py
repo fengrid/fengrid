@@ -9,6 +9,7 @@ registered with QFontDatabase, so no WebEngine is involved in this pane.
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -144,10 +145,15 @@ class Fonts(QObject):
         self._starred_only = False
         self._types: list = []
         self._selected = ""
+        self._specimens: dict | None = None
         self._scanning = False
         self._rescan_pending = False
         self._scan_count = 0
         self._scan_total = 0
+        # #119: pane-wide custom preview text for the grid cards
+        # (persisted; empty = curated passages)
+        self._grid_sample = str(
+            settings.get(con, "grid_sample_text", "") or "")
         self._scan_path = ""
         self._thread = None
         self._worker = None
@@ -320,6 +326,70 @@ class Fonts(QObject):
     # -------------------------------------------------- specimen text
     sampleCustomChanged = Signal()
 
+    # #151: per-family custom preview text. The inspector's specimen
+    # field edits the SELECTED family's sample; the grid reads the whole
+    # map as ONE property (a QVariantMap lookup per card — plain C++
+    # reads, the #137 discipline: no per-card slot calls). Persisted in
+    # settings as a JSON map keyed by family name.
+    familySamplesChanged = Signal()
+
+    def _load_family_samples(self) -> dict:
+        cached = getattr(self, "_family_samples", None)
+        if cached is None:
+            try:
+                raw = settings.get(self._con, "family_samples", "")
+                cached = json.loads(raw) if raw else {}
+            except ValueError:
+                cached = {}
+            if not isinstance(cached, dict):
+                cached = {}
+            self._family_samples = cached
+        return cached
+
+    @Property("QVariantMap", notify=familySamplesChanged)
+    def familySamples(self) -> dict:
+        return self._load_family_samples()
+
+    @Slot(str, str)
+    def set_family_sample(self, family: str, text: str) -> None:
+        """Set (or, with empty text, clear) one family's custom preview
+        text. Other families keep the master text or the curated
+        passages — never the literal fallback."""
+        family = str(family or "").strip()
+        if not family:
+            return
+        samples = dict(self._load_family_samples())
+        text = str(text or "")
+        if text.strip():
+            samples[family] = text
+        else:
+            samples.pop(family, None)
+        settings.set(self._con, "family_samples", json.dumps(samples))
+        self._family_samples = samples
+        self.familySamplesChanged.emit()
+
+    # #119: pane-wide custom preview text — applies to every card in the
+    # grid (the inspector's per-font specimen field is separate and stays)
+    gridSampleChanged = Signal()
+
+    @Property(str, notify=gridSampleChanged)
+    def gridSample(self) -> str:
+        return getattr(self, "_grid_sample", "")
+
+    @Slot(str)
+    def set_grid_sample(self, text: str) -> None:
+        text = str(text or "").strip()
+        if text == getattr(self, "_grid_sample", ""):
+            return
+        self._grid_sample = text
+        settings.set(self._con, "grid_sample_text", text)
+        self.gridSampleChanged.emit()
+
+    @Slot()
+    def clear_grid_sample(self) -> None:
+        """Back to the curated per-bucket passages."""
+        self.set_grid_sample("")
+
     @Property(bool, notify=sampleCustomChanged)
     def sampleCustom(self) -> bool:
         return bool(getattr(self, "_sample_custom", False))
@@ -338,6 +408,75 @@ class Fonts(QObject):
         Fonts pane opens so the specimen text rotates each session."""
         from ..core import preview_text as core_preview
         self._samples = core_preview.reshuffle()
+        # #137: rebuild the property-side cache from the same draw so
+        # the grid's property reads follow the rotation
+        self._specimens = None
+        self._resolve_specimens()
+        self.specimensChanged.emit()
+
+    # #137: the per-bucket specimens as PROPERTIES. The grid card's
+    # bindings pick among them with plain property reads (cached C++
+    # lookups) — invoking the preview_text() slot from every card
+    # binding re-crossed the Python bridge once per visible card on
+    # EVERY grid resize (measured on a 514-family library: ~280 calls
+    # and a ≥3 s binding storm per slider notch — the reported
+    # "resource intensive and slow", and on larger libraries the
+    # mid-drag backlog froze the app, reading as a crash). The slot
+    # stays for single-shot callers (the inspector's specimen field).
+    specimensChanged = Signal()
+
+    def _resolve_specimens(self) -> dict:
+        """Build the per-bucket specimens lazily (same draw discipline
+        as preview_text: one random passage per bucket per session)."""
+        cached = getattr(self, "_specimens", None)
+        if cached is not None:
+            return cached
+        from ..core import preview_text as core_preview
+        self._samples = core_preview.reshuffle()
+        bps = core_preview.boundaries()
+        if len(bps) >= 3:
+            small_max, small_name = bps[0]
+            medium_max, medium_name = bps[1]
+            large_name = bps[-1][1]
+        else:                     # degenerate resources file — documented
+            small_max, small_name = 19, "small"   # defaults
+            medium_max, medium_name = 47, "medium"
+            large_name = "large"
+        specs = {
+            "small_max": int(small_max),
+            "medium_max": int(medium_max),
+            "small": self._samples.get(small_name, ""),
+            "medium": self._samples.get(medium_name, ""),
+            "large": self._samples.get(large_name, ""),
+        }
+        self._specimens = specs
+        return specs
+
+    @Property(int, notify=specimensChanged)
+    def smallMaxPx(self) -> int:
+        """Top edge of the small specimen bucket (the QML picker's
+        first comparison point)."""
+        return self._resolve_specimens()["small_max"]
+
+    @Property(int, notify=specimensChanged)
+    def mediumMaxPx(self) -> int:
+        """Top edge of the medium specimen bucket."""
+        return self._resolve_specimens()["medium_max"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenSmall(self) -> str:
+        """Curated passage for the small size class (px < smallMaxPx)."""
+        return self._resolve_specimens()["small"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenMedium(self) -> str:
+        """Curated passage for the medium size class."""
+        return self._resolve_specimens()["medium"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenLarge(self) -> str:
+        """Curated passage for the large size class (px > mediumMaxPx)."""
+        return self._resolve_specimens()["large"]
 
     @Slot(int, result=str)
     def preview_text(self, px: int) -> str:
@@ -412,6 +551,23 @@ class Fonts(QObject):
             "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
             " ORDER BY id LIMIT 1", (family,)).fetchone()
         return row[0] if row else -1
+
+    @Slot("QVariantList", result="QVariantList")
+    def checked_family_ids(self, families) -> list:
+        """Primary asset IDs for a list of family names (#115) — the
+        Properties panel's multi-select target. One id per family (the
+        family's first indexed row); unknown families silently drop."""
+        out = []
+        for fam in (families or []):
+            fam = str(fam)
+            if not fam:
+                continue
+            row = self._con.execute(
+                "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
+                " ORDER BY id LIMIT 1", (fam,)).fetchone()
+            if row:
+                out.append(row[0])
+        return out
 
     @Slot(str, str)
     def export_css(self, family: str, dest_dir: str) -> None:

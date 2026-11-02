@@ -5,7 +5,7 @@
 # PySide6 does not publish Windows ARM64 wheels on PyPI (status verified
 # 2026-10-18; re-verify before enabling this target). This image exists so
 # the pipeline target is explicit and fails with a clear message instead of
-# a cryptic pip error. The decision is recorded in
+# a cryptic installer error. The decision is recorded in
 # docs/architecture/0001-qt6-rewrite.md (risks).
 #
 # When wheels appear (or Qt/PySide is built from source), replace this file

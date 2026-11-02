@@ -73,6 +73,11 @@ class Taxonomy(QObject):
     def fields(self) -> list:
         return self._fields
 
+    @Slot(str, result="QVariantList")
+    def fields_for(self, kind: str) -> list:
+        """Definitions scoped to one asset class (NULL = all classes)."""
+        return core_tax.list_fields(self._con, kind or None)
+
     # ------------------------------------------------------ saved libraries
     @Slot(str, str, bool)
     def create_library_view(self, name: str, tags: str,
@@ -147,11 +152,13 @@ class Taxonomy(QObject):
         return core_tax.smart_asset_ids(self._con, item_kind, crit)
 
     # -------------------------------------------------------- custom fields
-    @Slot(str, str, str, result=int)
-    def create_field(self, name: str, ftype: str, options_json: str) -> int:
+    @Slot(str, str, str, str, result=int)
+    def create_field(self, name: str, ftype: str, options_json: str,
+                     kind: str = "") -> int:
         try:
             opts = json.loads(options_json or "{}")
-            fid = core_tax.create_field(self._con, name, ftype, opts)
+            fid = core_tax.create_field(self._con, name, ftype, opts,
+                                        kind or None)
         except (ValueError, json.JSONDecodeError) as e:
             self.message.emit(str(e))
             return -1
@@ -166,6 +173,17 @@ class Taxonomy(QObject):
         self._refresh()
         self.fieldsChanged.emit()
         self.message.emit("Field deleted")
+
+    @Slot("QVariantList", int, str, str)
+    def set_field_values_bulk(self, item_ids, field_id: int,
+                              value: str, kind: str = "icon") -> None:
+        try:
+            core_tax.set_field_values_bulk(self._con, item_ids, field_id,
+                                           value, kind)
+        except ValueError as e:
+            self.message.emit(str(e))
+            return
+        self.fieldsChanged.emit()
 
     @Slot(int, int, str, str)
     def set_field_value(self, item_id: int, field_id: int,
@@ -553,11 +571,101 @@ class Taxonomy(QObject):
         tags = core_db.tags_for(self._con, item_id, kind)
         fields = core_tax.asset_field_values(self._con, item_id, kind)
         links = core_tax.links_for(self._con, kind, item_id, "both")
-        return {"kind": kind, "id": item_id, "tags": tags,
+        # #120: the IDENTITY surface (GUID + slug) rides in the payload
+        # for every kind — fonts previously had no way to see either
+        guid, slug = self._guid_slug(kind, item_id)
+        return {"kind": kind, "id": item_id, "guid": guid, "slug": slug,
+                "tags": tags,
                 "fields": fields,
                 "links": links,
                 "meta": self._shaped_meta(self._kind_meta(kind, item_id)),
                 "starred": core_db.is_starred(self._con, item_id, kind)}
+
+    def _guid_slug(self, kind: str, item_id: int) -> tuple[str, str]:
+        """The (guid, slug) pair for an item's table row (#120)."""
+        table = {
+            "icon": "asset", "font": "asset", "image": "asset",
+            "video": "asset", "audio": "asset", "doc": "asset",
+            "data": "asset", "spatial": "asset", "timeseries": "asset",
+            "markdown": "asset", "snippet": "snippet", "palette": "palette",
+            "collection": "collection", "library": "library_view",
+            "project": "projects", "preset": "preset_library",
+            "preset_entry": "preset_entry",
+        }.get(kind)
+        if table is None:
+            return "", ""
+        row = self._con.execute(
+            f"SELECT guid, slug FROM {table} WHERE id = ?",
+            (item_id,)).fetchone()
+        if row is None:
+            return "", ""
+        return (row["guid"] or "", row["slug"] or "")
+
+    @Slot(str, "QVariantList", result="QVariantMap")
+    def selection_properties(self, kind: str, ids) -> dict:
+        """Aggregate properties over multiple items of one kind (#115) —
+        the Properties panel's multi-select summary for the Fonts pane.
+
+        Returns the same payload shape as item_properties so the panel's
+        bindings stay valid, but with aggregate data: tags shared by
+        EVERY selected item, a count, and aggregate meta (files, bytes,
+        formats). Custom fields and links are per-item and left empty —
+        a bulk-edit surface is a separate feature.
+        """
+        id_list = []
+        for i in (ids or []):
+            try:
+                v = int(i)
+                if v > 0:
+                    id_list.append(v)
+            except (TypeError, ValueError):
+                continue
+        if not id_list:
+            return {}
+        marks = ",".join("?" * len(id_list))
+        rows = self._con.execute(
+            f"SELECT id FROM asset WHERE kind = ? AND id IN ({marks})",
+            [kind, *id_list]).fetchall()
+        real_ids = [r[0] for r in rows]
+        if not real_ids:
+            return {}
+
+        # tags shared by EVERY selected item (set intersection)
+        tag_sets = None
+        for iid in real_ids:
+            tags = {t["name"] for t in core_db.tags_for(self._con, iid, kind)}
+            tag_sets = tags if tag_sets is None else (tag_sets & tags)
+        shared = sorted(tag_sets) if tag_sets else []
+
+        starred = sum(1 for iid in real_ids
+                      if core_db.is_starred(self._con, iid, kind))
+
+        if kind == "font":
+            meta = self._font_selection_meta(real_ids)
+        else:
+            meta = {}
+
+        return {"kind": kind, "id": -1, "multi": True,
+                "count": len(real_ids),
+                "tags": shared, "fields": [], "links": [],
+                "meta": self._shaped_meta(meta),
+                "starred": starred}
+
+    def _font_selection_meta(self, ids: list) -> dict:
+        """Aggregate stats over the selected font asset rows (#115)."""
+        marks = ",".join("?" * len(ids))
+        rows = self._con.execute(
+            f"SELECT family, ext, bytes FROM asset"
+            f" WHERE kind = 'font' AND id IN ({marks})", ids).fetchall()
+        fams: set = set()
+        fmts: dict = {}
+        total = 0
+        for r in rows:
+            fams.add(r["family"])
+            total += r["bytes"] or 0
+            fmts[r["ext"]] = fmts.get(r["ext"], 0) + 1
+        return {"families": len(fams), "files": len(rows),
+                "bytes": total, "formats": fmts}
 
     def _shaped_meta(self, meta: dict) -> dict:
         """Merge the full meta shape the QML panels read over a

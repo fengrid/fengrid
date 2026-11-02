@@ -138,28 +138,46 @@ SNIPPETS: list[dict] = [
     _snippet("Stat card", "Dashboard KPI tile with delta badge",
              "web",
              "<div class='stat'>\n  <span class='label'>MRR</span>\n"
-             "  <strong>$24.6k</strong>\n"
-             "  <span class='delta up'>▲ 8.4%</span>\n</div>",
+             "  <strong id='mrr'>$24.6k</strong>\n"
+             "  <span class='delta up' id='delta'>▲ 8.4%</span>\n</div>",
              ".stat { display: flex; flex-direction: column; gap: 4px;\n"
              "  padding: 18px; border-radius: var(--fg-radius);\n"
              "  background: var(--fg-surface); }\n"
              ".delta.up { color: #4FB286; font-size: 12px; }\n"
              ".delta.down { color: #E05B5B; font-size: 12px; }",
-             "", "demo, admin, dashboard"),
-    _snippet("Pricing table", "Three-tier pricing row",
+             "// recompute the KPI on every click — demo of state + DOM\n"
+             "let mrr = 24.6, up = true\n"
+             "document.getElementById('mrr').addEventListener('click', () => {\n"
+             "  mrr *= 1.084\n"
+             "  up = !up\n"
+             "  document.getElementById('mrr').textContent = '$' + mrr.toFixed(1) + 'k'\n"
+             "  const d = document.getElementById('delta')\n"
+             "  d.textContent = (up ? '▲ 8.4%' : '▼ 2.1%')\n"
+             "  d.className = 'delta ' + (up ? 'up' : 'down')\n"
+             "})", "demo, admin, dashboard"),
+    _snippet("Pricing table", "Three-tier pricing row with billing toggle",
              "web",
+             "<label class='toggle'><input type='checkbox' id='annual'>"
+             "Annual billing</label>\n"
              "<div class='tiers'>\n  <div class='tier'><h3>Starter</h3>"
-             "<p class='p'>$9</p><button>Choose</button></div>\n"
-             "  <div class='tier best'><h3>Pro</h3><p class='p'>$29</p>"
+             "<p class='p' data-m='9' data-a='7'>$9</p><button>Choose</button></div>\n"
+             "  <div class='tier best'><h3>Pro</h3><p class='p' data-m='29' data-a='24'>$29</p>"
              "<button>Choose</button></div>\n"
-             "  <div class='tier'><h3>Team</h3><p class='p'>$99</p>"
+             "  <div class='tier'><h3>Team</h3><p class='p' data-m='99' data-a='82'>$99</p>"
              "<button>Choose</button></div>\n</div>",
+             ".toggle { font-size: 13px; margin-bottom: 14px; }\n"
              ".tiers { display: grid; grid-template-columns:"
              " repeat(3, 1fr); gap: 14px; }\n"
              ".tier { padding: 22px; border-radius: 14px;"
              " border: 1px solid var(--fg-border); }\n"
              ".tier.best { outline: 2px solid var(--fg-accent); }",
-             "", "demo, saas, pricing"),
+             "// billing toggle swaps the price from data attributes\n"
+             "document.getElementById('annual').addEventListener('change', e => {\n"
+             "  const attr = e.target.checked ? 'data-a' : 'data-m'\n"
+             "  document.querySelectorAll('.p').forEach(p => {\n"
+             "    p.textContent = '$' + p.getAttribute(attr)\n"
+             "  })\n"
+             "})", "demo, saas, pricing"),
     _snippet("Email signature", "Table-based HTML signature (client-safe)",
              "web",
              "<table cellpadding='0' cellspacing='0'>\n  <tr>\n"
@@ -180,27 +198,47 @@ SNIPPETS: list[dict] = [
              "      <h1 style='margin:0;font-size:26px'>The Weekly Fen</h1>\n"
              "      <p style='margin:6px 0 0;opacity:.8'>Issue #12 — assets, fonts, tokens</p>\n"
              "    </td>\n  </tr>\n</table>",
-             "", "", "demo, email, newsletter"),
+             "/* email-safe: presentation stays inline; this sheet only\n"
+             "   sets the preview page's padding */\n"
+             "body { margin: 0; padding: 24px; }",
+             "", "demo, email, newsletter"),
     _snippet("Recipe card", "Markdown recipe template",
              "markdown",
              "",
              "",
              "",
              "demo, food, recipe"),
-    _snippet("Gallery grid", "Responsive photo grid with captions",
+    _snippet("Gallery grid", "Responsive photo grid with captions + lightbox",
              "web",
              "<div class='gallery'>\n  <figure><img src='' alt=''>"
              "<figcaption>Golden hour</figcaption></figure>\n"
              "  <figure><img src='' alt=''><figcaption>Low tide</figcaption></figure>\n"
              "  <figure><img src='' alt=''><figcaption>Dune walk</figcaption></figure>\n"
-             "</div>",
+             "</div>\n<div class='lightbox' id='lb'><img id='lbimg' src='' alt=''></div>",
              ".gallery { display: grid; grid-template-columns:"
              " repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }\n"
-             "figure { margin: 0; }\nimg { width: 100%; aspect-ratio: 1;"
+             "figure { margin: 0; cursor: zoom-in; }\n"
+             "img { width: 100%; aspect-ratio: 1;"
              " object-fit: cover; border-radius: 6px; }\n"
              "figcaption { font-size: 12px; color: var(--fg-muted);"
-             " padding-top: 4px; }",
-             "", "demo, portfolio, gallery"),
+             " padding-top: 4px; }\n"
+             ".lightbox { display: none; position: fixed; inset: 0;\n"
+             "  background: rgba(0,0,0,.8); align-items: center;\n"
+             "  justify-content: center; }\n"
+             ".lightbox.open { display: flex; }\n"
+             ".lightbox img { max-width: 80vw; max-height: 80vh;"
+             " border-radius: 8px; }",
+             "// lightbox: click a figure to enlarge, click anywhere to close\n"
+             "const lb = document.getElementById('lb')\n"
+             "const lbimg = document.getElementById('lbimg')\n"
+             "document.querySelectorAll('.gallery figure').forEach(f => {\n"
+             "  f.addEventListener('click', () => {\n"
+             "    lbimg.src = f.querySelector('img').src\n"
+             "    lb.classList.add('open')\n"
+             "  })\n"
+             "})\n"
+             "lb.addEventListener('click', () => lb.classList.remove('open'))",
+             "demo, portfolio, gallery"),
     _snippet("Code block style", "Pre/code styling for dev blogs",
              "web",
              "<pre><code class='lang'>const grid = css.grid('12')</code></pre>",
@@ -220,17 +258,31 @@ SNIPPETS: list[dict] = [
              ".cta { background: var(--fg-accent); color: var(--fg-bg);\n"
              "  border: 0; border-radius: var(--fg-radius);\n  padding: 12px 22px; }",
              "", "demo, marketing, hero"),
-    _snippet("Sticky navbar", "Minimal fixed top bar",
+    _snippet("Sticky navbar", "Minimal fixed top bar with mobile menu",
              "web",
              "<nav class='topbar'>\n  <span class='brand'>acme</span>\n"
-             "  <a href='#'>Docs</a><a href='#'>Pricing</a>\n"
-             "  <button>Sign in</button>\n</nav>",
+             "  <button class='burger' id='burger'>☰</button>\n"
+             "  <div class='links' id='links'>\n"
+             "    <a href='#'>Docs</a><a href='#'>Pricing</a>\n"
+             "    <button>Sign in</button>\n  </div>\n</nav>",
              ".topbar { position: sticky; top: 0; display: flex;\n"
              "  gap: 18px; align-items: center; padding: 12px 20px;\n"
              "  background: var(--fg-surface);\n"
              "  border-bottom: 1px solid var(--fg-border); }\n"
-             ".brand { font-weight: 700; margin-right: auto; }",
-             "", "demo, web, nav"),
+             ".brand { font-weight: 700; margin-right: auto; }\n"
+             ".burger { display: none; background: none; border: 0;\n"
+             "  font-size: 18px; cursor: pointer; }\n"
+             ".links { display: flex; gap: 16px; align-items: center; }\n"
+             "@media (max-width: 640px) {\n"
+             "  .burger { display: block; }\n"
+             "  .links { display: none; position: absolute; top: 100%;\n"
+             "    left: 0; right: 0; flex-direction: column;\n"
+             "    padding: 12px 20px; background: var(--fg-surface); }\n"
+             "  .links.open { display: flex; }\n}",
+             "// mobile menu toggle\n"
+             "document.getElementById('burger').addEventListener('click', () => {\n"
+             "  document.getElementById('links').classList.toggle('open')\n"
+             "})", "demo, web, nav"),
     _snippet("Testimonial", "Quote card with attribution",
              "web",
              "<blockquote class='quote'>\n  <p>Replaced four tools with one grid.</p>\n"
@@ -240,6 +292,61 @@ SNIPPETS: list[dict] = [
              "  background: var(--fg-surface); border-radius: 0 10px 10px 0; }\n"
              "footer { color: var(--fg-muted); font-size: 13px; }",
              "", "demo, marketing, social-proof"),
+    _snippet("Tabs", "Classic tab switcher with keyboard support",
+             "web",
+             "<div class='tabs'>\n  <div class='tablist' role='tablist'>\n"
+             "    <button class='tab active' data-tab='1'>Preview</button>\n"
+             "    <button class='tab' data-tab='2'>Code</button>\n"
+             "    <button class='tab' data-tab='3'>Notes</button>\n"
+             "  </div>\n"
+             "  <div class='panel active' data-panel='1'>Preview pane</div>\n"
+             "  <div class='panel' data-panel='2'>Code pane</div>\n"
+             "  <div class='panel' data-panel='3'>Notes pane</div>\n</div>",
+             ".tablist { display: flex; gap: 2px;\n"
+             "  border-bottom: 1px solid var(--fg-border); }\n"
+             ".tab { padding: 8px 14px; background: none; border: 0;\n"
+             "  cursor: pointer; color: var(--fg-muted);\n"
+             "  border-bottom: 2px solid transparent; }\n"
+             ".tab.active { color: var(--fg-accent);\n"
+             "  border-bottom-color: var(--fg-accent); }\n"
+             ".panel { display: none; padding: 16px 0; }\n"
+             ".panel.active { display: block; }",
+             "// tab switching — single delegated listener\n"
+             "document.querySelector('.tablist').addEventListener('click', e => {\n"
+             "  const btn = e.target.closest('.tab')\n"
+             "  if (!btn) return\n"
+             "  document.querySelectorAll('.tab').forEach(t =>\n"
+             "    t.classList.toggle('active', t === btn))\n"
+             "  document.querySelectorAll('.panel').forEach(p =>\n"
+             "    p.classList.toggle('active',\n"
+             "      p.dataset.panel === btn.dataset.tab))\n"
+             "})", "demo, toolkit, tabs"),
+    _snippet("Toast stack", "Auto-dismissing notification stack",
+             "web",
+             "<button id='fire'>Show toast</button>\n"
+             "<div class='stack' id='stack'></div>",
+             ".stack { position: fixed; bottom: 16px; right: 16px;\n"
+             "  display: flex; flex-direction: column; gap: 8px; }\n"
+             ".toast { padding: 10px 16px; border-radius: 8px;\n"
+             "  background: var(--fg-surface);\n"
+             "  border: 1px solid var(--fg-border);\n"
+             "  box-shadow: 0 4px 14px rgba(0,0,0,.25);\n"
+             "  animation: slide .2s ease; }\n"
+             ".toast.out { opacity: 0; transition: opacity .3s; }\n"
+             "@keyframes slide { from { transform: translateX(20px);"
+             " opacity: 0; } }",
+             "// toasts auto-dismiss after 2.5s with a fade\n"
+             "let n = 0\n"
+             "document.getElementById('fire').addEventListener('click', () => {\n"
+             "  const t = document.createElement('div')\n"
+             "  t.className = 'toast'\n"
+             "  t.textContent = 'Saved changes #' + (++n)\n"
+             "  document.getElementById('stack').appendChild(t)\n"
+             "  setTimeout(() => {\n"
+             "    t.classList.add('out')\n"
+             "    setTimeout(() => t.remove(), 300)\n"
+             "  }, 2500)\n"
+             "})", "demo, toolkit, notifications"),
     _snippet("Badge chips", "Small status chips",
              "web",
              "<span class='chip ok'>stable</span>\n"

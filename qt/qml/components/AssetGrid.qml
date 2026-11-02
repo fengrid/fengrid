@@ -14,20 +14,22 @@ Item {
     property var selectedIds: []
     readonly property bool anySelected: selectedIds.length > 0
     function toggleSelect(id) {
-        var next = []
+        var next = [];
         for (var i = 0; i < selectedIds.length; i++)
             if (selectedIds[i] !== id)
-                next.push(selectedIds[i])
+                next.push(selectedIds[i]);
         if (next.length === selectedIds.length)
-            next.push(id)
-        selectedIds = next
+            next.push(id);
+        selectedIds = next;
     }
     function isSelected(id) {
-        return selectedIds.indexOf(id) >= 0
+        return selectedIds.indexOf(id) >= 0;
     }
     Connections {
         target: library
-        function onListsChanged() { gridRoot.selectedIds = [] }
+        function onListsChanged() {
+            gridRoot.selectedIds = [];
+        }
     }
 
     GridView {
@@ -42,7 +44,7 @@ Item {
         cellWidth: Math.max(gridRoot.iconPx + 24, 84)
         cellHeight: cellWidth + 26
 
-        ScrollBar.vertical: ScrollBar { }
+        ScrollBar.vertical: ScrollBar {}
 
         delegate: Item {
             width: grid.cellWidth
@@ -53,12 +55,8 @@ Item {
                 anchors.fill: parent
                 anchors.margins: 4
                 radius: 8
-                color: cardMa.containsMouse ? theme.tokens.surface2
-                                            : theme.tokens.surface
-                border.color: grid.currentIndex === index
-                              ? theme.tokens.litPane
-                              : (cardMa.containsMouse ? theme.tokens.accent
-                                                      : theme.tokens.border)
+                color: cardMa.containsMouse ? theme.tokens.surface2 : theme.tokens.surface
+                border.color: grid.currentIndex === index ? theme.tokens.litPane : (cardMa.containsMouse ? theme.tokens.accent : theme.tokens.border)
                 border.width: grid.currentIndex === index ? 2 : 1
 
                 // selection checkbox — empty boxes hover-only; once ANY
@@ -72,11 +70,8 @@ Item {
                     anchors.left: parent.left
                     anchors.margins: 5
                     visible: cardMa.containsMouse || gridRoot.anySelected
-                    color: gridRoot.isSelected(model.id)
-                           ? theme.tokens.accent : theme.tokens.surface
-                    border.color: gridRoot.isSelected(model.id)
-                                  ? theme.tokens.accent
-                                  : theme.tokens.textMuted
+                    color: gridRoot.isSelected(model.id) ? theme.tokens.accent : theme.tokens.surface
+                    border.color: gridRoot.isSelected(model.id) ? theme.tokens.accent : theme.tokens.textMuted
                     border.width: 1
                     z: 3
                     IconImage {
@@ -123,10 +118,9 @@ Item {
                     anchors.margins: 5
                     width: 13
                     height: 13
-                    sourceSize.width: 26
-                    sourceSize.height: 26
-                    source: Icons.url("star", theme.tokens.litPane,
-                                      theme.tokens.litPane)
+                    sourceSize.width: 13
+                    sourceSize.height: 13
+                    source: Icons.url("star", theme.tokens.litPane, theme.tokens.litPane, 13)
                 }
                 Text {
                     id: cardLabel
@@ -155,36 +149,32 @@ Item {
                         // right-click opens the menu for the CURRENT
                         // selection without moving it
                         if (mouse.button === Qt.LeftButton) {
-                            if (mouse.modifiers & (Qt.ControlModifier
-                                                   | Qt.ShiftModifier)) {
-                                var start = grid.currentIndex >= 0
-                                            ? grid.currentIndex : index
+                            if (mouse.modifiers & (Qt.ControlModifier | Qt.ShiftModifier)) {
+                                var start = grid.currentIndex >= 0 ? grid.currentIndex : index;
                                 if (mouse.modifiers & Qt.ShiftModifier) {
                                     // range from the anchor item
-                                    var lo = Math.min(start, index)
-                                    var hi = Math.max(start, index)
-                                    var ids = []
+                                    var lo = Math.min(start, index);
+                                    var hi = Math.max(start, index);
+                                    var ids = [];
                                     for (var r = lo; r <= hi; r++) {
-                                        var rid = library.row_id(r)
-                                        if (rid >= 0 && !gridRoot
-                                            .isSelected(rid))
-                                            ids.push(rid)
+                                        var rid = library.row_id(r);
+                                        if (rid >= 0 && !gridRoot.isSelected(rid))
+                                            ids.push(rid);
                                     }
-                                    gridRoot.selectedIds =
-                                            gridRoot.selectedIds.concat(ids)
+                                    gridRoot.selectedIds = gridRoot.selectedIds.concat(ids);
                                 } else {
-                                    gridRoot.toggleSelect(model.id)
+                                    gridRoot.toggleSelect(model.id);
                                 }
-                                grid.currentIndex = index
+                                grid.currentIndex = index;
                             } else {
-                                gridRoot.selectedIds = []
-                                grid.currentIndex = index
+                                gridRoot.selectedIds = [];
+                                grid.currentIndex = index;
                             }
-                            grid.forceActiveFocus()
+                            grid.forceActiveFocus();
                         } else if (gridRoot.anySelected) {
-                            bulkMenu.popup()
+                            bulkMenu.popup();
                         } else {
-                            cardMenu.popup()
+                            cardMenu.popup();
                         }
                     }
                     onDoubleClicked: library.copy_name(index)
@@ -205,9 +195,9 @@ Item {
             }
 
             onOpened: {
-                var st = library.is_starred(grid.currentIndex)
-                starItem.starred = st
-                starItem.text = st ? qsTr("Unstar") : qsTr("Star")
+                var st = library.is_starred(grid.currentIndex);
+                starItem.starred = st;
+                starItem.text = st ? qsTr("Unstar") : qsTr("Star");
             }
 
             FgMenuItem {
@@ -219,14 +209,12 @@ Item {
                     text: starItem.text
                     font.family: theme.uiFont
                     font.pixelSize: 12
-                    color: starItem.starred ? theme.tokens.textMuted
-                                            : theme.tokens.hlInk
+                    color: starItem.starred ? theme.tokens.textMuted : theme.tokens.hlInk
                     verticalAlignment: Text.AlignVCenter
                     leftPadding: 10
                 }
                 background: Rectangle {
-                    color: starItem.hovered ? theme.tokens.surface2
-                                            : "transparent"
+                    color: starItem.hovered ? theme.tokens.surface2 : "transparent"
                     radius: 5
                 }
             }
@@ -252,8 +240,7 @@ Item {
                     leftPadding: 10
                 }
                 background: Rectangle {
-                    color: copyItem.hovered ? theme.tokens.surface2
-                                            : "transparent"
+                    color: copyItem.hovered ? theme.tokens.surface2 : "transparent"
                     radius: 5
                 }
             }
@@ -273,20 +260,19 @@ Item {
                     leftPadding: 10
                 }
                 background: Rectangle {
-                    color: linkItem.hovered ? theme.tokens.surface2
-                                            : "transparent"
+                    color: linkItem.hovered ? theme.tokens.surface2 : "transparent"
                     radius: 5
                 }
                 Menu {
                     id: linkSub
-                        cascade: true
-                    onAboutToShow: targets = taxonomy !== null
-                                   ? taxonomy.link_targets() : []
+                    cascade: true
+                    onAboutToShow: targets = taxonomy !== null ? taxonomy.link_targets() : []
                     property var targets: []
                     width: 230
                     padding: 4
                     background: Rectangle {
-                        radius: 8; color: theme.tokens.surface
+                        radius: 8
+                        color: theme.tokens.surface
                         border.color: theme.tokens.border
                     }
                     Repeater {
@@ -296,12 +282,10 @@ Item {
                             required property var modelData
                             height: 28
                             onTriggered: {
-                                var row = library.row(grid.currentIndex)
+                                var row = library.row(grid.currentIndex);
                                 if (row === null || taxonomy === null)
-                                    return
-                                taxonomy.add_link("icon", row.id,
-                                                  linkTarget.modelData.kind,
-                                                  linkTarget.modelData.id, "")
+                                    return;
+                                taxonomy.add_link("icon", row.id, linkTarget.modelData.kind, linkTarget.modelData.id, "");
                             }
                             contentItem: Text {
                                 text: linkTarget.modelData.label
@@ -313,8 +297,7 @@ Item {
                                 leftPadding: 10
                             }
                             background: Rectangle {
-                                color: linkTarget.hovered
-                                       ? theme.tokens.surface2 : "transparent"
+                                color: linkTarget.hovered ? theme.tokens.surface2 : "transparent"
                                 radius: 5
                             }
                         }
@@ -330,27 +313,25 @@ Item {
                 enabled: idFields.length > 0
                 onHoveredChanged: {
                     if (!hovered || taxonomy === null)
-                        return
-                    var out = []
-                    var all = taxonomy.fields
+                        return;
+                    var out = [];
+                    var all = taxonomy.fields_for("icon");
                     for (var i = 0; i < all.length; i++)
                         if (all[i].type === "id")
-                            out.push(all[i])
-                    idFields = out
-                    genIdSub.open(genIdItem, genIdItem.width, 0)
+                            out.push(all[i]);
+                    idFields = out;
+                    genIdSub.open(genIdItem, genIdItem.width, 0);
                 }
                 contentItem: Text {
                     text: genIdItem.text
                     font.family: theme.uiFont
                     font.pixelSize: 12
-                    color: genIdItem.enabled
-                           ? theme.tokens.text : theme.tokens.textMuted
+                    color: genIdItem.enabled ? theme.tokens.text : theme.tokens.textMuted
                     verticalAlignment: Text.AlignVCenter
                     leftPadding: 10
                 }
                 background: Rectangle {
-                    color: genIdItem.hovered ? theme.tokens.surface2
-                                             : "transparent"
+                    color: genIdItem.hovered ? theme.tokens.surface2 : "transparent"
                     radius: 5
                 }
                 Menu {
@@ -358,7 +339,8 @@ Item {
                     width: 200
                     padding: 4
                     background: Rectangle {
-                        radius: 8; color: theme.tokens.surface
+                        radius: 8
+                        color: theme.tokens.surface
                         border.color: theme.tokens.border
                     }
                     Repeater {
@@ -368,11 +350,10 @@ Item {
                             required property var modelData
                             height: 28
                             onTriggered: {
-                                var row = library.row(grid.currentIndex)
+                                var row = library.row(grid.currentIndex);
                                 if (row === null || taxonomy === null)
-                                    return
-                                taxonomy.generate_id(row.id,
-                                                     genIdTarget.modelData.id)
+                                    return;
+                                taxonomy.generate_id(row.id, genIdTarget.modelData.id);
                             }
                             contentItem: Text {
                                 text: genIdTarget.modelData.name
@@ -384,8 +365,7 @@ Item {
                                 leftPadding: 10
                             }
                             background: Rectangle {
-                                color: genIdTarget.hovered
-                                       ? theme.tokens.surface2 : "transparent"
+                                color: genIdTarget.hovered ? theme.tokens.surface2 : "transparent"
                                 radius: 5
                             }
                         }
@@ -396,16 +376,40 @@ Item {
                 id: exportItem
                 text: qsTr("Export…")
                 height: 30
-                onTriggered: cardExport.openWith(
-                    [{ id: "png", label: "PNG" },
-                     { id: "jpeg", label: "JPEG" },
-                     { id: "webp", label: "WebP" },
-                     { id: "ico", label: "ICO" },
-                     { id: "pdf", label: "PDF" },
-                     { id: "gif", label: "GIF" },
-                     { id: "tiff", label: "TIFF" },
-                     { id: "bmp", label: "BMP" }],
-                    library !== null ? library.lastExportDir : "")
+                onTriggered: cardExport.openWith([
+                    {
+                        id: "png",
+                        label: "PNG"
+                    },
+                    {
+                        id: "jpeg",
+                        label: "JPEG"
+                    },
+                    {
+                        id: "webp",
+                        label: "WebP"
+                    },
+                    {
+                        id: "ico",
+                        label: "ICO"
+                    },
+                    {
+                        id: "pdf",
+                        label: "PDF"
+                    },
+                    {
+                        id: "gif",
+                        label: "GIF"
+                    },
+                    {
+                        id: "tiff",
+                        label: "TIFF"
+                    },
+                    {
+                        id: "bmp",
+                        label: "BMP"
+                    }
+                ], library !== null ? library.lastExportDir : "")
             }
             FgMenuItem {
                 id: collMenuItem
@@ -421,14 +425,13 @@ Item {
                     leftPadding: 10
                 }
                 background: Rectangle {
-                    color: collMenuItem.hovered ? theme.tokens.surface2
-                                                : "transparent"
+                    color: collMenuItem.hovered ? theme.tokens.surface2 : "transparent"
                     radius: 5
                 }
 
                 Menu {
                     id: collSubmenu
-                        cascade: true
+                    cascade: true
                     width: 190
                     padding: 4
                     background: Rectangle {
@@ -443,8 +446,7 @@ Item {
                             required property var modelData
                             text: collItem.modelData.name
                             height: 28
-                            onTriggered: library.add_to_collection(
-                                grid.currentIndex, collItem.modelData.id)
+                            onTriggered: library.add_to_collection(grid.currentIndex, collItem.modelData.id)
                             contentItem: Text {
                                 text: collItem.modelData.name
                                 font.family: theme.uiFont
@@ -455,8 +457,7 @@ Item {
                                 leftPadding: 10
                             }
                             background: Rectangle {
-                                color: collItem.hovered
-                                       ? theme.tokens.surface2 : "transparent"
+                                color: collItem.hovered ? theme.tokens.surface2 : "transparent"
                                 radius: 5
                             }
                         }
@@ -464,91 +465,122 @@ Item {
                 }
             }
 
-        // bulk actions over the multi-selection (right-click while ≥1
-        // checkbox is checked)
-        Menu {
-            id: bulkMenu
-            width: 220
-            padding: 4
-            background: Rectangle {
-                radius: 8
-                color: theme.tokens.surface
-                border.color: theme.tokens.border
-            }
-            FgMenuItem {
-                text: qsTr("Star all selected (%1)").arg(
-                          gridRoot.selectedIds.length)
-                height: 28
-                onTriggered: {
-                    for (var i = 0; i < gridRoot.selectedIds.length; i++)
-                        library.set_starred_item(gridRoot.selectedIds[i],
-                                                 true)
-                    gridRoot.selectedIds = []
+            // bulk actions over the multi-selection (right-click while ≥1
+            // checkbox is checked)
+            Menu {
+                id: bulkMenu
+                width: 220
+                padding: 4
+                background: Rectangle {
+                    radius: 8
+                    color: theme.tokens.surface
+                    border.color: theme.tokens.border
                 }
-            }
-            FgMenuItem {
-                text: qsTr("Unstar all selected")
-                height: 28
-                onTriggered: {
-                    for (var i = 0; i < gridRoot.selectedIds.length; i++)
-                        library.set_starred_item(gridRoot.selectedIds[i],
-                                                 false)
-                    gridRoot.selectedIds = []
-                }
-            }
-            FgMenuItem {
-                id: bulkCollItem
-                text: qsTr("Add all to collection…")
-                height: 28
-                enabled: library !== null
-                         && library.collections.length > 0
-                Menu {
-                    id: bulkCollSub
-                        cascade: true
-                    width: 200
-                    padding: 4
-                    background: Rectangle {
-                        radius: 8; color: theme.tokens.surface
-                        border.color: theme.tokens.border
+                FgMenuItem {
+                    text: qsTr("Star all selected (%1)").arg(gridRoot.selectedIds.length)
+                    height: 28
+                    onTriggered: {
+                        for (var i = 0; i < gridRoot.selectedIds.length; i++)
+                            library.set_starred_item(gridRoot.selectedIds[i], true);
+                        gridRoot.selectedIds = [];
                     }
-                    Repeater {
-                        model: library !== null ? library.collections : []
-                        FgMenuItem {
-                            id: bulkCollTarget
-                            required property var modelData
-                            height: 28
-                            onTriggered: {
-                                for (var i = 0; i < gridRoot.selectedIds
-                                         .length; i++)
-                                    library.add_item_to_collection(
-                                        bulkCollTarget.modelData.id, "icon",
-                                        gridRoot.selectedIds[i], "")
-                                gridRoot.selectedIds = []
-                            }
-                            contentItem: Text {
-                                text: bulkCollTarget.modelData.name
-                                font.family: theme.uiFont
-                                font.pixelSize: 11
-                                color: theme.tokens.text
-                                elide: Text.ElideRight
-                                verticalAlignment: Text.AlignVCenter
-                                leftPadding: 10
-                            }
-                            background: Rectangle {
-                                color: bulkCollTarget.hovered
-                                       ? theme.tokens.surface2 : "transparent"
-                                radius: 5
+                }
+                FgMenuItem {
+                    text: qsTr("Unstar all selected")
+                    height: 28
+                    onTriggered: {
+                        for (var i = 0; i < gridRoot.selectedIds.length; i++)
+                            library.set_starred_item(gridRoot.selectedIds[i], false);
+                        gridRoot.selectedIds = [];
+                    }
+                }
+                FgMenuItem {
+                    id: bulkCollItem
+                    text: qsTr("Add all to collection…")
+                    height: 28
+                    enabled: library !== null && library.collections.length > 0
+                    Menu {
+                        id: bulkCollSub
+                        cascade: true
+                        width: 200
+                        padding: 4
+                        background: Rectangle {
+                            radius: 8
+                            color: theme.tokens.surface
+                            border.color: theme.tokens.border
+                        }
+                        Repeater {
+                            model: library !== null ? library.collections : []
+                            FgMenuItem {
+                                id: bulkCollTarget
+                                required property var modelData
+                                height: 28
+                                onTriggered: {
+                                    for (var i = 0; i < gridRoot.selectedIds.length; i++)
+                                        library.add_item_to_collection(bulkCollTarget.modelData.id, "icon", gridRoot.selectedIds[i], "");
+                                    gridRoot.selectedIds = [];
+                                }
+                                contentItem: Text {
+                                    text: bulkCollTarget.modelData.name
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 11
+                                    color: theme.tokens.text
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: 10
+                                }
+                                background: Rectangle {
+                                    color: bulkCollTarget.hovered ? theme.tokens.surface2 : "transparent"
+                                    radius: 5
+                                }
                             }
                         }
                     }
                 }
+                FgMenuItem {
+                    text: qsTr("Export all selected (%1)…").arg(gridRoot.selectedIds.length)
+                    height: 28
+                    onTriggered: bulkExport.openWith([
+                        {
+                            id: "png",
+                            label: "PNG"
+                        },
+                        {
+                            id: "jpeg",
+                            label: "JPEG"
+                        },
+                        {
+                            id: "webp",
+                            label: "WebP"
+                        },
+                        {
+                            id: "ico",
+                            label: "ICO"
+                        },
+                        {
+                            id: "pdf",
+                            label: "PDF"
+                        },
+                        {
+                            id: "gif",
+                            label: "GIF"
+                        },
+                        {
+                            id: "tiff",
+                            label: "TIFF"
+                        },
+                        {
+                            id: "bmp",
+                            label: "BMP"
+                        }
+                    ], library !== null ? library.lastExportDir : "")
+                }
+                FgMenuItem {
+                    text: qsTr("Clear selection")
+                    height: 28
+                    onTriggered: gridRoot.selectedIds = []
+                }
             }
-            FgMenuItem {
-                text: qsTr("Clear selection")
-                height: 28
-                onTriggered: gridRoot.selectedIds = []
-            }
-        }
         }
 
         // empty / first-run / no-match states
@@ -564,7 +596,9 @@ Item {
                 Repeater {
                     model: 4
                     Rectangle {
-                        width: 26; height: 26; radius: 6
+                        width: 26
+                        height: 26
+                        radius: 6
                         color: "transparent"
                         border.color: theme.tokens.border
                         border.width: 2
@@ -574,11 +608,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.min(340, gridRoot.width - 40)
-                text: (library !== null && library.scanning)
-                      ? qsTr("Indexing your icon folders…")
-                      : (library !== null && library.totalAssets === 0
-                         ? qsTr("No assets found on this machine yet")
-                         : qsTr("No assets match the current filters"))
+                text: (library !== null && library.scanning) ? qsTr("Indexing your icon folders…") : (library !== null && library.totalAssets === 0 ? qsTr("No assets found on this machine yet") : qsTr("No assets match the current filters"))
                 color: theme.tokens.text
                 font.family: theme.uiFont
                 font.pixelSize: 14
@@ -589,15 +619,11 @@ Item {
                 id: emptyCta
                 anchors.horizontalCenter: parent.horizontalCenter
                 enabled: library === null ? false : !library.scanning
-                text: library !== null && library.scanning ? qsTr("Scanning…")
-                      : (library !== null && library.totalAssets === 0
-                         ? qsTr("Scan now") : qsTr("Clear filters"))
-                onClicked: library.totalAssets === 0 ? library.rescan()
-                                                     : library.clear_filters()
+                text: library !== null && library.scanning ? qsTr("Scanning…") : (library !== null && library.totalAssets === 0 ? qsTr("Scan now") : qsTr("Clear filters"))
+                onClicked: library.totalAssets === 0 ? library.rescan() : library.clear_filters()
                 background: Rectangle {
                     radius: 6
-                    color: emptyCta.enabled ? theme.tokens.accent
-                                            : theme.tokens.border
+                    color: emptyCta.enabled ? theme.tokens.accent : theme.tokens.border
                 }
                 contentItem: Text {
                     text: emptyCta.text
@@ -625,8 +651,9 @@ Item {
                 Layout.fillWidth: true
                 spacing: 8
                 Text {
-                    text: qsTr("size")
-                    font.family: theme.monoFont; font.pixelSize: 10
+                    text: qsTr("Size")
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
                     color: theme.tokens.textMuted
                     Layout.preferredWidth: 40
                 }
@@ -635,41 +662,113 @@ Item {
                     model: ["orig", "16", "32", "64", "128", "256"]
                     currentIndex: 0
                     onActivated: function (idx) {
-                        cardExport.exportSize = exportSizeBox.model[idx]
+                        cardExport.exportSize = exportSizeBox.model[idx];
                     }
                     background: Rectangle {
-                        radius: 4; color: theme.tokens.surface2
+                        radius: 4
+                        color: theme.tokens.surface2
                         border.color: theme.tokens.border
                     }
                     contentItem: Text {
                         text: exportSizeBox.displayText
-                        font.family: theme.monoFont; font.pixelSize: 10
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
                         color: theme.tokens.text
-                        verticalAlignment: Text.AlignVCenter; leftPadding: 6
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 6
                     }
                 }
-                Item { Layout.fillWidth: true }
+                Item {
+                    Layout.fillWidth: true
+                }
                 Text {
                     text: qsTr("applies to every selected format")
-                    font.family: theme.uiFont; font.pixelSize: 9
+                    font.family: theme.uiFont
+                    font.pixelSize: 9
                     color: theme.tokens.textMuted
                 }
             }
         ]
         onDoExport: function (formats, dest) {
             for (var i = 0; i < formats.length; i++)
-                library.export_asset(grid.currentIndex, formats[i],
-                                     cardExport.exportSize, dest)
+                library.export_asset(grid.currentIndex, formats[i], cardExport.exportSize, dest);
         }
     }
-    Toast { id: exportToast }
+    Toast {
+        id: exportToast
+    }
     Connections {
         target: library
         function onExportDone(path) {
-            exportToast.show(qsTr("Exported: %1").arg(path))
+            exportToast.show(qsTr("Exported: %1").arg(path));
         }
         function onExportFailed(err) {
-            exportToast.show(qsTr("Export failed: %1").arg(err))
+            exportToast.show(qsTr("Export failed: %1").arg(err));
+        }
+    }
+
+    // bulk export: the checkbox selection goes through ONE dataio job —
+    // every selected asset, every checked format, into one folder
+    ExportDialog {
+        id: bulkExport
+        headline: qsTr("Export selection")
+        options: [
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Text {
+                    text: qsTr("Size")
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
+                    color: theme.tokens.textMuted
+                    Layout.preferredWidth: 40
+                }
+                ComboBox {
+                    id: bulkSizeBox
+                    model: ["orig", "16", "32", "64", "128", "256"]
+                    currentIndex: 0
+                    onActivated: function (idx) {
+                        bulkExport.exportSize = bulkSizeBox.model[idx];
+                    }
+                    background: Rectangle {
+                        radius: 4
+                        color: theme.tokens.surface2
+                        border.color: theme.tokens.border
+                    }
+                    contentItem: Text {
+                        text: bulkSizeBox.displayText
+                        font.family: theme.monoFont
+                        font.pixelSize: 10
+                        color: theme.tokens.text
+                        verticalAlignment: Text.AlignVCenter
+                        leftPadding: 6
+                    }
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                Text {
+                    text: qsTr("applies to every selected format")
+                    font.family: theme.uiFont
+                    font.pixelSize: 9
+                    color: theme.tokens.textMuted
+                }
+            }
+        ]
+        onDoExport: function (formats, dest) {
+            if (library === null || dataio === null)
+                return;
+            var paths = library.selection_paths(gridRoot.selectedIds);
+            if (!paths.length)
+                return;
+            var opts = {
+                icon_fmts: formats,
+                icon_size: bulkExport.exportSize,
+                tint: "",
+                script: "",
+                script_enabled: false
+            };
+            dataio.exportIcons(paths, dest, JSON.stringify(opts));
         }
     }
 
@@ -679,9 +778,8 @@ Item {
     Connections {
         target: grid
         function onAtYEndChanged() {
-            if (library !== null && grid.atYEnd && !library.scanning
-                    && library.gridCapped)
-                library.loadMore()
+            if (library !== null && grid.atYEnd && !library.scanning && library.gridCapped)
+                library.loadMore();
         }
     }
     Rectangle {
@@ -699,8 +797,7 @@ Item {
         Text {
             id: pagerRow
             anchors.centerIn: parent
-            text: qsTr("showing %1 of %2 · scroll to load more")
-                  .arg(grid.count).arg(library.gridTotal)
+            text: qsTr("Showing %1 of %2 · Scroll to Load More").arg(grid.count).arg(library.gridTotal)
             font.family: theme.monoFont
             font.pixelSize: 10
             color: theme.tokens.textMuted

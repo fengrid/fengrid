@@ -49,16 +49,19 @@ fi
 
 cd "$QT_DIR"
 
-if [ "${FENGRID_IN_CONTAINER:-0}" != "1" ]; then
-    python3 -m venv .venv
-    # shellcheck disable=SC1091
-    . .venv/bin/activate
+# Frozen build environment (uv project — pyproject.toml + committed uv.lock).
+# Prod installs the build group only; dev adds the dev group (pytest/ruff).
+# uv sync creates/reuses qt/.venv (same venv layout pip produced), so the
+# PyInstaller invocation below is unchanged. The FENGRID_IN_CONTAINER knob is
+# gone — macOS builds never ran in a container, and uv now handles both worlds
+# identically anyway.
+if [ "$VARIANT" = "dev" ]; then
+    uv sync --frozen --group build      # dev group is included by default
+else
+    uv sync --frozen --no-dev --group build
 fi
-
-python -m pip install --upgrade pip wheel
-REQS="$ROOT/build/requirements-build.txt"
-[ "$VARIANT" = "dev" ] && REQS="$ROOT/build/requirements-dev.txt"
-python -m pip install -r "$REQS"
+# shellcheck disable=SC1091
+. .venv/bin/activate
 python -c "import PySide6; print('PySide6', PySide6.__version__)"
 
 # build provenance (#43): stamp the commit for the About screen

@@ -16,7 +16,7 @@ Rectangle {
 
     property string category: "all"
     property string query: ""
-    signal closed()
+    signal closed
 
     // absorb clicks/hover so the rail and panes beneath never react
     MouseArea {
@@ -26,29 +26,29 @@ Rectangle {
 
     function matches(section, label, keys) {
         if (category !== "all" && section !== category)
-            return false
+            return false;
         if (query === "")
-            return true
-        var hay = (label + " " + keys + " " + section).toLowerCase()
-        return hay.indexOf(query.toLowerCase()) >= 0
+            return true;
+        var hay = (label + " " + keys + " " + section).toLowerCase();
+        return hay.indexOf(query.toLowerCase()) >= 0;
     }
-    function showCategory(name) { category = name }
+    function showCategory(name) {
+        category = name;
+    }
 
     // dataio options flow: QML edits a COPY of the map, writes it back
     function setImportOpt(k, v) {
-        var m = JSON.parse(JSON.stringify(
-            dataio !== null ? dataio.importOpts : {}))
-        m[k] = v
-        dataio.setImportOpts(m)
+        var m = JSON.parse(JSON.stringify(dataio !== null ? dataio.importOpts : {}));
+        m[k] = v;
+        dataio.setImportOpts(m);
     }
     function setExportOpt(k, v) {
-        var m = JSON.parse(JSON.stringify(
-            dataio !== null ? dataio.exportOpts : {}))
-        m[k] = v
-        dataio.setExportOpts(m)
+        var m = JSON.parse(JSON.stringify(dataio !== null ? dataio.exportOpts : {}));
+        m[k] = v;
+        dataio.setExportOpts(m);
     }
     function url2path(u) {
-        return Icons.toLocalPath(u)   // single source of truth (#41)
+        return Icons.toLocalPath(u);   // single source of truth (#41)
     }
     // #81 dialog telemetry: every browse-button click, retry and dialog
     // resolution lands in crash.log via the prefs bridge, so a "the
@@ -58,25 +58,26 @@ Rectangle {
     // resolved-accepted|resolved-rejected, ms = open→resolution time.
     function dialogEvent(name, event, ms) {
         if (prefs !== null)
-            prefs.noteDialogEvent(name, event, ms || 0)
+            prefs.noteDialogEvent(name, event, ms || 0);
     }
     // #51: every file/folder dialog opens in the last folder the user
     // visited (persisted in prefs.lastDialogDir, a plain local path —
     // encodeURI turns it into the file:// URL the dialogs bind to)
     function lastDialogUrl() {
-        return (prefs !== null && prefs.lastDialogDir !== "")
-            ? encodeURI("file://" + prefs.lastDialogDir) : ""
+        return (prefs !== null && prefs.lastDialogDir !== "") ? encodeURI("file://" + prefs.lastDialogDir) : "";
     }
     function rememberDialogDir(u) {
         if (prefs !== null && u !== undefined && u !== "")
-            prefs.rememberDialogDir(url2path(u))
+            prefs.rememberDialogDir(url2path(u));
     }
     function toggleFmt(list, fmt) {
-        var out = []
+        var out = [];
         for (var i = 0; i < list.length; i++)
-            if (list[i] !== fmt) out.push(list[i])
-        if (out.length === list.length) out.push(fmt)
-        return out.length ? out : ["png"]
+            if (list[i] !== fmt)
+                out.push(list[i]);
+        if (out.length === list.length)
+            out.push(fmt);
+        return out.length ? out : ["png"];
     }
     // live dataio state for the section
     property var watchRows: []
@@ -92,77 +93,94 @@ Rectangle {
     property int jobTotal: 0
     property string csvColumn: "0"
     property string pendingRestore: ""
+    // #98: VS Code snippet scan results — set by the Import & Watch row's
+    // scan button, read by the snippet scan popup
+    property var snipScanResults: []
     function refreshData() {
-        if (dataio === null) return
-        watchRows = dataio.watches()
-        transportRows = dataio.transports()
-        backupRows = dataio.backups()
-        csvPath = (dataio.importOpts.csv_path || "")
-        jobBusy = dataio.jobRunning
+        if (dataio === null)
+            return;
+        watchRows = dataio.watches();
+        transportRows = dataio.transports();
+        backupRows = dataio.backups();
+        csvPath = (dataio.importOpts.csv_path || "");
+        jobBusy = dataio.jobRunning;
     }
     Component.onCompleted: refreshData()
     Connections {
         target: dataio
-        function onWatchesChanged() { settingsRoot.watchRows = dataio.watches() }
-        function onBackupsChanged() { settingsRoot.backupRows = dataio.backups() }
-        function onTransportsChanged() { settingsRoot.transportRows = dataio.transports() }
+        function onWatchesChanged() {
+            settingsRoot.watchRows = dataio.watches();
+        }
+        function onBackupsChanged() {
+            settingsRoot.backupRows = dataio.backups();
+        }
+        function onTransportsChanged() {
+            settingsRoot.transportRows = dataio.transports();
+        }
         function onJobStarted(kind) {
-            settingsRoot.jobBusy = true
-            settingsRoot.jobDone = 0
-            settingsRoot.jobTotal = 0
+            settingsRoot.jobBusy = true;
+            settingsRoot.jobDone = 0;
+            settingsRoot.jobTotal = 0;
         }
         function onJobProgress(kind, done, total) {
-            settingsRoot.jobDone = done
-            settingsRoot.jobTotal = total
+            settingsRoot.jobDone = done;
+            settingsRoot.jobTotal = total;
         }
-        function onJobDone(kind, msg) { settingsRoot.jobBusy = false }
-        function onJobFailed(kind, err) { settingsRoot.jobBusy = false }
-        function onAdminDone(op, summary) { settingsRoot.adminResult = summary }
-        function onStatsChanged() {}
+        function onJobDone(kind, msg) {
+            settingsRoot.jobBusy = false;
+        }
+        function onJobFailed(kind, err) {
+            settingsRoot.jobBusy = false;
+        }
+        function onAdminDone(op, summary) {
+            settingsRoot.adminResult = summary;
+        }
+        function onStatsChanged() {
+        }
     }
 
     // user folders = registered sources that are NOT detected system
     // paths (system icon roots / font dirs are listed separately)
     readonly property var customFolders: {
         if (library === null || prefs === null)
-            return []
-        var sys = {}
-        var icons = prefs.systemIconPaths
-        var fontsDirs = prefs.systemFontDirs
+            return [];
+        var sys = {};
+        var icons = prefs.systemIconPaths;
+        var fontsDirs = prefs.systemFontDirs;
         for (var i = 0; i < icons.length; i++)
-            sys[icons[i]] = true
+            sys[icons[i]] = true;
         for (var j = 0; j < fontsDirs.length; j++)
-            sys[fontsDirs[j]] = true
-        var out = []
-        var srcs = library.sources          // notify dep: sourcesChanged
+            sys[fontsDirs[j]] = true;
+        var out = [];
+        var srcs = library.sources;          // notify dep: sourcesChanged
         for (var k = 0; k < srcs.length; k++) {
             if (!sys[srcs[k].path])
-                out.push(srcs[k])
+                out.push(srcs[k]);
         }
-        return out
+        return out;
     }
     readonly property var enabledMap: {
-        var map = {}
+        var map = {};
         if (library === null)
-            return map
-        var s = library.sources
+            return map;
+        var s = library.sources;
         for (var i = 0; i < s.length; i++)
-            map[s[i].path] = s[i].enabled
-        return map
+            map[s[i].path] = s[i].enabled;
+        return map;
     }
     function pathEnabled(path) {
         if (library === null)
-            return true
-        return path in enabledMap ? enabledMap[path] : true
+            return true;
+        return path in enabledMap ? enabledMap[path] : true;
     }
     function rescanKind(kind) {
         if (kind === "fontroot")
-            fonts.rescan()
+            fonts.rescan();
         else
-            library.rescan()
+            library.rescan();
     }
     function baseName(path) {
-        return path.replace(/\\/g, "/").split("/").pop()
+        return path.replace(/\\/g, "/").split("/").pop();
     }
 
     RowLayout {
@@ -196,7 +214,9 @@ Rectangle {
                 AbstractButton {
                     width: parent.width
                     implicitHeight: 28
-                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    HoverHandler {
+                        cursorShape: Qt.PointingHandCursor
+                    }
                     contentItem: Row {
                         leftPadding: 10
                         spacing: 8
@@ -216,43 +236,83 @@ Rectangle {
                     }
                     background: Rectangle {
                         radius: 5
-                        color: parent.hovered ? theme.tokens.surface2
-                                              : "transparent"
+                        color: parent.hovered ? theme.tokens.surface2 : "transparent"
                     }
                     onClicked: settingsRoot.closed()
                 }
                 Repeater {
                     model: [
-                        { k: "all", t: qsTr("All settings") },
-                        { k: "general", t: qsTr("General") },
-                        { k: "appearance", t: qsTr("Appearance") },
-                        { k: "library", t: qsTr("Library") },
-                        { k: "storage", t: qsTr("Storage") },
-                        { k: "import", t: qsTr("Import & Watch") },
-                        { k: "export", t: qsTr("Export") },
-                        { k: "backup", t: qsTr("Backup") },
-                        { k: "database", t: qsTr("Database") },
-                        { k: "sc", t: qsTr("Source control") },
-                        { k: "editor", t: qsTr("Editor") },
-                        { k: "colors", t: qsTr("Colors") },
-                        { k: "updates", t: qsTr("Updates") },
-                        { k: "about", t: qsTr("About") }
+                        {
+                            k: "all",
+                            t: qsTr("All settings")
+                        },
+                        {
+                            k: "general",
+                            t: qsTr("General")
+                        },
+                        {
+                            k: "appearance",
+                            t: qsTr("Appearance")
+                        },
+                        {
+                            k: "library",
+                            t: qsTr("Library")
+                        },
+                        {
+                            k: "storage",
+                            t: qsTr("Storage")
+                        },
+                        {
+                            k: "import",
+                            t: qsTr("Import & Watch")
+                        },
+                        {
+                            k: "export",
+                            t: qsTr("Export")
+                        },
+                        {
+                            k: "backup",
+                            t: qsTr("Backup")
+                        },
+                        {
+                            k: "database",
+                            t: qsTr("Database")
+                        },
+                        {
+                            k: "sc",
+                            t: qsTr("Source control")
+                        },
+                        {
+                            k: "editor",
+                            t: qsTr("Editor")
+                        },
+                        {
+                            k: "colors",
+                            t: qsTr("Colors")
+                        },
+                        {
+                            k: "updates",
+                            t: qsTr("Updates")
+                        },
+                        {
+                            k: "about",
+                            t: qsTr("About")
+                        }
                     ]
                     delegate: Rectangle {
                         id: navItem
                         required property var modelData
                         width: navCol.width
                         height: 30
-                        color: settingsRoot.category === modelData.k
-                               ? theme.tokens.surface2 : "transparent"
-                        Rectangle {      // selection bar
+                        color: settingsRoot.category === modelData.k ? theme.tokens.surface2 : "transparent"
+                        Rectangle {
+                            // selection bar
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             width: 3
                             height: parent.height - 12
                             radius: 1.5
-                            color: settingsRoot.category === modelData.k
-                                   ? theme.tokens.accent : "transparent"
+                            color: settingsRoot.category === modelData.k ? theme.tokens.accent : "transparent"
                         }
                         Text {
                             anchors.left: parent.left
@@ -261,8 +321,7 @@ Rectangle {
                             text: navItem.modelData.t
                             font.family: theme.uiFont
                             font.pixelSize: 12
-                            color: settingsRoot.category === navItem.modelData.k
-                                   ? theme.tokens.text : theme.tokens.textMuted
+                            color: settingsRoot.category === navItem.modelData.k ? theme.tokens.text : theme.tokens.textMuted
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -308,8 +367,7 @@ Rectangle {
                     Layout.preferredHeight: 30
                     radius: 6
                     color: theme.tokens.surface2
-                    border.color: queryField.activeFocus
-                                  ? theme.tokens.accent : theme.tokens.border
+                    border.color: queryField.activeFocus ? theme.tokens.accent : theme.tokens.border
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 9
@@ -323,7 +381,7 @@ Rectangle {
                         TextField {
                             id: queryField
                             Layout.fillWidth: true
-                            placeholderText: qsTr("search settings")
+                            placeholderText: qsTr("Search Settings")
                             background: null
                             color: theme.tokens.text
                             placeholderTextColor: theme.tokens.textMuted
@@ -364,23 +422,18 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("Smart"), qsTr("Fuzzy"),
-                                        qsTr("Regex"), qsTr("Content")]
+                                model: [qsTr("Smart"), qsTr("Fuzzy"), qsTr("Regex"), qsTr("Content")]
                                 function syncIndex() {
-                                    currentIndex = ["smart", "fuzzy", "regex",
-                                                    "content"].indexOf(
-                                        library !== null ? library.searchMode
-                                                         : "smart")
+                                    currentIndex = ["smart", "fuzzy", "regex", "content"].indexOf(library !== null ? library.searchMode : "smart");
                                 }
                                 Component.onCompleted: syncIndex()
                                 onActivated: function (idx) {
-                                    library !== null && library.set_search_mode(
-                                        ["smart", "fuzzy", "regex", "content"][idx])
+                                    library !== null && library.set_search_mode(["smart", "fuzzy", "regex", "content"][idx]);
                                 }
                                 Connections {
                                     target: library
                                     function onFiltersChanged() {
-                                        modeRow.syncIndex()
+                                        modeRow.syncIndex();
                                     }
                                 }
                                 background: Rectangle {
@@ -410,23 +463,18 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("Auto"), qsTr("Always on"),
-                                        qsTr("Off")]
+                                model: [qsTr("Auto"), qsTr("Always on"), qsTr("Off")]
                                 function syncIndex() {
-                                    currentIndex = ["auto", "on", "off"]
-                                        .indexOf(prefs !== null
-                                                 ? prefs.webPreviews
-                                                 : "auto")
+                                    currentIndex = ["auto", "on", "off"].indexOf(prefs !== null ? prefs.webPreviews : "auto");
                                 }
                                 Component.onCompleted: syncIndex()
                                 onActivated: function (idx) {
-                                    prefs !== null && prefs.set_web_previews(
-                                        ["auto", "on", "off"][idx])
+                                    prefs !== null && prefs.set_web_previews(["auto", "on", "off"][idx]);
                                 }
                                 Connections {
                                     target: prefs
                                     function onWebPreviewsChanged() {
-                                        webPreviewsRow.syncIndex()
+                                        webPreviewsRow.syncIndex();
                                     }
                                 }
                                 background: Rectangle {
@@ -458,16 +506,13 @@ Rectangle {
                                     Layout.preferredWidth: 170
                                     Layout.preferredHeight: 30
                                     onSequenceEdited: function (seq) {
-                                        prefs !== null
-                                            && prefs.set_command_shortcut(seq)
+                                        prefs !== null && prefs.set_command_shortcut(seq);
                                     }
                                 }
                                 SettingsButton {
                                     Layout.alignment: Qt.AlignVCenter
                                     text: qsTr("Reset")
-                                    onClicked: prefs !== null
-                                               && prefs.set_command_shortcut(
-                                                   "Alt+/")
+                                    onClicked: prefs !== null && prefs.set_command_shortcut("Alt+/")
                                 }
                             }
                         }
@@ -483,14 +528,10 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("Icons"), qsTr("Fonts"),
-                                        qsTr("Colors"), qsTr("Code"),
-                                        qsTr("Projects")]
-                                Component.onCompleted:
-                                    currentIndex = prefs !== null
-                                                  ? prefs.startupPane : 0
+                                model: [qsTr("Icons"), qsTr("Fonts"), qsTr("Colors"), qsTr("Code"), qsTr("Projects")]
+                                Component.onCompleted: currentIndex = prefs !== null ? prefs.startupPane : 0
                                 onActivated: function (idx) {
-                                    prefs !== null && prefs.set_startup_pane(idx)
+                                    prefs !== null && prefs.set_startup_pane(idx);
                                 }
                                 background: Rectangle {
                                     radius: 6
@@ -518,8 +559,8 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: qsTr("Run setup again…")
                                 onClicked: {
-                                    prefs.start_first_run()
-                                    settingsRoot.closed()
+                                    prefs.start_first_run();
+                                    settingsRoot.closed();
                                 }
                             }
                         }
@@ -543,18 +584,16 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 model: [qsTr("Dark"), qsTr("Light")]
                                 function syncIndex() {
-                                    currentIndex = theme === null || theme.isDark
-                                                  ? 0 : 1
+                                    currentIndex = theme === null || theme.isDark ? 0 : 1;
                                 }
                                 Component.onCompleted: syncIndex()
                                 onActivated: function (idx) {
-                                    theme !== null && theme.set_theme(
-                                        idx === 0 ? "dark" : "light")
+                                    theme !== null && theme.set_theme(idx === 0 ? "dark" : "light");
                                 }
                                 Connections {
                                     target: theme
                                     function onThemeChanged() {
-                                        themeRow.syncIndex()
+                                        themeRow.syncIndex();
                                     }
                                 }
                                 background: Rectangle {
@@ -575,6 +614,50 @@ Rectangle {
 
                         SettingRow {
                             section: "appearance"
+                            label: qsTr("Accent color")
+                            desc: qsTr("The main accent Fengrid tints active states with — pane outlines, selection, primary buttons. Pick from the brand palette.")
+                            keys: "accent color scheme tint brand teal amber violet coral rose green"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 6
+                                Layout.alignment: Qt.AlignVCenter
+                                Repeater {
+                                    model: theme !== null ? theme.accentOptions : []
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        readonly property bool sel: theme !== null && theme.accent === modelData.id
+                                        readonly property color c: theme !== null && theme.isDark ? modelData.dark : modelData.light
+                                        width: 26
+                                        height: 20
+                                        radius: 5
+                                        color: c
+                                        border.width: sel ? 2 : 0
+                                        border.color: theme.tokens.text
+                                        opacity: sel ? 1 : 0.62
+                                        // #138: on the first binding pass the
+                                        // MouseArea exists but its properties
+                                        // are not initialized yet — coerce
+                                        // to a real bool so creation logs no
+                                        // "Unable to assign [undefined] to bool"
+                                        ToolTip.visible: ma ? ma.hovered === true : false
+                                        ToolTip.text: modelData.name
+                                        MouseArea {
+                                            id: ma
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: theme !== null && theme.set_accent(modelData.id)
+                                        }
+                                        Accessible.role: Accessible.RadioButton
+                                        Accessible.name: modelData.name
+                                        Accessible.checked: sel
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "appearance"
                             label: qsTr("Icon size")
                             desc: qsTr("Grid tile size on the Icons pane, 16–256 px. The header slider writes the same value.")
                             keys: "icon size grid tile thumb thumbnail px slider zoom scale"
@@ -582,7 +665,7 @@ Rectangle {
                             RowLayout {
                                 spacing: 10
                                 Layout.alignment: Qt.AlignVCenter
-                                Slider {
+                                FgSlider {
                                     id: sizeRow
                                     from: 16
                                     to: 256
@@ -592,14 +675,12 @@ Rectangle {
                                     // moved() = user-driven only, so the
                                     // Connections sync below can't loop;
                                     // set_icon_size dedupes per-step writes
-                                    onMoved: prefs !== null
-                                             && prefs.set_icon_size(
-                                                 Math.round(value))
+                                    onMoved: prefs !== null && prefs.set_icon_size(Math.round(value))
                                     Connections {
                                         target: prefs
                                         function onIconSizeChanged() {
                                             if (!sizeRow.pressed)
-                                                sizeRow.value = prefs.iconSize
+                                                sizeRow.value = prefs.iconSize;
                                         }
                                     }
                                 }
@@ -627,8 +708,7 @@ Rectangle {
                             rowMatches: settingsRoot.matches(section, label, keys)
                         }
                         Repeater {
-                            model: prefs !== null ? prefs.systemIconPaths
-                                                  : []
+                            model: prefs !== null ? prefs.systemIconPaths : []
                             delegate: RowLayout {
                                 id: iconPathRow
                                 required property string modelData
@@ -642,18 +722,16 @@ Rectangle {
                                     checkLabel: settingsRoot.baseName(modelData)
                                     checked: settingsRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        var isChecked = checked
-                                        Qt.callLater(function() {
-                                            library.set_path_enabled(modelData,
-                                                                     "system",
-                                                                     isChecked)
-                                            library.rescan()
-                                        })
+                                        var isChecked = checked;
+                                        Qt.callLater(function () {
+                                            library.set_path_enabled(modelData, "system", isChecked);
+                                            library.rescan();
+                                        });
                                     }
                                     Connections {
                                         target: library
                                         function onSourcesChanged() {
-                                            iconCheck.checked = settingsRoot.pathEnabled(modelData)
+                                            iconCheck.checked = settingsRoot.pathEnabled(modelData);
                                         }
                                     }
                                 }
@@ -676,8 +754,7 @@ Rectangle {
                             rowMatches: settingsRoot.matches(section, label, keys)
                         }
                         Repeater {
-                            model: prefs !== null ? prefs.systemFontDirs
-                                                  : []
+                            model: prefs !== null ? prefs.systemFontDirs : []
                             delegate: RowLayout {
                                 id: fontPathRow
                                 required property string modelData
@@ -691,18 +768,16 @@ Rectangle {
                                     checkLabel: settingsRoot.baseName(modelData)
                                     checked: settingsRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        var isChecked = checked
-                                        Qt.callLater(function() {
-                                            library.set_path_enabled(modelData,
-                                                                     "fontroot",
-                                                                     isChecked)
-                                            fonts.rescan()
-                                        })
+                                        var isChecked = checked;
+                                        Qt.callLater(function () {
+                                            library.set_path_enabled(modelData, "fontroot", isChecked);
+                                            fonts.rescan();
+                                        });
                                     }
                                     Connections {
                                         target: library
                                         function onSourcesChanged() {
-                                            fontCheck.checked = settingsRoot.pathEnabled(modelData)
+                                            fontCheck.checked = settingsRoot.pathEnabled(modelData);
                                         }
                                     }
                                 }
@@ -742,18 +817,14 @@ Rectangle {
                                     spacing: 10
                                     Rectangle {
                                         Layout.preferredHeight: 16
-                                        Layout.preferredWidth:
-                                            kindChipText.implicitWidth + 12
+                                        Layout.preferredWidth: kindChipText.implicitWidth + 12
                                         radius: 3
                                         color: "transparent"
                                         border.color: theme.tokens.border
                                         Text {
                                             id: kindChipText
                                             anchors.centerIn: parent
-                                            text: folderRow.modelData.kind
-                                                  === "fontroot"
-                                                  ? qsTr("FONTS")
-                                                  : qsTr("ICONS")
+                                            text: folderRow.modelData.kind === "fontroot" ? qsTr("FONTS") : qsTr("ICONS")
                                             font.family: theme.monoFont
                                             font.pixelSize: 8
                                             font.letterSpacing: 1
@@ -764,8 +835,7 @@ Rectangle {
                                         Layout.fillWidth: true
                                         spacing: 0
                                         Text {
-                                            text: folderRow.modelData.label
-                                                  || folderRow.modelData.path
+                                            text: folderRow.modelData.label || folderRow.modelData.path
                                             font.family: theme.uiFont
                                             font.pixelSize: 12
                                             color: theme.tokens.text
@@ -782,8 +852,7 @@ Rectangle {
                                         }
                                     }
                                     Text {
-                                        text: qsTr("%1 items").arg(
-                                            folderRow.modelData.n)
+                                        text: qsTr("%1 items").arg(folderRow.modelData.n)
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
                                         color: theme.tokens.textMuted
@@ -794,26 +863,23 @@ Rectangle {
                                         checked: folderRow.modelData.enabled
                                         ToolTip.visible: hovered
                                         ToolTip.delay: 400
-                                        ToolTip.text: qsTr(
-                                            "Include in the library")
+                                        ToolTip.text: qsTr("Include in the library")
                                         onToggled: {
-                                            var isChecked = checked
-                                            var p = folderRow.modelData.path
-                                            var k = folderRow.modelData.kind
-                                            Qt.callLater(function() {
-                                                library.set_path_enabled(p, k, isChecked)
-                                                settingsRoot.rescanKind(k)
-                                            })
+                                            var isChecked = checked;
+                                            var p = folderRow.modelData.path;
+                                            var k = folderRow.modelData.kind;
+                                            Qt.callLater(function () {
+                                                library.set_path_enabled(p, k, isChecked);
+                                                settingsRoot.rescanKind(k);
+                                            });
                                         }
                                     }
                                     IconButton {
                                         icon_name: "trash"
-                                        ToolTip.text: qsTr(
-                                            "Remove folder from library")
+                                        ToolTip.text: qsTr("Remove folder from library")
                                         onClicked: {
-                                            library.remove_folder(
-                                                folderRow.modelData.id)
-                                            fonts.refresh()
+                                            library.remove_folder(folderRow.modelData.id);
+                                            fonts.refresh();
                                         }
                                     }
                                 }
@@ -827,20 +893,21 @@ Rectangle {
                             SettingsButton {
                                 text: qsTr("Add icon folder…")
                                 onClicked: {
-                                    folderDialogLoader.open("folder")
+                                    folderDialogLoader.open("folder");
                                 }
                             }
                             SettingsButton {
                                 text: qsTr("Add font folder…")
                                 onClicked: {
-                                    folderDialogLoader.open("fontroot")
+                                    folderDialogLoader.open("fontroot");
                                 }
                             }
-                            Item { Layout.fillWidth: true }
+                            Item {
+                                Layout.fillWidth: true
+                            }
                             SettingsButton {
                                 text: qsTr("Re-scan icons")
-                                enabled: library !== null
-                                         && !library.scanning
+                                enabled: library !== null && !library.scanning
                                 onClicked: library.rescan()
                             }
                             SettingsButton {
@@ -852,14 +919,7 @@ Rectangle {
                         Text {
                             Layout.fillWidth: true
                             Layout.topMargin: 8
-                            text: library === null || fonts === null ? ""
-                                  : (library.scanning || fonts.scanning)
-                                    ? qsTr("Indexing… icons %1 · fonts %2")
-                                          .arg(library.scanCount)
-                                          .arg(fonts.scanCount)
-                                    : qsTr("%1 assets indexed · %2 font files")
-                                          .arg(library.totalAssets)
-                                          .arg(fonts.totalFonts)
+                            text: library === null || fonts === null ? "" : (library.scanning || fonts.scanning) ? qsTr("Indexing… icons %1 · fonts %2").arg(library.scanCount).arg(fonts.scanCount) : qsTr("%1 assets indexed · %2 font files").arg(library.totalAssets).arg(fonts.totalFonts)
                             font.family: theme.monoFont
                             font.pixelSize: 10
                             color: theme.tokens.textMuted
@@ -881,7 +941,7 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: qsTr("Add folder…")
                                 onClicked: {
-                                    folderDialogLoader.open("folder")
+                                    folderDialogLoader.open("folder");
                                 }
                             }
                         }
@@ -890,8 +950,7 @@ Rectangle {
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.topMargin: 12
-                            Layout.preferredHeight:
-                                cloudCol.implicitHeight + 20
+                            Layout.preferredHeight: cloudCol.implicitHeight + 20
                             radius: 6
                             color: theme.tokens.surface2
                             border.color: theme.tokens.border
@@ -922,21 +981,16 @@ Rectangle {
                         }
 
                         Repeater {
-                            model: storage !== null
-                                   ? storage.backends.filter(function (b) {
-                                         return b.key !== "local"
-                                     })
-                                   : []
+                            model: storage !== null ? storage.backends.filter(function (b) {
+                                return b.key !== "local";
+                            }) : []
                             delegate: RowLayout {
                                 id: backendRow
                                 required property var modelData
                                 Layout.fillWidth: true
                                 Layout.topMargin: 14
                                 spacing: 20
-                                visible: settingsRoot.matches(
-                                    "storage", modelData.label,
-                                    "storage backend mount remote share "
-                                    + modelData.key + " network cloud")
+                                visible: settingsRoot.matches("storage", modelData.label, "storage backend mount remote share " + modelData.key + " network cloud")
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     // #56: label/description gap
@@ -958,21 +1012,14 @@ Rectangle {
                                         // #56: loosen wrapped body text
                                         lineHeight: 1.3
                                         lineHeightMode: Text.ProportionalHeight
-                                        color: backendRow.modelData.available
-                                               ? theme.tokens.textMuted
-                                               : theme.tokens.hlInk
+                                        color: backendRow.modelData.available ? theme.tokens.textMuted : theme.tokens.hlInk
                                     }
                                 }
                                 SettingsButton {
                                     Layout.alignment: Qt.AlignVCenter
                                     text: qsTr("Attach…")
                                     enabled: backendRow.modelData.available
-                                    onClicked: storageDialog.openFor(
-                                        backendRow.modelData.key,
-                                        backendRow.modelData.label,
-                                        qsTr("Example: %1 — %2")
-                                            .arg(backendRow.modelData.hint)
-                                            .arg(backendRow.modelData.status))
+                                    onClicked: storageDialog.openFor(backendRow.modelData.key, backendRow.modelData.label, qsTr("Example: %1 — %2").arg(backendRow.modelData.hint).arg(backendRow.modelData.status))
                                 }
                             }
                         }
@@ -988,10 +1035,7 @@ Rectangle {
                                 radius: 6
                                 color: theme.tokens.surface2
                                 border.color: theme.tokens.border
-                                visible: settingsRoot.matches(
-                                    "storage", modelData.backendLabel,
-                                    "mount attached storage "
-                                    + modelData.backend)
+                                visible: settingsRoot.matches("storage", modelData.backendLabel, "mount attached storage " + modelData.backend)
                                 RowLayout {
                                     anchors.fill: parent
                                     anchors.leftMargin: 10
@@ -999,8 +1043,7 @@ Rectangle {
                                     spacing: 10
                                     Rectangle {
                                         Layout.preferredHeight: 16
-                                        Layout.preferredWidth:
-                                            mountChip.implicitWidth + 12
+                                        Layout.preferredWidth: mountChip.implicitWidth + 12
                                         radius: 3
                                         color: "transparent"
                                         border.color: theme.tokens.border
@@ -1035,19 +1078,14 @@ Rectangle {
                                         }
                                     }
                                     Text {
-                                        text: mountRow.modelData.healthy
-                                              ? qsTr("mounted")
-                                              : qsTr("not mounted")
+                                        text: mountRow.modelData.healthy ? qsTr("Mounted") : qsTr("Not Mounted")
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
-                                        color: mountRow.modelData.healthy
-                                               ? theme.tokens.textMuted
-                                               : theme.tokens.hlInk
+                                        color: mountRow.modelData.healthy ? theme.tokens.textMuted : theme.tokens.hlInk
                                     }
                                     SettingsButton {
                                         text: qsTr("Eject")
-                                        onClicked:
-                                            storage.detach(mountRow.modelData.id)
+                                        onClicked: storage.detach(mountRow.modelData.id)
                                     }
                                 }
                             }
@@ -1056,8 +1094,7 @@ Rectangle {
                         Text {
                             Layout.fillWidth: true
                             Layout.topMargin: 10
-                            visible: storage === null
-                                     || storage.mounts.length === 0
+                            visible: storage === null || storage.mounts.length === 0
                             text: qsTr("No network or cloud storage attached yet.")
                             font.family: theme.uiFont
                             font.pixelSize: 11
@@ -1095,6 +1132,33 @@ Rectangle {
 
                         SettingRow {
                             section: "import"
+                            label: qsTr("Import code snippets")
+                            desc: qsTr("Bring in VS Code and massCode snippets. Scan finds files at VS Code's default snippet folder; Files… picks any .code-snippets, .json or massCode database.")
+                            keys: "import snippets code vscode masscode scan detect location vs code default files"
+                            rowMatches: settingsRoot.matches(section, label, keys)
+                            RowLayout {
+                                spacing: 8
+                                SettingsButton {
+                                    text: qsTr("Scan VS Code…")
+                                    onClicked: {
+                                        // #98: scan the default User/snippets
+                                        // folders of VS Code and its variants;
+                                        // the popup lists what it found (or
+                                        // the not-found message) and imports
+                                        // on click
+                                        settingsRoot.snipScanResults = code !== null ? code.scan_vscode_snippets() : [];
+                                        snippetScanPopup.open();
+                                    }
+                                }
+                                SettingsButton {
+                                    text: qsTr("Files…")
+                                    onClicked: snippetFileDialogLoader.open()
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "import"
                             label: qsTr("File storage mode")
                             desc: qsTr("Copy embeds files into Fengrid's data folder (self-contained). Link keeps them where they are and symlinks — needs read permission on the original location.")
                             keys: "copy link embed symlink mode storage external permission embedded readonly"
@@ -1102,12 +1166,12 @@ Rectangle {
                             RowLayout {
                                 spacing: 6
                                 Chip {
-                                    label: "copy"
+                                    label: "Copy"
                                     on: dataio !== null && dataio.importOpts.mode === "copy"
                                     onPicked: settingsRoot.setImportOpt("mode", "copy")
                                 }
                                 Chip {
-                                    label: "link"
+                                    label: "Link"
                                     on: dataio !== null && dataio.importOpts.mode === "link"
                                     onPicked: settingsRoot.setImportOpt("mode", "link")
                                 }
@@ -1127,8 +1191,7 @@ Rectangle {
                                     Chip {
                                         required property var modelData
                                         label: modelData
-                                        on: dataio !== null
-                                            && dataio.importOpts.convert === modelData
+                                        on: dataio !== null && dataio.importOpts.convert === modelData
                                         onPicked: settingsRoot.setImportOpt("convert", modelData)
                                     }
                                 }
@@ -1142,7 +1205,7 @@ Rectangle {
                             keys: "rename template naming pattern tokens guid random enumeration"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             FormInput {
-                                label: qsTr("template")
+                                label: qsTr("Template")
                                 text: dataio !== null ? (dataio.importOpts.template || "") : ""
                                 onTextChanged: settingsRoot.setImportOpt("template", text)
                             }
@@ -1158,13 +1221,13 @@ Rectangle {
                                 spacing: 8
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("prefix")
+                                    label: qsTr("Prefix")
                                     text: dataio !== null ? (dataio.importOpts.prefix || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("prefix", text)
                                 }
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("suffix")
+                                    label: qsTr("Suffix")
                                     text: dataio !== null ? (dataio.importOpts.suffix || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("suffix", text)
                                 }
@@ -1181,13 +1244,13 @@ Rectangle {
                                 spacing: 8
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("find")
+                                    label: qsTr("Find")
                                     text: dataio !== null ? (dataio.importOpts.find || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("find", text)
                                 }
                                 FormInput {
                                     Layout.fillWidth: true
-                                    label: qsTr("replace")
+                                    label: qsTr("Replace")
                                     text: dataio !== null ? (dataio.importOpts.repl || "") : ""
                                     onTextChanged: settingsRoot.setImportOpt("repl", text)
                                 }
@@ -1209,8 +1272,7 @@ Rectangle {
                                         Chip {
                                             required property var modelData
                                             label: modelData
-                                            on: dataio !== null
-                                                && dataio.importOpts.style === modelData
+                                            on: dataio !== null && dataio.importOpts.style === modelData
                                             onPicked: settingsRoot.setImportOpt("style", modelData)
                                         }
                                     }
@@ -1219,16 +1281,14 @@ Rectangle {
                                     spacing: 8
                                     FormInput {
                                         Layout.preferredWidth: 90
-                                        label: qsTr("start")
-                                        text: dataio !== null
-                                              ? String(dataio.importOpts.start || 1) : "1"
+                                        label: qsTr("Start")
+                                        text: dataio !== null ? String(dataio.importOpts.start || 1) : "1"
                                         onTextChanged: settingsRoot.setImportOpt("start", parseInt(text) || 1)
                                     }
                                     FormInput {
                                         Layout.preferredWidth: 90
-                                        label: qsTr("pad")
-                                        text: dataio !== null
-                                              ? String(dataio.importOpts.pad || 2) : "2"
+                                        label: qsTr("Pad")
+                                        text: dataio !== null ? String(dataio.importOpts.pad || 2) : "2"
                                         onTextChanged: settingsRoot.setImportOpt("pad", Math.max(0, parseInt(text) || 0))
                                     }
                                 }
@@ -1244,18 +1304,16 @@ Rectangle {
                             RowLayout {
                                 spacing: 8
                                 SettingsButton {
-                                    text: settingsRoot.csvPath === ""
-                                          ? qsTr("Choose CSV…")
-                                          : settingsRoot.csvPath.split("/").pop()
+                                    text: settingsRoot.csvPath === "" ? qsTr("Choose CSV…") : settingsRoot.csvPath.split("/").pop()
                                     onClicked: csvDialogLoader.open()
                                 }
                                 FormInput {
                                     Layout.preferredWidth: 90
-                                    label: qsTr("column")
+                                    label: qsTr("Column")
                                     text: settingsRoot.csvColumn
                                     onTextChanged: {
-                                        settingsRoot.csvColumn = text
-                                        settingsRoot.setImportOpt("csv_column", text)
+                                        settingsRoot.csvColumn = text;
+                                        settingsRoot.setImportOpt("csv_column", text);
                                     }
                                 }
                             }
@@ -1276,10 +1334,8 @@ Rectangle {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 6
                                     from: 0
-                                    to: settingsRoot.jobTotal > 0
-                                        ? settingsRoot.jobTotal : 1
-                                    value: settingsRoot.jobTotal > 0
-                                           ? settingsRoot.jobDone : 0
+                                    to: settingsRoot.jobTotal > 0 ? settingsRoot.jobTotal : 1
+                                    value: settingsRoot.jobTotal > 0 ? settingsRoot.jobDone : 0
                                     indeterminate: settingsRoot.jobTotal <= 0
                                     background: Rectangle {
                                         radius: 3
@@ -1290,8 +1346,7 @@ Rectangle {
                                         Rectangle {
                                             visible: !jobProgress.indeterminate
                                             height: parent.height
-                                            width: jobProgress.visualPosition
-                                                   * jobProgress.width
+                                            width: jobProgress.visualPosition * jobProgress.width
                                             radius: 3
                                             color: theme.tokens.accent
                                         }
@@ -1319,9 +1374,7 @@ Rectangle {
                                     }
                                 }
                                 Text {
-                                    text: settingsRoot.jobTotal > 0
-                                          ? settingsRoot.jobDone + " / " + settingsRoot.jobTotal
-                                          : qsTr("working…")
+                                    text: settingsRoot.jobTotal > 0 ? settingsRoot.jobDone + " / " + settingsRoot.jobTotal : qsTr("Working…")
                                     font.family: theme.monoFont
                                     font.pixelSize: 10
                                     color: theme.tokens.textMuted
@@ -1344,27 +1397,25 @@ Rectangle {
                                     Layout.fillWidth: true
                                     FormInput {
                                         Layout.fillWidth: true
-                                        label: qsTr("path or remote spec")
+                                        label: qsTr("Path or Remote Spec")
                                         text: settingsRoot.addWatchPath
                                         onTextChanged: settingsRoot.addWatchPath = text
                                     }
                                     SettingsButton {
                                         text: qsTr("Add")
-                                        enabled: settingsRoot.addWatchPath.trim() !== ""
-                                                 && dataio !== null
+                                        enabled: settingsRoot.addWatchPath.trim() !== "" && dataio !== null
                                         onClicked: {
-                                            dataio.watchAdd(settingsRoot.addWatchPath.trim(),
-                                                            settingsRoot.addWatchTransport,
-                                                            settingsRoot.addWatchInterval)
-                                            settingsRoot.addWatchPath = ""
+                                            dataio.watchAdd(settingsRoot.addWatchPath.trim(), settingsRoot.addWatchTransport, settingsRoot.addWatchInterval);
+                                            settingsRoot.addWatchPath = "";
                                         }
                                     }
                                 }
                                 Flow {
                                     spacing: 6
                                     Repeater {
-                                        model: settingsRoot.transportRows.filter(
-                                            function (t) { return t.kind !== "soon" })
+                                        model: settingsRoot.transportRows.filter(function (t) {
+                                            return t.kind !== "soon";
+                                        })
                                         Chip {
                                             required property var modelData
                                             opacity: modelData.available ? 1 : 0.45
@@ -1372,7 +1423,7 @@ Rectangle {
                                             on: settingsRoot.addWatchTransport === modelData.key
                                             onPicked: {
                                                 if (modelData.available)
-                                                    settingsRoot.addWatchTransport = modelData.key
+                                                    settingsRoot.addWatchTransport = modelData.key;
                                             }
                                         }
                                     }
@@ -1380,7 +1431,7 @@ Rectangle {
                                 RowLayout {
                                     spacing: 6
                                     Text {
-                                        text: qsTr("every")
+                                        text: qsTr("Every")
                                         font.family: theme.uiFont
                                         font.pixelSize: 11
                                         color: theme.tokens.textMuted
@@ -1389,9 +1440,7 @@ Rectangle {
                                         model: [30, 60, 300]
                                         Chip {
                                             required property var modelData
-                                            label: modelData === 60 ? "1m"
-                                                  : modelData === 300 ? "5m"
-                                                  : modelData + "s"
+                                            label: modelData === 60 ? "1m" : modelData === 300 ? "5m" : modelData + "s"
                                             on: settingsRoot.addWatchInterval === modelData
                                             onPicked: settingsRoot.addWatchInterval = modelData
                                         }
@@ -1417,13 +1466,7 @@ Rectangle {
                                             }
                                             Text {
                                                 Layout.fillWidth: true
-                                                text: modelData.transport + " · "
-                                                      + (modelData.interval >= 300
-                                                         ? Math.round(modelData.interval / 60) + "m"
-                                                         : modelData.interval + "s")
-                                                      + (modelData.lastHits
-                                                         ? " · " + modelData.lastHits + " new"
-                                                         : "")
+                                                text: modelData.transport + " · " + (modelData.interval >= 300 ? Math.round(modelData.interval / 60) + "m" : modelData.interval + "s") + (modelData.lastHits ? " · " + modelData.lastHits + " new" : "")
                                                 font.family: theme.monoFont
                                                 font.pixelSize: 9
                                                 color: theme.tokens.textMuted
@@ -1431,7 +1474,7 @@ Rectangle {
                                             }
                                         }
                                         FormCheck {
-                                            checkLabel: qsTr("on")
+                                            checkLabel: qsTr("On")
                                             checked: modelData.enabled
                                             onToggled: dataio.watchToggle(modelData.id, checked)
                                         }
@@ -1464,8 +1507,11 @@ Rectangle {
                             rowMatches: settingsRoot.matches(section, label, keys)
                             RowLayout {
                                 spacing: 6
-                                Chip { label: "S3 (Storage)"; on: false
-                                       onPicked: {} }
+                                Chip {
+                                    label: "S3 (Storage)"
+                                    on: false
+                                    onPicked: {}
+                                }
                                 Text {
                                     text: qsTr("OneDrive · iCloud · Google Drive — coming soon")
                                     font.family: theme.uiFont
@@ -1487,24 +1533,18 @@ Rectangle {
                                 fileMode: FileDialog.OpenFiles
                                 nameFilters: [qsTr("Assets (*.png *.svg *.bmp *.ico *.webp *.gif *.jpg *.jpeg *.tiff *.ttf *.otf *.ttc)"), qsTr("All files (*)")]
                                 onAccepted: {
-                                    settingsRoot.dialogEvent(
-                                        "files", "resolved-accepted",
-                                        Date.now() - filesDialogLoader.openStamp)
-                                    var paths = []
+                                    settingsRoot.dialogEvent("files", "resolved-accepted", Date.now() - filesDialogLoader.openStamp);
+                                    var paths = [];
                                     for (var i = 0; i < selectedFiles.length; i++)
-                                        paths.push(settingsRoot.url2path(selectedFiles[i]))
-                                    dataio.importStart(paths)
-                                    settingsRoot.rememberDialogDir(
-                                        filesDialog.currentFolder)
-                                    filesDialogLoader.active = false
+                                        paths.push(settingsRoot.url2path(selectedFiles[i]));
+                                    dataio.importStart(paths);
+                                    settingsRoot.rememberDialogDir(filesDialog.currentFolder);
+                                    filesDialogLoader.active = false;
                                 }
                                 onRejected: {
-                                    settingsRoot.dialogEvent(
-                                        "files", "resolved-rejected",
-                                        Date.now() - filesDialogLoader.openStamp)
-                                    settingsRoot.rememberDialogDir(
-                                        filesDialog.currentFolder)
-                                    filesDialogLoader.active = false
+                                    settingsRoot.dialogEvent("files", "resolved-rejected", Date.now() - filesDialogLoader.openStamp);
+                                    settingsRoot.rememberDialogDir(filesDialog.currentFolder);
+                                    filesDialogLoader.active = false;
                                 }
                             }
                             // #81 dead-attempt recycle guard +
@@ -1512,13 +1552,11 @@ Rectangle {
                             // below for the full rationale (same class).
                             onLoaded: item.open()
                             function open() {
-                                settingsRoot.dialogEvent(
-                                    "files", active ? "retry-click" : "click",
-                                    0)
+                                settingsRoot.dialogEvent("files", active ? "retry-click" : "click", 0);
                                 if (active)
-                                    active = false
-                                openStamp = Date.now()
-                                active = true
+                                    active = false;
+                                openStamp = Date.now();
+                                active = true;
                             }
                         }
                         // native dialogs load lazily: instantiating a
@@ -1539,22 +1577,15 @@ Rectangle {
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("ZIP archives (*.zip)")]
                                 onAccepted: {
-                                    settingsRoot.dialogEvent(
-                                        "zip", "resolved-accepted",
-                                        Date.now() - zipDialogLoader.openStamp)
-                                    dataio.importZip(
-                                        settingsRoot.url2path(selectedFile))
-                                    settingsRoot.rememberDialogDir(
-                                        zipDialog.currentFolder)
-                                    zipDialogLoader.active = false
+                                    settingsRoot.dialogEvent("zip", "resolved-accepted", Date.now() - zipDialogLoader.openStamp);
+                                    dataio.importZip(settingsRoot.url2path(selectedFile));
+                                    settingsRoot.rememberDialogDir(zipDialog.currentFolder);
+                                    zipDialogLoader.active = false;
                                 }
                                 onRejected: {
-                                    settingsRoot.dialogEvent(
-                                        "zip", "resolved-rejected",
-                                        Date.now() - zipDialogLoader.openStamp)
-                                    settingsRoot.rememberDialogDir(
-                                        zipDialog.currentFolder)
-                                    zipDialogLoader.active = false
+                                    settingsRoot.dialogEvent("zip", "resolved-rejected", Date.now() - zipDialogLoader.openStamp);
+                                    settingsRoot.rememberDialogDir(zipDialog.currentFolder);
+                                    zipDialogLoader.active = false;
                                 }
                             }
                             // #81: a native dialog that never maps (the
@@ -1574,13 +1605,11 @@ Rectangle {
                             // belt-and-braces only.)
                             onLoaded: item.open()
                             function open() {
-                                settingsRoot.dialogEvent(
-                                    "zip", active ? "retry-click" : "click",
-                                    0)
+                                settingsRoot.dialogEvent("zip", active ? "retry-click" : "click", 0);
                                 if (active)
-                                    active = false
-                                openStamp = Date.now()
-                                active = true
+                                    active = false;
+                                openStamp = Date.now();
+                                active = true;
                             }
                         }
                         Loader {
@@ -1594,24 +1623,16 @@ Rectangle {
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("CSV files (*.csv)")]
                                 onAccepted: {
-                                    settingsRoot.dialogEvent(
-                                        "csv", "resolved-accepted",
-                                        Date.now() - csvDialogLoader.openStamp)
-                                    settingsRoot.csvPath =
-                                        settingsRoot.url2path(selectedFile)
-                                    settingsRoot.setImportOpt(
-                                        "csv_path", settingsRoot.csvPath)
-                                    settingsRoot.rememberDialogDir(
-                                        csvDialog.currentFolder)
-                                    csvDialogLoader.active = false
+                                    settingsRoot.dialogEvent("csv", "resolved-accepted", Date.now() - csvDialogLoader.openStamp);
+                                    settingsRoot.csvPath = settingsRoot.url2path(selectedFile);
+                                    settingsRoot.setImportOpt("csv_path", settingsRoot.csvPath);
+                                    settingsRoot.rememberDialogDir(csvDialog.currentFolder);
+                                    csvDialogLoader.active = false;
                                 }
                                 onRejected: {
-                                    settingsRoot.dialogEvent(
-                                        "csv", "resolved-rejected",
-                                        Date.now() - csvDialogLoader.openStamp)
-                                    settingsRoot.rememberDialogDir(
-                                        csvDialog.currentFolder)
-                                    csvDialogLoader.active = false
+                                    settingsRoot.dialogEvent("csv", "resolved-rejected", Date.now() - csvDialogLoader.openStamp);
+                                    settingsRoot.rememberDialogDir(csvDialog.currentFolder);
+                                    csvDialogLoader.active = false;
                                 }
                             }
                             // #81 dead-attempt recycle guard +
@@ -1619,13 +1640,11 @@ Rectangle {
                             // for the full rationale (same class).
                             onLoaded: item.open()
                             function open() {
-                                settingsRoot.dialogEvent(
-                                    "csv", active ? "retry-click" : "click",
-                                    0)
+                                settingsRoot.dialogEvent("csv", active ? "retry-click" : "click", 0);
                                 if (active)
-                                    active = false
-                                openStamp = Date.now()
-                                active = true
+                                    active = false;
+                                openStamp = Date.now();
+                                active = true;
                             }
                         }
                         Loader {
@@ -1637,24 +1656,15 @@ Rectangle {
                                 title: qsTr("Import folder as source")
                                 currentFolder: settingsRoot.lastDialogUrl()
                                 onAccepted: {
-                                    settingsRoot.dialogEvent(
-                                        "folder", "resolved-accepted",
-                                        Date.now()
-                                        - folderImportLoader.openStamp)
-                                    dataio.importFolder(
-                                        settingsRoot.url2path(selectedFolder))
-                                    settingsRoot.rememberDialogDir(
-                                        folderImportDialog.currentFolder)
-                                    folderImportLoader.active = false
+                                    settingsRoot.dialogEvent("folder", "resolved-accepted", Date.now() - folderImportLoader.openStamp);
+                                    dataio.importFolder(settingsRoot.url2path(selectedFolder));
+                                    settingsRoot.rememberDialogDir(folderImportDialog.currentFolder);
+                                    folderImportLoader.active = false;
                                 }
                                 onRejected: {
-                                    settingsRoot.dialogEvent(
-                                        "folder", "resolved-rejected",
-                                        Date.now()
-                                        - folderImportLoader.openStamp)
-                                    settingsRoot.rememberDialogDir(
-                                        folderImportDialog.currentFolder)
-                                    folderImportLoader.active = false
+                                    settingsRoot.dialogEvent("folder", "resolved-rejected", Date.now() - folderImportLoader.openStamp);
+                                    settingsRoot.rememberDialogDir(folderImportDialog.currentFolder);
+                                    folderImportLoader.active = false;
                                 }
                             }
                             // #81 dead-attempt recycle guard +
@@ -1662,13 +1672,131 @@ Rectangle {
                             // for the full rationale (same class).
                             onLoaded: item.open()
                             function open() {
-                                settingsRoot.dialogEvent(
-                                    "folder", active ? "retry-click" : "click",
-                                    0)
+                                settingsRoot.dialogEvent("folder", active ? "retry-click" : "click", 0);
                                 if (active)
-                                    active = false
-                                openStamp = Date.now()
-                                active = true
+                                    active = false;
+                                openStamp = Date.now();
+                                active = true;
+                            }
+                        }
+
+                        // #98: snippet file picker — same lazy-loader pattern
+                        // as the other dialogs (portal hang avoidance)
+                        Loader {
+                            id: snippetFileDialogLoader
+                            active: false
+                            property int openStamp: 0
+                            sourceComponent: FileDialog {
+                                id: snippetFileDialog
+                                title: qsTr("Import code snippets")
+                                currentFolder: settingsRoot.lastDialogUrl()
+                                fileMode: FileDialog.OpenFile
+                                nameFilters: [qsTr("Snippets (*.code-snippets *.json *.sqlite *.db *.sqlite3)"), qsTr("All files (*)")]
+                                onAccepted: {
+                                    settingsRoot.dialogEvent("snippets", "resolved-accepted", Date.now() - snippetFileDialogLoader.openStamp);
+                                    // kind = "" → the bridge infers it from
+                                    // the file extension
+                                    code !== null && code.import_snippets("", settingsRoot.url2path(selectedFile));
+                                    settingsRoot.rememberDialogDir(snippetFileDialog.currentFolder);
+                                    snippetFileDialogLoader.active = false;
+                                }
+                                onRejected: {
+                                    settingsRoot.dialogEvent("snippets", "resolved-rejected", Date.now() - snippetFileDialogLoader.openStamp);
+                                    settingsRoot.rememberDialogDir(snippetFileDialog.currentFolder);
+                                    snippetFileDialogLoader.active = false;
+                                }
+                            }
+                            onLoaded: item.open()
+                            function open() {
+                                settingsRoot.dialogEvent("snippets", active ? "retry-click" : "click", 0);
+                                if (active)
+                                    active = false;
+                                openStamp = Date.now();
+                                active = true;
+                            }
+                        }
+
+                        // #98: VS Code snippet scan results popup — lists
+                        // the files found at default locations; clicking
+                        // one imports it immediately
+                        Popup {
+                            id: snippetScanPopup
+                            parent: Overlay.overlay
+                            anchors.centerIn: parent
+                            width: 380
+                            height: Math.min(320, snipColumn.implicitHeight + 56)
+                            modal: true
+                            background: Rectangle {
+                                radius: 8
+                                color: theme.tokens.surface
+                                border.color: theme.tokens.border
+                            }
+                            ColumnLayout {
+                                id: snipColumn
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                spacing: 8
+                                Text {
+                                    text: settingsRoot.snipScanResults.length ? qsTr("VS Code snippets found") : qsTr("No snippet files found at VS Code's default locations")
+                                    font.family: theme.headingFont
+                                    font.pixelSize: 13
+                                    color: theme.tokens.text
+                                }
+                                Text {
+                                    visible: settingsRoot.snipScanResults.length === 0
+                                    text: qsTr("Checked: VS Code, Insiders, VSCodium and Cursor. You can still import any file with Files… below.")
+                                    font.family: theme.uiFont
+                                    font.pixelSize: 10
+                                    color: theme.tokens.textMuted
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                                ListView {
+                                    visible: settingsRoot.snipScanResults.length > 0
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    clip: true
+                                    model: settingsRoot.snipScanResults
+                                    delegate: ItemDelegate {
+                                        required property var modelData
+                                        width: ListView.view.width
+                                        height: 34
+                                        contentItem: RowLayout {
+                                            spacing: 8
+                                            ColumnLayout {
+                                                spacing: 1
+                                                Layout.fillWidth: true
+                                                Text {
+                                                    text: modelData.name
+                                                    font.family: theme.monoFont
+                                                    font.pixelSize: 11
+                                                    color: theme.tokens.text
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: modelData.app
+                                                    font.family: theme.uiFont
+                                                    font.pixelSize: 9
+                                                    color: theme.tokens.textMuted
+                                                }
+                                            }
+                                            SettingsButton {
+                                                text: qsTr("Import")
+                                                onClicked: {
+                                                    code !== null && code.import_snippets("", modelData.path);
+                                                    snippetScanPopup.close();
+                                                }
+                                            }
+                                        }
+                                    }
+                                    ScrollBar.vertical: ScrollBar {}
+                                }
+                                FgDialogFooter {
+                                    acceptLabel: qsTr("Close")
+                                    onCancelClicked: snippetScanPopup.close()
+                                    onAcceptClicked: snippetScanPopup.close()
+                                }
                             }
                         }
                     }
@@ -1691,11 +1819,8 @@ Rectangle {
                                     Chip {
                                         required property var modelData
                                         label: modelData
-                                        on: dataio !== null
-                                            && dataio.exportOpts.icon_fmts.indexOf(modelData) >= 0
-                                        onPicked: settingsRoot.setExportOpt(
-                                            "icon_fmts",
-                                            settingsRoot.toggleFmt(dataio.exportOpts.icon_fmts, modelData))
+                                        on: dataio !== null && dataio.exportOpts.icon_fmts.indexOf(modelData) >= 0
+                                        onPicked: settingsRoot.setExportOpt("icon_fmts", settingsRoot.toggleFmt(dataio.exportOpts.icon_fmts, modelData))
                                     }
                                 }
                             }
@@ -1714,8 +1839,7 @@ Rectangle {
                                     Chip {
                                         required property var modelData
                                         label: modelData === "orig" ? qsTr("orig") : modelData + "px"
-                                        on: dataio !== null
-                                            && String(dataio.exportOpts.icon_size) === modelData
+                                        on: dataio !== null && String(dataio.exportOpts.icon_size) === modelData
                                         onPicked: settingsRoot.setExportOpt("icon_size", modelData)
                                     }
                                 }
@@ -1729,7 +1853,7 @@ Rectangle {
                             keys: "tint color filter recolor mono paint hue photoshop filter overlay"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             FormInput {
-                                label: qsTr("hex (e.g. #39B8C4)")
+                                label: qsTr("Hex (e.g. #39B8C4)")
                                 text: dataio !== null ? (dataio.exportOpts.tint || "") : ""
                                 onTextChanged: settingsRoot.setExportOpt("tint", text)
                             }
@@ -1745,16 +1869,14 @@ Rectangle {
                                 spacing: 6
                                 Layout.fillWidth: true
                                 FormCheck {
-                                    checkLabel: qsTr("run a script on each exported file")
-                                    checked: dataio !== null
-                                             && !!dataio.exportOpts.script_enabled
+                                    checkLabel: qsTr("Run a Script on Each Exported File")
+                                    checked: dataio !== null && !!dataio.exportOpts.script_enabled
                                     onToggled: settingsRoot.setExportOpt("script_enabled", checked)
                                 }
                                 FormInput {
                                     Layout.fillWidth: true
-                                    visible: dataio !== null
-                                             && !!dataio.exportOpts.script_enabled
-                                    label: qsTr("command (argv)")
+                                    visible: dataio !== null && !!dataio.exportOpts.script_enabled
+                                    label: qsTr("Command (argv)")
                                     text: dataio !== null ? (dataio.exportOpts.script || "") : ""
                                     onTextChanged: settingsRoot.setExportOpt("script", text)
                                 }
@@ -1774,11 +1896,8 @@ Rectangle {
                                     Chip {
                                         required property var modelData
                                         label: modelData
-                                        on: dataio !== null
-                                            && dataio.exportOpts.font_fmts.indexOf(modelData) >= 0
-                                        onPicked: settingsRoot.setExportOpt(
-                                            "font_fmts",
-                                            settingsRoot.toggleFmt(dataio.exportOpts.font_fmts, modelData))
+                                        on: dataio !== null && dataio.exportOpts.font_fmts.indexOf(modelData) >= 0
+                                        onPicked: settingsRoot.setExportOpt("font_fmts", settingsRoot.toggleFmt(dataio.exportOpts.font_fmts, modelData))
                                     }
                                 }
                             }
@@ -1797,8 +1916,7 @@ Rectangle {
                                     Chip {
                                         required property var modelData
                                         label: modelData
-                                        on: dataio !== null
-                                            && dataio.exportOpts.color_codes === modelData
+                                        on: dataio !== null && dataio.exportOpts.color_codes === modelData
                                         onPicked: settingsRoot.setExportOpt("color_codes", modelData)
                                     }
                                 }
@@ -1818,8 +1936,7 @@ Rectangle {
                                     Chip {
                                         required property var modelData
                                         label: modelData
-                                        on: dataio !== null
-                                            && dataio.exportOpts.snippet_kind === modelData
+                                        on: dataio !== null && dataio.exportOpts.snippet_kind === modelData
                                         onPicked: settingsRoot.setExportOpt("snippet_kind", modelData)
                                     }
                                 }
@@ -1854,9 +1971,7 @@ Rectangle {
                             keys: "export folder destination output path directory last"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             Text {
-                                text: library !== null
-                                      && library.lastExportDir !== ""
-                                      ? library.lastExportDir : qsTr("—")
+                                text: library !== null && library.lastExportDir !== "" ? library.lastExportDir : qsTr("—")
                                 font.family: theme.monoFont
                                 font.pixelSize: 10
                                 color: theme.tokens.textMuted
@@ -1874,26 +1989,15 @@ Rectangle {
                                 title: qsTr("Export library bundle to…")
                                 currentFolder: settingsRoot.lastDialogUrl()
                                 onAccepted: {
-                                    settingsRoot.dialogEvent(
-                                        "exportDest", "resolved-accepted",
-                                        Date.now()
-                                        - exportDestLoader.openStamp)
-                                    dataio.exportBundle(
-                                        "library",
-                                        settingsRoot.url2path(selectedFolder),
-                                        true)
-                                    settingsRoot.rememberDialogDir(
-                                        exportDestDialog.currentFolder)
-                                    exportDestLoader.active = false
+                                    settingsRoot.dialogEvent("exportDest", "resolved-accepted", Date.now() - exportDestLoader.openStamp);
+                                    dataio.exportBundle("library", settingsRoot.url2path(selectedFolder), true);
+                                    settingsRoot.rememberDialogDir(exportDestDialog.currentFolder);
+                                    exportDestLoader.active = false;
                                 }
                                 onRejected: {
-                                    settingsRoot.dialogEvent(
-                                        "exportDest", "resolved-rejected",
-                                        Date.now()
-                                        - exportDestLoader.openStamp)
-                                    settingsRoot.rememberDialogDir(
-                                        exportDestDialog.currentFolder)
-                                    exportDestLoader.active = false
+                                    settingsRoot.dialogEvent("exportDest", "resolved-rejected", Date.now() - exportDestLoader.openStamp);
+                                    settingsRoot.rememberDialogDir(exportDestDialog.currentFolder);
+                                    exportDestLoader.active = false;
                                 }
                             }
                             // #81 dead-attempt recycle guard +
@@ -1901,13 +2005,11 @@ Rectangle {
                             // for the full rationale (same class).
                             onLoaded: item.open()
                             function open() {
-                                settingsRoot.dialogEvent(
-                                    "exportDest",
-                                    active ? "retry-click" : "click", 0)
+                                settingsRoot.dialogEvent("exportDest", active ? "retry-click" : "click", 0);
                                 if (active)
-                                    active = false
-                                openStamp = Date.now()
-                                active = true
+                                    active = false;
+                                openStamp = Date.now();
+                                active = true;
                             }
                         }
                         Loader {
@@ -1921,24 +2023,15 @@ Rectangle {
                                 fileMode: FileDialog.OpenFile
                                 nameFilters: [qsTr("Fengrid bundles (*.zip)")]
                                 onAccepted: {
-                                    settingsRoot.dialogEvent(
-                                        "bundleImport", "resolved-accepted",
-                                        Date.now()
-                                        - bundleImportLoader.openStamp)
-                                    dataio.importBundle(
-                                        settingsRoot.url2path(selectedFile), "copy")
-                                    settingsRoot.rememberDialogDir(
-                                        bundleImportDialog.currentFolder)
-                                    bundleImportLoader.active = false
+                                    settingsRoot.dialogEvent("bundleImport", "resolved-accepted", Date.now() - bundleImportLoader.openStamp);
+                                    dataio.importBundle(settingsRoot.url2path(selectedFile), "copy");
+                                    settingsRoot.rememberDialogDir(bundleImportDialog.currentFolder);
+                                    bundleImportLoader.active = false;
                                 }
                                 onRejected: {
-                                    settingsRoot.dialogEvent(
-                                        "bundleImport", "resolved-rejected",
-                                        Date.now()
-                                        - bundleImportLoader.openStamp)
-                                    settingsRoot.rememberDialogDir(
-                                        bundleImportDialog.currentFolder)
-                                    bundleImportLoader.active = false
+                                    settingsRoot.dialogEvent("bundleImport", "resolved-rejected", Date.now() - bundleImportLoader.openStamp);
+                                    settingsRoot.rememberDialogDir(bundleImportDialog.currentFolder);
+                                    bundleImportLoader.active = false;
                                 }
                             }
                             // #81 dead-attempt recycle guard +
@@ -1946,13 +2039,11 @@ Rectangle {
                             // for the full rationale (same class).
                             onLoaded: item.open()
                             function open() {
-                                settingsRoot.dialogEvent(
-                                    "bundleImport",
-                                    active ? "retry-click" : "click", 0)
+                                settingsRoot.dialogEvent("bundleImport", active ? "retry-click" : "click", 0);
                                 if (active)
-                                    active = false
-                                openStamp = Date.now()
-                                active = true
+                                    active = false;
+                                openStamp = Date.now();
+                                active = true;
                             }
                         }
                     }
@@ -1982,7 +2073,7 @@ Rectangle {
                             keys: "auto backup quit exit automatic schedule safety"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             FormCheck {
-                                checkLabel: qsTr("back up when the app closes")
+                                checkLabel: qsTr("Back Up When the App Closes")
                                 checked: dataio !== null && dataio.autoBackup
                                 onToggled: dataio.setAutoBackup(checked)
                             }
@@ -2015,20 +2106,20 @@ Rectangle {
                                                 elide: Text.ElideMiddle
                                             }
                                             Text {
-                                                text: (modelData.bytes / 1048576).toFixed(1) + " MB"
-                                                      + (modelData.created
-                                                         ? " · " + modelData.created : "")
+                                                text: (modelData.bytes / 1048576).toFixed(1) + " MB" + (modelData.created ? " · " + modelData.created : "")
                                                 font.family: theme.monoFont
                                                 font.pixelSize: 9
                                                 color: theme.tokens.textMuted
                                             }
                                         }
-                                        Item { Layout.fillWidth: true }
+                                        Item {
+                                            Layout.fillWidth: true
+                                        }
                                         SettingsButton {
                                             text: qsTr("Restore…")
                                             onClicked: {
-                                                settingsRoot.pendingRestore = modelData.path
-                                                restoreConfirm.open()
+                                                settingsRoot.pendingRestore = modelData.path;
+                                                restoreConfirm.open();
                                             }
                                         }
                                         SettingsButton {
@@ -2089,11 +2180,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Text {
                                     Layout.fillWidth: true
-                                    text: sc !== null && sc.gitAvailable()
-                                          ? (sc.lfsAvailable()
-                                             ? qsTr("git + git-lfs detected")
-                                             : qsTr("git detected (git-lfs not found — large files commit directly)"))
-                                          : qsTr("git not installed — install it to enable version control")
+                                    text: sc !== null && sc.gitAvailable() ? (sc.lfsAvailable() ? qsTr("Git + Git-LFS Detected") : qsTr("Git Detected (Git-LFS Not Found — Large Files Commit Directly)")) : qsTr("Git Not Installed — Install It to Enable Version Control")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
                                     color: theme.tokens.textMuted
@@ -2114,7 +2201,7 @@ Rectangle {
                                     id: scTokenField
                                     Layout.fillWidth: true
                                     echoMode: TextInput.Password
-                                    placeholderText: qsTr("ghp_… / token")
+                                    placeholderText: qsTr("GHP_… / Token")
                                     font.family: theme.monoFont
                                     font.pixelSize: 11
                                 }
@@ -2128,7 +2215,7 @@ Rectangle {
                             keys: "maintenance cleanup gc prune branches stale"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             RowLayout {
-                                Button {
+                                FgButton {
                                     text: qsTr("Run maintenance")
                                     onClicked: sc !== null && sc.maintenance_all()
                                 }
@@ -2152,13 +2239,7 @@ Rectangle {
                                 Layout.fillWidth: true
                                 Text {
                                     Layout.fillWidth: true
-                                    text: dataio !== null && dataio.stats.bytes !== undefined
-                                          ? ((dataio.stats.bytes / 1048576).toFixed(1) + " MB"
-                                             + (dataio.stats.wal_bytes
-                                                ? " · WAL " + (dataio.stats.wal_bytes / 1024).toFixed(0) + " KB"
-                                                : "")
-                                             + " · " + dataio.stats.tables.length + " tables")
-                                          : qsTr("—")
+                                    text: dataio !== null && dataio.stats.bytes !== undefined ? ((dataio.stats.bytes / 1048576).toFixed(1) + " MB" + (dataio.stats.wal_bytes ? " · WAL " + (dataio.stats.wal_bytes / 1024).toFixed(0) + " KB" : "") + " · " + dataio.stats.tables.length + " tables") : qsTr("—")
                                     font.family: theme.monoFont
                                     font.pixelSize: 10
                                     color: theme.tokens.textMuted
@@ -2244,8 +2325,7 @@ Rectangle {
                             rowMatches: settingsRoot.matches(section, label, keys)
                             Text {
                                 Layout.fillWidth: true
-                                text: settingsRoot.adminResult !== ""
-                                      ? settingsRoot.adminResult : qsTr("—")
+                                text: settingsRoot.adminResult !== "" ? settingsRoot.adminResult : qsTr("—")
                                 font.family: theme.monoFont
                                 font.pixelSize: 10
                                 color: theme.tokens.textMuted
@@ -2270,17 +2350,15 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("VS Code"), qsTr("Emacs"),
-                                        qsTr("Vim"), qsTr("Readline")]
-                                Component.onCompleted:
-                                    currentIndex = code === null ? 0
-                                        : ({ "vscode": 0, "emacs": 1,
-                                             "vim": 2, "readline": 3 }
-                                           [code.keymap] || 0)
+                                model: [qsTr("VS Code"), qsTr("Emacs"), qsTr("Vim"), qsTr("Readline")]
+                                Component.onCompleted: currentIndex = code === null ? 0 : ({
+                                        "vscode": 0,
+                                        "emacs": 1,
+                                        "vim": 2,
+                                        "readline": 3
+                                    }[code.keymap] || 0)
                                 onActivated: function (idx) {
-                                    code !== null && code.set_keymap(
-                                        ["vscode", "emacs", "vim",
-                                         "readline"][idx])
+                                    code !== null && code.set_keymap(["vscode", "emacs", "vim", "readline"][idx]);
                                 }
                                 background: Rectangle {
                                     radius: 6
@@ -2315,28 +2393,20 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("Pleasing mix"), qsTr("Analogous"),
-                                        qsTr("Complementary"), qsTr("Triadic"),
-                                        qsTr("Monochrome"), qsTr("Random")]
+                                model: [qsTr("Pleasing mix"), qsTr("Analogous"), qsTr("Complementary"), qsTr("Triadic"), qsTr("Monochrome"), qsTr("Random")]
                                 function syncIndex() {
-                                    var rules = ["pleasing", "analogous",
-                                                 "complementary", "triadic",
-                                                 "monochrome", "random"]
-                                    currentIndex = colors === null ? 0
-                                        : Math.max(0, rules.indexOf(colors.rule))
+                                    var rules = ["pleasing", "analogous", "complementary", "triadic", "monochrome", "random"];
+                                    currentIndex = colors === null ? 0 : Math.max(0, rules.indexOf(colors.rule));
                                 }
                                 Component.onCompleted: syncIndex()
                                 onActivated: function (idx) {
-                                    var rules = ["pleasing", "analogous",
-                                                 "complementary", "triadic",
-                                                 "monochrome", "random"]
-                                    colors !== null
-                                        && colors.set_rule(rules[idx])
+                                    var rules = ["pleasing", "analogous", "complementary", "triadic", "monochrome", "random"];
+                                    colors !== null && colors.set_rule(rules[idx]);
                                 }
                                 Connections {
                                     target: colors
                                     function onRuleChanged() {
-                                        ruleRow.syncIndex()
+                                        ruleRow.syncIndex();
                                     }
                                 }
                                 background: Rectangle {
@@ -2371,22 +2441,14 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 checkLabel: ""
                                 checked: prefs !== null && prefs.updateCheck
-                                onToggled: prefs !== null
-                                           && prefs.set_update_check(checked)
+                                onToggled: prefs !== null && prefs.set_update_check(checked)
                             }
                         }
 
                         SettingRow {
                             section: "updates"
                             label: qsTr("Release status")
-                            desc: updater === null ? ""
-                                 : updater.checking
-                                   ? qsTr("Checking the releases page…")
-                                   : updater.updateAvailable
-                                     ? qsTr("Update available: %1")
-                                           .arg(updater.latestVersion)
-                                     : qsTr("fengrid %1 — no newer release seen.")
-                                           .arg(appVersion)
+                            desc: updater === null ? "" : updater.checking ? qsTr("Checking the releases page…") : updater.updateAvailable ? qsTr("Update available: %1").arg(updater.latestVersion) : qsTr("Fengrid %1 — No Newer Release Seen.").arg(appVersion)
                             keys: "release status version update check now open"
                             rowMatches: settingsRoot.matches(section, label, keys)
                             RowLayout {
@@ -2394,16 +2456,13 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 SettingsButton {
                                     text: qsTr("Check now")
-                                    enabled: updater !== null
-                                             && !updater.checking
+                                    enabled: updater !== null && !updater.checking
                                     onClicked: updater.check()
                                 }
                                 SettingsButton {
                                     text: qsTr("Open releases page")
-                                    visible: updater !== null
-                                             && updater.updateAvailable
-                                    onClicked:
-                                        Qt.openUrlExternally(updater.releasesUrl)
+                                    visible: updater !== null && updater.updateAvailable
+                                    onClicked: Qt.openUrlExternally(updater.releasesUrl)
                                 }
                             }
                         }
@@ -2417,8 +2476,7 @@ Rectangle {
                         SettingRow {
                             section: "about"
                             label: qsTr("Fengrid")
-                            desc: qsTr("Version %1 — MIT licensed, Native IT (S. Davis). The UI asset explorer.")
-                                .arg(appVersion)
+                            desc: qsTr("Version %1 — MIT licensed, Native IT (S. Davis). The UI asset explorer.").arg(appVersion)
                             keys: "about version license credit native it help"
                             rowMatches: settingsRoot.matches(section, label, keys)
                         }
@@ -2449,13 +2507,14 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 text: qsTr("Open releases page")
                                 enabled: updater !== null
-                                onClicked:
-                                    Qt.openUrlExternally(updater.releasesUrl)
+                                onClicked: Qt.openUrlExternally(updater.releasesUrl)
                             }
                         }
                     }
 
-                    Item { Layout.preferredHeight: 24 }   // scroll tail
+                    Item {
+                        Layout.preferredHeight: 24
+                    }   // scroll tail
                 }
                 // Basic-style default handles render invisibly on the
                 // card — style it token-driven so the overflow below the
@@ -2472,8 +2531,7 @@ Rectangle {
                     contentItem: Rectangle {
                         implicitWidth: 6
                         radius: 3
-                        color: bodyBar.hovered ? theme.tokens.accent
-                                               : theme.tokens.textMuted
+                        color: bodyBar.hovered ? theme.tokens.accent : theme.tokens.textMuted
                     }
                 }
             }
@@ -2489,36 +2547,31 @@ Rectangle {
         sourceComponent: FolderDialog {
             id: folderDialog
             onAccepted: {
-                settingsRoot.dialogEvent(
-                    "sources", "resolved-accepted",
-                    Date.now() - folderDialogLoader.openStamp)
-                var p = Icons.toLocalPath(selectedFolder)
-                library.add_folder(p, folderDialogLoader.kind)
+                settingsRoot.dialogEvent("sources", "resolved-accepted", Date.now() - folderDialogLoader.openStamp);
+                var p = Icons.toLocalPath(selectedFolder);
+                library.add_folder(p, folderDialogLoader.kind);
                 if (folderDialogLoader.kind === "fontroot")
-                    fonts.rescan()
-                settingsRoot.rememberDialogDir(folderDialog.currentFolder)
-                folderDialogLoader.active = false
+                    fonts.rescan();
+                settingsRoot.rememberDialogDir(folderDialog.currentFolder);
+                folderDialogLoader.active = false;
             }
             onRejected: {
-                settingsRoot.dialogEvent(
-                    "sources", "resolved-rejected",
-                    Date.now() - folderDialogLoader.openStamp)
-                settingsRoot.rememberDialogDir(folderDialog.currentFolder)
-                folderDialogLoader.active = false
+                settingsRoot.dialogEvent("sources", "resolved-rejected", Date.now() - folderDialogLoader.openStamp);
+                settingsRoot.rememberDialogDir(folderDialog.currentFolder);
+                folderDialogLoader.active = false;
             }
         }
         // #81 dead-attempt recycle guard: a dialog that never maps
         // leaves the Loader active and every later click no-ops —
         // rationale on zipDialogLoader in the settings sections.
         function open(kind_) {
-            kind = kind_ || "folder"
-            settingsRoot.dialogEvent(
-                "sources", active ? "retry-click" : "click", 0)
+            kind = kind_ || "folder";
+            settingsRoot.dialogEvent("sources", active ? "retry-click" : "click", 0);
             if (active)
-                active = false
-            openStamp = Date.now()
-            active = true
-            item.open()
+                active = false;
+            openStamp = Date.now();
+            active = true;
+            item.open();
         }
     }
 

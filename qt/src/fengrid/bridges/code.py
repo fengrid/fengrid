@@ -327,6 +327,11 @@ class Code(QObject):
 
     @Slot(str, str)
     def import_snippets(self, kind: str, path: str) -> None:
+        if not kind:
+            # #98: the Settings import row doesn't know the source kind —
+            # infer it from the file extension (.sqlite/.db = massCode,
+            # .code-snippets/.json = VS Code)
+            kind = core_snippets.infer_snippet_kind(path)
         try:
             items = core_snippets.import_file(kind, path)
         except (ValueError, OSError) as e:
@@ -345,6 +350,17 @@ class Code(QObject):
         self.importDone.emit(len(items))
         self.message.emit(f"Imported {len(items)} snippet"
                           f"{'s' if len(items) != 1 else ''}")
+
+    @Slot(result="QVariantList")
+    def scan_vscode_snippets(self) -> list:
+        """#98: find snippet files at VS Code's default locations.
+
+        Returns a list of dicts {app, name, path} for each .code-snippets
+        or .json file in the User/snippets folder of any installed VS Code
+        variant (Code / Insiders / VSCodium / Cursor). Empty when none
+        exist — the user can still pick files manually.
+        """
+        return core_snippets.scan_vscode_snippets()
 
     # -------------------------------------------------------------- exports
     @Slot(str, str)

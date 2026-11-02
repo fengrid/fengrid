@@ -46,8 +46,19 @@ def _normalize(msg: str) -> str:
 
 
 class _DedupeFilter(logging.Filter):
+    # issue #138: fontTools' head-table notes ('created' timestamp seems
+    # very low / out of range) are auto-corrections for font files with
+    # bogus epoch fields — fontTools fixes the value and carries on.
+    # Nothing for the user to act on, dozens per large library, so they
+    # are dropped outright rather than shown once.
+    _DROP = re.compile(
+        r"'(?:created|modified)' timestamp"
+        r" (?:seems very low|out of range)")
+
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
+        if self._DROP.search(msg):
+            return False
         key = (record.name, _normalize(msg))
         with _lock:
             entry = _log_counts.get(key)

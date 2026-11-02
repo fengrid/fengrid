@@ -7,6 +7,8 @@ PropertiesPanel 1.0 PropertiesPanel.qml
 FgMenuItem 1.0 FgMenuItem.qml
 FgMenuSeparator 1.0 FgMenuSeparator.qml
 FgDialogFooter 1.0 FgDialogFooter.qml
+FgButton 1.0 FgButton.qml
+FgSlider 1.0 FgSlider.qml
 SourceControlPanel 1.0 SourceControlPanel.qml
 StudioDesign 1.0 StudioDesign.qml
 StudioAssets 1.0 StudioAssets.qml

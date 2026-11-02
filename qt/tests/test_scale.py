@@ -419,3 +419,125 @@ def test_identify_workers_env_knob(monkeypatch):
     assert indexer.identify_workers() == 4
     monkeypatch.setenv("FENGRID_SCAN_WORKERS", "-3")
     assert indexer.identify_workers() == 1
+
+
+# ------------------------------------------------- palette-bytes warning
+def test_palette_bytes_transparency_no_warning(tmp_path):
+    """#95: P-mode PNGs whose transparency is palette-BYTE indices used
+    to emit PIL's 'should be converted to RGBA' UserWarning on every
+    identify (and on jpeg/pdf/bmp/gif export). working_rgba resolves
+    them silently, per PIL's own advice."""
+    import io as _io
+    import warnings
+    from PIL import Image
+    from fengrid.core import export as core_export
+
+    img = Image.new("P", (8, 8))
+    img.putpalette([i % 256 for i in range(768)])
+    px = img.load()
+    for y in range(8):
+        for x in range(8):
+            px[x, y] = (x + y) % 4
+    img.info["transparency"] = bytes([0, 0, 255, 255])
+    path = tmp_path / "pal.png"
+    img.save(path, format="PNG")
+
+    # the round-trip must keep BYTE transparency (the warning condition)
+    im = Image.open(path)
+    assert im.mode == "P"
+    assert isinstance(im.info.get("transparency"), bytes)
+
+    # fixture sanity: a DIRECT convert warns (the class is real)
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        im.convert("RGB")
+    assert any("converted to RGBA" in str(x.message) for x in w)
+
+    # the helper: no warning, RGBA result
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        rgba = core_export.working_rgba(im)
+    assert rgba.mode == "RGBA"
+    assert not [x for x in w if "converted to RGBA" in str(x.message)]
+
+    # identify on the same file: no warning, metadata intact
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        info = indexer.identify(str(path))
+    assert info["width"] == 8 and info["colorspace"] == "P"
+    assert not [x for x in w if "converted to RGBA" in str(x.message)]
+
+    # export through _convert_for: no warning
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        out = core_export.export(str(path), tmp_path, "pal", "jpeg", 8)
+    assert out.exists()
+    assert not [x for x in w if "converted to RGBA" in str(x.message)]
+
+# ------------------------------------------------------ #121 demo snippets
+def test_demo_snippets_are_fullstack():
+    """#121: demo snippets carry real HTML+CSS (not placeholders) and
+    the interactive ones carry JS — previews render as full-featured
+    layouts with all three editor panes populated."""
+    from fengrid.core import demo
+    web = [s for s in demo.SNIPPETS if s["language"] == "web"]
+    assert len(web) >= 10, "expected a full demo suite of web snippets"
+    for s in web:
+        assert s["html"].strip(), f"{s['title']}: empty html"
+        assert s["css"].strip(), f"{s['title']}: empty css"
+    interactive = [s for s in web if "getElementById" in s["js"]
+                   or "querySelector" in s["js"]]
+    assert len(interactive) >= 6, (
+        f"expected ≥6 interactive demo snippets, got {len(interactive)}")
+    # the new full-stack additions exist
+    titles = {s["title"] for s in demo.SNIPPETS}
+    assert {"Tabs", "Toast stack"} <= titles
+
+
+# ------------------------------------------------------ #120 identity payload
+def test_item_properties_carries_guid_slug(tmp_path):
+    """#120: item_properties returns guid + slug for every asset kind —
+    the IDENTITY section on the Properties panel reads from the payload
+    (fonts previously had no IDENTITY surface at all)."""
+    from fengrid.core import db as core_db
+    from fengrid.core import indexer
+    from fengrid.core import taxonomy as core_tax
+    from pathlib import Path as P
+    con = core_db.connect(tmp_path / "lib.db")
+    src_dir = tmp_path / "fonts"
+    src_dir.mkdir()
+    (src_dir / "Test-Regular.ttf").write_bytes(b"")
+    sources = indexer.ensure_sources(con, [src_dir], kinds=("fontroot",))
+    indexer.scan_fonts(con, sources)
+    row = con.execute(
+        "SELECT id, guid, slug FROM asset WHERE kind = 'font' LIMIT 1"
+    ).fetchone()
+    assert row is not None, "no font indexed"
+
+    class _T:
+        pass
+    # drive the bridge method directly
+    from fengrid.bridges.taxonomy import Taxonomy
+    bridge = Taxonomy(con, str(tmp_path))
+    props = bridge.item_properties("font", row["id"])
+    assert props["guid"] == row["guid"] and props["guid"] != ""
+    assert props["slug"] == ""
+
+    # slug set → payload reflects it
+    core_db.set_slug(con, "font", row["id"], "test serif")
+    props = bridge.item_properties("font", row["id"])
+    assert props["slug"] == "test-serif"
+
+    # unknown kind → empty identity, no crash
+    assert bridge._guid_slug("bogus", 1) == ("", "")
+# --------------------------------------------------------- #119 grid sample
+def test_grid_sample_text_persists(tmp_path):
+    """#119: the pane-wide grid preview text persists in settings and
+    round-trips through the fonts bridge semantics (set/clear)."""
+    from fengrid.core import db as core_db
+    from fengrid.core import settings as core_settings
+    con = core_db.connect(tmp_path / "lib.db")
+    core_settings.set(con, "grid_sample_text", "Hamburgefonstiv")
+    assert core_settings.get(con, "grid_sample_text", "") == "Hamburgefonstiv"
+    core_settings.set(con, "grid_sample_text", "")
+    assert core_settings.get(con, "grid_sample_text", "") == ""

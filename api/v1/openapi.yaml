@@ -917,3 +917,131 @@ paths:
       responses:
         '200':
           description: OK
+  /planning/board:
+    get:
+      summary: >-
+        Full Kanban board — every stage with its position-ordered cards
+        and per-stage colors. `q` filters like the pane's filter field.
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+  /planning/stages:
+    get:
+      summary: Stage metadata (keys, labels, dark/light dot colors)
+      responses:
+        '200':
+          description: OK
+  /planning/tasks:
+    post:
+      summary: >-
+        Create a task. Body: title (required), stage, project_id,
+        description, priority (low|normal|high), due_date (YYYY-MM-DD),
+        status_note.
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+        '404':
+          $ref: '#/components/responses/Err'
+  /planning/tasks/{tid}:
+    get:
+      summary: Task detail (fields + linked assets)
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    patch:
+      summary: >-
+        Update editable fields (title, description, status_note,
+        due_date, priority, project_id). Stage moves go through /move.
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+        '404':
+          $ref: '#/components/responses/Err'
+    delete:
+      summary: Delete a task (its asset links cascade)
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+  /planning/tasks/{tid}/move:
+    post:
+      summary: Kanban move — body {stage, index} (index clamped to the
+        stage length; omit for end-of-stage)
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+        '404':
+          $ref: '#/components/responses/Err'
+  /planning/tasks/{tid}/assets:
+    post:
+      summary: Link a library asset — body {kind, asset_id, label?}
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+        '404':
+          $ref: '#/components/responses/Err'
+  /planning/tasks/{tid}/assets/{row_id}:
+    delete:
+      summary: Unlink a previously linked asset row
+      parameters:
+        - name: tid
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: row_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'

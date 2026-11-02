@@ -135,7 +135,7 @@ def test_preview_is_bottom_band(projects_qml):
     hint = None
     for t in texts:
         txt = t.property("text") or ""
-        if "Live preview renders automatically" in txt:
+        if "Live Preview Renders Automatically" in txt:
             hint = t
             break
     assert hint is not None, "preview hint text not found"

@@ -3,8 +3,9 @@
 #  qt/resources/branding/, which must NOT be caught by this rule)
 /branding/
 
-# Dev-only symlink to system icons
-icons
+# Dev-only symlink to system icons (root-anchored: the vendored
+# Qlementine set under qt/resources/icons/ must stay tracked — #112)
+/icons
 
 # Internal design brief — not for distribution
 IDEA.md
@@ -25,13 +26,17 @@ __pycache__/
 
 # local build outputs — build/scripts/build-docker-linux.sh lands artifacts in
 # build/<target>/; build/pyinstaller/ holds regenerated spec files (never
-# commit host-absolute specs). build/scripts + requirements stay tracked.
+# commit host-absolute specs). build/scripts stays tracked; dependency
+# manifests live in the uv project (qt/pyproject.toml + qt/uv.lock).
 build/*
 !build/scripts/
-!build/requirements-*.txt
 dist/
 qt/dist/
 qt/build/
 
 # pytest cache
 .pytest_cache/
+list.txt
+meta-state.tsv.new
+working.md~
+.env

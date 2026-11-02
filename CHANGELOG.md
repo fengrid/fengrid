@@ -50,6 +50,30 @@ adheres to [Semantic Versioning](https://semver.org/).
 - LIGHT theme `text_muted` and code `ink_faint` darkened to meet
   WCAG AA contrast on their surfaces.
 
+### Fixed
+
+- **WOFF2 webfont exports were broken in every environment** — the default
+  `font_fmts: ["woff2"]` export path (`exportplus.convert_font`) saves
+  through fontTools' WOFF2 encoder, which hard-requires brotli, but no
+  manifest ever declared it: dev venvs raised `ImportError: No module
+  named brotli` (6 tests) and every frozen bundle shipped without the
+  extension. brotli is now a declared runtime dependency, so uv installs
+  it everywhere and PyInstaller bundles it.
+
+### Changed
+
+- **Packaging moved to uv** (project mode, replacing pip + the two floating
+  requirements files). `qt/pyproject.toml` is now the single source of
+  truth: the runtime dependency list absorbs the app's actual imports
+  (`fonttools`, `platformdirs`), the never-imported `watchdog` entry is
+  dropped, and build/QA tooling moved to dependency-groups (`build` =
+  PyInstaller, `dev` = pytest/ruff). The committed `qt/uv.lock` freezes
+  every install — pipelines and local dev run `uv sync --frozen`, so two
+  builds of the same commit ship identical dependency versions. Source
+  installs become `uv sync` (+ `uv run`) instead of venv + `pip install
+  -e .`; `build/requirements-build.txt` / `build/requirements-dev.txt`
+  are deleted.
+
 ### Removed
 
 - **The 0.x web interface is retired** — Qt 6 is now the only Fengrid.

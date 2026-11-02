@@ -39,10 +39,7 @@ Dialog {
             spacing: 10
             Text {
                 Layout.fillWidth: true
-                text: presets !== null
-                      ? (presets.libraries.length + " preset libraries · "
-                         + "nothing downloads until you ask")
-                      : ""
+                text: presets !== null ? (presets.libraries.length + " preset libraries · " + "nothing downloads until you ask") : ""
                 font.family: theme.monoFont
                 font.pixelSize: 9
                 color: theme.tokens.textMuted
@@ -60,18 +57,14 @@ Dialog {
                 contentItem: Text {
                     text: closeBtn.text
                     font: closeBtn.font
-                    color: closeBtn.hovered ? theme.tokens.bg
-                                            : theme.tokens.text
+                    color: closeBtn.hovered ? theme.tokens.bg : theme.tokens.text
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
                 background: Rectangle {
                     radius: 6
-                    color: closeBtn.hovered || closeBtn.pressed
-                           ? theme.tokens.accent : theme.tokens.surface2
-                    border.color: closeBtn.hovered
-                                  ? theme.tokens.accent
-                                  : theme.tokens.border
+                    color: closeBtn.hovered || closeBtn.pressed ? theme.tokens.accent : theme.tokens.surface2
+                    border.color: closeBtn.hovered ? theme.tokens.accent : theme.tokens.border
                 }
                 onClicked: presetsRoot.close()
             }
@@ -80,38 +73,40 @@ Dialog {
 
     function openLibrary(libId, paneKind) {
         if (libId >= 0) {
-            currentLib = libId
+            currentLib = libId;
         } else {
             // no explicit pack: open the library matching the ACTIVE
             // pane's asset kind (Fonts pane → Open Fonts, etc.)
-            var packs = presets !== null ? presets.libraries : []
-            var want = paneKind === "font" ? "font"
-                       : paneKind === "icon" ? "icon"
-                       : paneKind === "template" ? "template" : ""
-            currentLib = -1
+            var packs = presets !== null ? presets.libraries : [];
+            var want = paneKind === "font" ? "font" : paneKind === "icon" ? "icon" : paneKind === "template" ? "template" : "";
+            currentLib = -1;
             for (var i = 0; i < packs.length; i++)
                 if (want !== "" && packs[i].kind === want)
-                    currentLib = packs[i].id
+                    currentLib = packs[i].id;
             if (currentLib < 0 && packs.length > 0)
-                currentLib = packs[0].id
+                currentLib = packs[0].id;
         }
-        filterText = ""
-        refresh()
-        open()
+        filterText = "";
+        refresh();
+        open();
     }
 
     function refresh() {
-        entryRows = (presets !== null && currentLib >= 0)
-                    ? presets.entries(currentLib) : []
+        entryRows = (presets !== null && currentLib >= 0) ? presets.entries(currentLib) : [];
     }
 
     onCurrentLibChanged: refresh()
 
     Connections {
         target: presets
-        function onEntriesChanged() { presetsRoot.refresh() }
-        function onLibrariesChanged() { presetsRoot.refresh() }
-        function onMessage(msg) { }
+        function onEntriesChanged() {
+            presetsRoot.refresh();
+        }
+        function onLibrariesChanged() {
+            presetsRoot.refresh();
+        }
+        function onMessage(msg) {
+        }
     }
 
     // 2:1 preview cards — GitHub social-image proportions (1280x640)
@@ -135,20 +130,20 @@ Dialog {
                 font.letterSpacing: 1.6
                 color: theme.tokens.accent
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
             TextField {
                 id: searchField
                 Layout.preferredWidth: 220
-                placeholderText: qsTr("filter entries…")
+                placeholderText: qsTr("Filter Entries…")
                 font.family: theme.uiFont
                 font.pixelSize: 11
                 color: theme.tokens.text
                 background: Rectangle {
                     radius: 6
                     color: theme.tokens.bg
-                    border.color: searchField.activeFocus
-                                  ? theme.tokens.accent
-                                  : theme.tokens.border
+                    border.color: searchField.activeFocus ? theme.tokens.accent : theme.tokens.border
                 }
                 onTextChanged: presetsRoot.filterText = text
             }
@@ -170,30 +165,22 @@ Dialog {
                     required property var modelData
                     implicitWidth: 200
                     padding: 10
-                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                    HoverHandler {
+                        cursorShape: Qt.PointingHandCursor
+                    }
                     background: Rectangle {
                         radius: 8
-                        color: presetsRoot.currentLib === libTab.modelData.id
-                               ? theme.tokens.surface2 : "transparent"
-                        border.color: presetsRoot.currentLib
-                                      === libTab.modelData.id
-                                      ? theme.tokens.accent
-                                      : theme.tokens.border
+                        color: presetsRoot.currentLib === libTab.modelData.id ? theme.tokens.surface2 : "transparent"
+                        border.color: presetsRoot.currentLib === libTab.modelData.id ? theme.tokens.accent : theme.tokens.border
                     }
                     contentItem: ColumnLayout {
                         spacing: 2
                         Text {
-                            text: libTab.modelData.name
-                                  + (libTab.modelData.downloaded > 0
-                                     ? "  ·  " + libTab.modelData.downloaded
-                                       + " local" : "")
+                            text: libTab.modelData.name + (libTab.modelData.downloaded > 0 ? "  ·  " + libTab.modelData.downloaded + " local" : "")
                             font.family: theme.uiFont
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
-                            color: presetsRoot.currentLib
-                                   === libTab.modelData.id
-                                   ? theme.tokens.accent
-                                   : theme.tokens.text
+                            color: presetsRoot.currentLib === libTab.modelData.id ? theme.tokens.accent : theme.tokens.text
                         }
                         Text {
                             text: libTab.modelData.entries + " entries"
@@ -205,19 +192,20 @@ Dialog {
                     onClicked: presetsRoot.currentLib = libTab.modelData.id
                 }
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
         }
 
         Text {
             Layout.fillWidth: true
             Layout.leftMargin: 16
             text: {
-                var l = (presets !== null && presetsRoot.currentLib >= 0)
-                        ? presets.libraries : []
+                var l = (presets !== null && presetsRoot.currentLib >= 0) ? presets.libraries : [];
                 for (var i = 0; i < l.length; i++)
                     if (l[i].id === presetsRoot.currentLib)
-                        return l[i].summary
-                return ""
+                        return l[i].summary;
+                return "";
             }
             font.family: theme.uiFont
             font.pixelSize: 11
@@ -232,7 +220,7 @@ Dialog {
             contentWidth: width
             contentHeight: gridFlow.implicitHeight + 24
             clip: true
-            ScrollBar.vertical: ScrollBar { }
+            ScrollBar.vertical: ScrollBar {}
 
             Flow {
                 id: gridFlow
@@ -243,20 +231,17 @@ Dialog {
 
                 Repeater {
                     model: {
-                        var f = presetsRoot.filterText.toLowerCase()
-                        var rows = presetsRoot.entryRows
+                        var f = presetsRoot.filterText.toLowerCase();
+                        var rows = presetsRoot.entryRows;
                         if (!f)
-                            return rows
-                        var out = []
+                            return rows;
+                        var out = [];
                         for (var i = 0; i < rows.length; i++) {
-                            var hay = (rows[i].name + " "
-                                       + rows[i].repo + " "
-                                       + rows[i].description + " "
-                                       + rows[i].tags).toLowerCase()
+                            var hay = (rows[i].name + " " + rows[i].repo + " " + rows[i].description + " " + rows[i].tags).toLowerCase();
                             if (hay.indexOf(f) >= 0)
-                                out.push(rows[i])
+                                out.push(rows[i]);
                         }
-                        return out
+                        return out;
                     }
                     delegate: Rectangle {
                         id: entryCard
@@ -265,9 +250,7 @@ Dialog {
                         height: presetsRoot.cardH + 108
                         radius: 8
                         color: theme.tokens.surface2
-                        border.color: cardMa.containsMouse
-                                      ? theme.tokens.accent
-                                      : theme.tokens.border
+                        border.color: cardMa.containsMouse ? theme.tokens.accent : theme.tokens.border
                         clip: true
 
                         // ── preview square (2:1, social-image size) ──
@@ -284,46 +267,30 @@ Dialog {
                             // downloaded → generated preview image
                             Image {
                                 anchors.fill: parent
-                                visible: entryCard.modelData.downloaded
-                                         && entryCard.modelData.preview !== ""
-                                source: entryCard.modelData.downloaded
-                                        && entryCard.modelData.preview !== ""
-                                        ? Icons.fileUrl(
-                                              entryCard.modelData.preview)
-                                        : ""
+                                visible: entryCard.modelData.downloaded && entryCard.modelData.preview !== ""
+                                source: entryCard.modelData.downloaded && entryCard.modelData.preview !== "" ? Icons.fileUrl(entryCard.modelData.preview) : ""
                                 fillMode: Image.PreserveAspectCrop
                                 smooth: true
                             }
 
-                            // remote placeholder: dashed frame + download
-                            // glyph — "this entry is not locally present"
-                            Rectangle {
+                            // palette-kind entry: show color swatches
+                            Row {
                                 anchors.fill: parent
-                                visible: !entryCard.modelData.downloaded
-                                color: "transparent"
-                                border.color: theme.tokens.border
-                                border.width: 1
-                            }
-                            Column {
-                                anchors.centerIn: parent
-                                visible: !entryCard.modelData.downloaded
-                                spacing: 6
-                                IconImage {
-                                    name: "download"
-                                    px: 22
-                                    tint: entryCard.modelData.busy
-                                          ? theme.tokens.accent
-                                          : theme.tokens.textMuted
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                }
-                                Text {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: entryCard.modelData.busy
-                                          ? qsTr("cloning…")
-                                          : qsTr("remote — not downloaded")
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 9
-                                    color: theme.tokens.textMuted
+                                visible: entryCard.modelData.libraryKind === "palette"
+                                spacing: 2
+                                Repeater {
+                                    model: {
+                                        var raw = entryCard.modelData.colors || "";
+                                        if (!raw) return [];
+                                        try { return JSON.parse(raw); }
+                                        catch(e) { return []; }
+                                    }
+                                    Rectangle {
+                                        required property var modelData
+                                        width: (previewBox.width - 10) / 5
+                                        height: previewBox.height
+                                        color: modelData
+                                    }
                                 }
                             }
 
@@ -404,9 +371,7 @@ Dialog {
                             }
                             Text {
                                 Layout.fillWidth: true
-                                text: "#" + String(
-                                          entryCard.modelData.tags)
-                                          .split(",").join(" #")
+                                text: "#" + String(entryCard.modelData.tags).split(",").join(" #")
                                 font.family: theme.monoFont
                                 font.pixelSize: 9
                                 color: theme.tokens.accent
@@ -422,13 +387,16 @@ Dialog {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: function (mouse) {
                                 if (mouse.button === Qt.RightButton) {
-                                    entryMenu.popup()
-                                    return
+                                    entryMenu.popup();
+                                    return;
                                 }
-                                if (entryCard.modelData.downloaded)
-                                    presets.open_folder(entryCard.modelData.id)
-                                else
-                                    presets.download(entryCard.modelData.id)
+                                if (entryCard.modelData.libraryKind === "palette") {
+                                    presets.apply_preset(entryCard.modelData.id);
+                                } else if (entryCard.modelData.downloaded) {
+                                    presets.open_folder(entryCard.modelData.id);
+                                } else {
+                                    presets.download(entryCard.modelData.id);
+                                }
                             }
                         }
                         Menu {
@@ -436,37 +404,35 @@ Dialog {
                             width: 210
                             padding: 4
                             background: Rectangle {
-                                radius: 8; color: theme.tokens.surface
+                                radius: 8
+                                color: theme.tokens.surface
                                 border.color: theme.tokens.border
                             }
                             FgMenuItem {
-                                text: entryCard.modelData.downloaded
-                                      ? qsTr("Update (git pull)")
-                                      : qsTr("Download (git clone)")
+                                visible: entryCard.modelData.libraryKind !== "palette"
+                                text: entryCard.modelData.downloaded ? qsTr("Update (git pull)") : qsTr("Download (git clone)")
                                 height: 28
-                                onTriggered: presets.download(
-                                                 entryCard.modelData.id)
+                                onTriggered: presets.download(entryCard.modelData.id)
                             }
                             FgMenuItem {
+                                visible: entryCard.modelData.libraryKind !== "palette"
                                 text: qsTr("Open folder")
                                 height: 28
                                 enabled: entryCard.modelData.downloaded
-                                onTriggered: presets.open_folder(
-                                                 entryCard.modelData.id)
+                                onTriggered: presets.open_folder(entryCard.modelData.id)
                             }
                             FgMenuItem {
+                                visible: entryCard.modelData.libraryKind !== "palette"
                                 text: qsTr("Open on GitHub")
                                 height: 28
-                                onTriggered: Qt.openUrlExternally(
-                                                 "https://github.com/"
-                                                 + entryCard.modelData.repo)
+                                onTriggered: Qt.openUrlExternally("https://github.com/" + entryCard.modelData.repo)
                             }
                             FgMenuItem {
+                                visible: entryCard.modelData.libraryKind !== "palette"
                                 text: qsTr("Remove local copy")
                                 height: 28
                                 enabled: entryCard.modelData.downloaded
-                                onTriggered: presets.forget(
-                                                 entryCard.modelData.id)
+                                onTriggered: presets.forget(entryCard.modelData.id)
                             }
                         }
                     }
@@ -479,12 +445,7 @@ Dialog {
             Layout.fillWidth: true
             Layout.leftMargin: 16
             Layout.bottomMargin: 10
-            text: qsTr("Entries stay remote until downloaded — clicking a "
-                       + "remote card clones its repository with Fengrid's "
-                       + "git (source URL and branch from the entry's "
-                       + "properties). Previews are generated at GitHub "
-                       + "social-image size (1280×640) from the repo's "
-                       + "README/social imagery once downloaded.")
+            text: qsTr("Entries stay remote until downloaded — clicking a " + "remote card clones its repository with Fengrid's " + "git (source URL and branch from the entry's " + "properties). Previews are generated at GitHub " + "social-image size (1280×640) from the repo's " + "README/social imagery once downloaded.")
             font.family: theme.uiFont
             font.pixelSize: 10
             color: theme.tokens.textMuted

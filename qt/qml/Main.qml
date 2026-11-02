@@ -20,12 +20,34 @@ ApplicationWindow {
     font.family: theme.uiFont
     font.pixelSize: 13
 
+    // the Qt Quick Controls default palette — every default-styled
+    // Button/ComboBox/Menu contentItem binds to these, so any control
+    // that skips its own themed skin still renders with theme colors.
+    // Before this, default Button text was #000 (the light control
+    // palette) sitting on themed dark backgrounds — illegible (#87).
+    palette.window: theme.tokens.bg
+    palette.windowText: theme.tokens.text
+    palette.button: theme.tokens.surface2
+    palette.buttonText: theme.tokens.text
+    palette.text: theme.tokens.text
+    palette.base: theme.tokens.surface
+    palette.toolTipBase: theme.tokens.surface2
+    palette.toolTipText: theme.tokens.text
+    palette.placeholderText: theme.tokens.textMuted
+    palette.accent: theme.tokens.accent
+    palette.highlight: theme.tokens.accent
+    palette.highlightedText: theme.tokens.bg
+    palette.link: theme.tokens.accent
+
     Component.onCompleted: {
         if (typeof startupNotice !== "undefined" && startupNotice !== "")
             toast.show(startupNotice)
     }
 
-    property int iconSize: sizeSlider.value
+    // #153: the icons grid reads its OWN persisted size — the header
+    // slider edits the active pane's value, so binding here to the
+    // slider would drag the icons grid along with font-grid changes
+    property int iconSize: prefs !== null ? prefs.iconSize : 32
     // 0 = icons, 1 = fonts, 2 = colors, 3 = code, 4 = projects (top-bar
     // pane switcher); --pane N (QA) overrides via the initialPane context
     property int pane: typeof initialPane !== "undefined" ? initialPane : 0
@@ -39,6 +61,7 @@ ApplicationWindow {
     property var colorsPane: null
     property var codePane: null
     property var projectsPane: null
+    property var planningPane: null
     // blur the main UI behind open modal windows (Preset Libraries,
     // entity inspector, Settings) — read by the blur-behind host.
     // CRASH GUARD: the MultiEffect layer is shader-based; on the
@@ -46,11 +69,11 @@ ApplicationWindow {
     // displays) engaging it segfaults (user report) — never enable it
     // there
     readonly property bool blurUi: softwareRenderer === false
-                                   && ((presetsDialog !== null
+                                    && ((presetsDialog !== null
                                         && presetsDialog.visible)
-                                       || (entityInspector !== null
-                                           && entityInspector.visible)
-                                       || root.settingsOpen)
+                                    || (entityInspector !== null
+                                        && entityInspector.visible)
+                                    || root.settingsOpen)
     function openEntityInspector(kind, id) {
         entityKind = String(kind)
         entityId = parseInt(id)
@@ -63,7 +86,7 @@ ApplicationWindow {
     // computed in __main__ (flag unset && not a screenshot run); flipped
     // afterwards by prefs.firstRunNeededChanged
     property bool setupOpen: typeof initialFirstRun !== "undefined"
-                             && initialFirstRun
+                            && initialFirstRun
     property string pendingCategory: ""
     // ── status-bar tip ticker + short-lived notices. Details win: while
     // a notice (scan summaries, export results, errors) is live the tips
@@ -138,22 +161,28 @@ ApplicationWindow {
                 // binding would go stale after the first layout pass
                 onAboutToShow: {
                     var p = menuBtn.mapToItem(Overlay.overlay, 0,
-                                              menuBtn.height)
+                                            menuBtn.height)
                     x = p.x
                     y = p.y + 6
                 }
                 // ── databases: current / Quick access / Recent ──
+                // #116: hidden items inside a Menu still reserve their
+                // height in the content layout (Qt 6 menu geometry) —
+                // every conditional item pins height to 0 when hidden,
+                // otherwise the menu shows a ~90px dead band when no
+                // quick-access/recent databases exist
                 FgMenuItem {
                     enabled: false
                     font.pixelSize: 11
                     font.letterSpacing: 1.2
                     font.capitalization: Font.AllUppercase
                     text: dbs !== null
-                          ? qsTr("Database — %1").arg(dbs.currentLabel)
-                          : qsTr("Database")
+                        ? qsTr("Database — %1").arg(dbs.currentLabel)
+                        : qsTr("Database")
                 }
                 FgMenuItem {
                     visible: dbs !== null && dbs.quick.length > 0
+                    height: visible ? implicitHeight : 0
                     enabled: false
                     text: qsTr("Quick access")
                 }
@@ -163,12 +192,13 @@ ApplicationWindow {
                         required property var modelData
                         enabled: modelData.exists
                         text: modelData.label + (modelData.exists ? ""
-                                                                  : qsTr(" (missing)"))
+                                                                : qsTr(" (missing)"))
                         onClicked: dbs.switchTo(modelData.path)
                     }
                 }
                 FgMenuItem {
                     visible: dbs !== null && dbs.recent.length > 0
+                    height: visible ? implicitHeight : 0
                     enabled: false
                     text: qsTr("Recent")
                 }
@@ -178,19 +208,20 @@ ApplicationWindow {
                         required property var modelData
                         enabled: modelData.exists
                         text: modelData.label + " · " + modelData.when
-                              + (modelData.exists ? "" : qsTr(" (missing)"))
+                            + (modelData.exists ? "" : qsTr(" (missing)"))
                         onClicked: dbs.switchTo(modelData.path)
                     }
                 }
                 FgMenuSeparator {
                     visible: dbs !== null && (dbs.quick.length > 0
-                                              || dbs.recent.length > 0)
+                                            || dbs.recent.length > 0)
+                    height: visible ? implicitHeight : 0
                 }
                 FgMenuItem {
                     visible: dbs !== null
                     text: dbs !== null && dbs.currentStarred
-                          ? qsTr("Unstar current database")
-                          : qsTr("Star current database")
+                        ? qsTr("Unstar current database")
+                        : qsTr("Star current database")
                     onTriggered: dbs.starCurrent()
                 }
                 FgMenuItem {
@@ -205,6 +236,7 @@ ApplicationWindow {
                 }
                 FgMenuItem {
                     visible: dbs !== null && dbs.recent.length > 0
+                    height: visible ? implicitHeight : 0
                     text: qsTr("Clear recent")
                     onTriggered: dbs.clearRecent()
                 }
@@ -295,7 +327,7 @@ ApplicationWindow {
                 function syncIndex() {
                     currentIndex = ["smart", "fuzzy", "regex", "content"]
                         .indexOf(library !== null ? library.searchMode
-                                                  : "smart")
+                                                : "smart")
                 }
                 Component.onCompleted: syncIndex()
                 Connections {
@@ -328,7 +360,7 @@ ApplicationWindow {
                 radius: 6
                 color: theme.tokens.surface2
                 border.color: searchField.activeFocus ? theme.tokens.accent
-                                                      : theme.tokens.border
+                                                    : theme.tokens.border
 
                 RowLayout {
                     anchors.fill: parent
@@ -338,10 +370,11 @@ ApplicationWindow {
 
                     IconImage {
                         name: "search"
-                        // header inline icons are 14px — one size below the
-                        // 16px IconButton glyphs, so field/decoration glyphs
-                        // sit quieter than the clickable ones next to them
-                        px: 14
+                        // header inline icons are 13px with the optical
+                        // 0.71 inset (Icons.url) — ink lands on the text
+                        // cap-height, one quiet tier below the clickable
+                        // 16px IconButton glyphs
+                        px: 13
                         tint: theme.tokens.textMuted
                         // magnifier = mouse entry into the slash menu
                         MouseArea {
@@ -357,9 +390,9 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         // the tip for the slash-menu hotkey rides in
                         // the placeholder and follows the user's binding
-                        placeholderText: qsTr("search assets  ( / )  ·  %1")
+                        placeholderText: qsTr("Search Assets  ( / )  ·  %1")
                             .arg(prefs !== null ? prefs.formattedShortcut
-                                                 : "Alt + /")
+                                                : "Alt + /")
                         color: theme.tokens.text
                         placeholderTextColor: theme.tokens.textMuted
                         background: null
@@ -371,7 +404,7 @@ ApplicationWindow {
 
                     IconImage {
                         name: "x"
-                        px: 14
+                        px: 13
                         tint: theme.tokens.textMuted
                         visible: searchField.text.length > 0
                         MouseArea {
@@ -396,32 +429,48 @@ ApplicationWindow {
 
             IconImage {
                 name: "grid"
-                px: 14
+                px: 13
                 tint: theme.tokens.textMuted
                 Layout.alignment: Qt.AlignVCenter
             }
-            Slider {
+            FgSlider {
                 id: sizeSlider
                 ToolTip.visible: hovered
                 ToolTip.delay: 400
-                ToolTip.text: qsTr("Grid tile size on the icons pane")
+                // #153: the slider drives the ACTIVE pane's grid —
+                // independent persisted sizes for icons and fonts
+                ToolTip.text: root.pane === 1
+                              ? qsTr("Font Grid Size")
+                              : qsTr("Icon Grid Size")
                 from: 16
                 to: 256
                 stepSize: 16
-                value: prefs !== null ? prefs.iconSize : 32
+                value: prefs !== null ? (root.pane === 1
+                                         ? prefs.fontGridSize
+                                         : prefs.iconSize) : 32
                 Layout.preferredWidth: 110
                 Layout.alignment: Qt.AlignVCenter
                 // moved() = user-driven only (no feedback loop with the
-                // sync below); set_icon_size dedupes per-step writes
-                onMoved: prefs !== null
-                         && prefs.set_icon_size(Math.round(value))
+                // sync below); the setters dedupe per-step writes
+                onMoved: {
+                    if (prefs === null)
+                        return;
+                    if (root.pane === 1)
+                        prefs.set_font_grid_size(Math.round(value));
+                    else
+                        prefs.set_icon_size(Math.round(value));
+                }
                 Connections {
                     // a drag writes `value` imperatively, killing the
                     // binding above — re-sync from Settings while idle
                     target: prefs
                     function onIconSizeChanged() {
-                        if (!sizeSlider.pressed)
+                        if (!sizeSlider.pressed && root.pane !== 1)
                             sizeSlider.value = prefs.iconSize
+                    }
+                    function onFontGridSizeChanged() {
+                        if (!sizeSlider.pressed && root.pane === 1)
+                            sizeSlider.value = prefs.fontGridSize
                     }
                 }
             }
@@ -437,7 +486,7 @@ ApplicationWindow {
             IconButton {
                 icon_name: theme.isDark ? "sun" : "moon"
                 ToolTip.text: theme.isDark ? qsTr("Switch to light")
-                                           : qsTr("Switch to dark")
+                                        : qsTr("Switch to dark")
                 onClicked: theme.toggle()
             }
             IconButton {
@@ -537,6 +586,21 @@ ApplicationWindow {
                 }
                 onStatusChanged: if (status === Loader.Ready) projectsPane = item
             }
+            Loader {
+                id: planningLoader
+                active: root.pane === 5 || root.startupPane === 5
+                asynchronous: true
+                sourceComponent: Planning {
+                    // deep integration: a card's project chip opens the
+                    // project in the Projects pane
+                    onProjectOpenRequested: (id) => {
+                        root.pane = 4;
+                        if (projects !== null)
+                            projects.open(id);
+                    }
+                }
+                onStatusChanged: if (status === Loader.Ready) planningPane = item
+            }
         }
 
         Rectangle {
@@ -551,7 +615,10 @@ ApplicationWindow {
             Layout.fillHeight: true
             gridView: grid
             index: grid.currentIndex
-            visible: root.pane === 0 && grid.currentIndex >= 0
+            // checkbox multi-selection → aggregate summary + bulk export
+            selectedIds: grid.selectedIds
+            visible: root.pane === 0
+                    && (grid.currentIndex >= 0 || grid.selectedIds.length > 0)
         }
         // universal Properties panel for the other asset kinds (fonts,
         // color schemes, code snippets) — tags, custom fields, links
@@ -562,12 +629,18 @@ ApplicationWindow {
             itemKind: root.pane === 1 ? "font" : "palette"
             itemId: root.pane === 1
                     ? (fonts !== null
-                       ? fonts.family_primary_id(fonts.selectedFamily) : -1)
+                    ? fonts.family_primary_id(fonts.selectedFamily) : -1)
                     : (colors !== null ? colors.paletteId : -1)
+            // #115: checkbox multi-selection on the Fonts pane → the
+            // panel shows an aggregate summary instead of single-item
+            // detail (same pattern as the Icons pane's InspectorPanel)
+            selectedIds: root.pane === 1 && fontsPane !== null && fonts !== null
+                    ? fonts.checked_family_ids(fontsPane.checkedFams) : []
             // pane 3 hosts its own PropertiesPanel in the editor row —
             // the snippet preview spans the FULL lower band, so the
             // Main-level inspector would push it out of the window
-            visible: root.pane >= 1 && root.pane <= 2 && itemId >= 0
+            visible: root.pane >= 1 && root.pane <= 2
+                    && (itemId >= 0 || selectedIds.length > 1)
         }
     }
     }   // blurHost
@@ -584,7 +657,8 @@ ApplicationWindow {
         function flash() {
             color = [theme.tokens.accentIcon, theme.tokens.accentFont,
                      theme.tokens.accentColor, theme.tokens.accentCode,
-                     theme.tokens.accentProject][root.pane]
+                     theme.tokens.accentProject,
+                     theme.tokens.accentPlanning][root.pane]
             paneFlashAnim.restart()
         }
         Connections {
@@ -642,7 +716,7 @@ ApplicationWindow {
             height: 26
             radius: 13
             color: closeMa.containsMouse ? theme.tokens.surface2
-                                         : "transparent"
+                                        : "transparent"
             z: 2
             Text {
                 anchors.centerIn: parent
@@ -675,10 +749,10 @@ ApplicationWindow {
                 text: {
                     if (root.pane === 0 && library !== null)
                         return library.scanning
-                               ? qsTr("indexing… %1").arg(library.scanCount)
-                               : qsTr("%1 assets%2").arg(library.totalAssets)
-                                 .arg(library.lastScan !== ""
-                                      ? qsTr(" · indexed ")
+                                ? qsTr("Indexing… %1").arg(library.scanCount)
+                                : qsTr("%1 assets%2").arg(library.totalAssets)
+                                .arg(library.lastScan !== ""
+                                    ? qsTr(" · indexed ")
                                         + library.lastScan : "")
                     if (root.pane === 1 && fonts !== null)
                         return qsTr("%1 font files · %2 families").arg(
@@ -689,6 +763,9 @@ ApplicationWindow {
                         return qsTr("%1 snippets").arg(code.snippetCount)
                     if (root.pane === 4 && projects !== null)
                         return qsTr("%1 projects").arg(projects.projects.length)
+                    if (root.pane === 5 && planning !== null
+                            && typeof planning !== "undefined")
+                        return qsTr("%1 tasks").arg(planning.totalCount)
                     return ""
                 }
                 font.family: theme.monoFont
@@ -700,7 +777,7 @@ ApplicationWindow {
             Text {
                 id: uncommittedNote
                 text: sc !== null && sc.hasUncommitted
-                      ? qsTr("● %1: uncommitted changes — commit or stash")
+                    ? qsTr("● %1: uncommitted changes — commit or stash")
                         .arg(sc.currentBranch) : ""
                 visible: text !== ""
                 font.family: theme.monoFont
@@ -720,8 +797,8 @@ ApplicationWindow {
                 // indexed details it must never displace
                 text: "| " + root.statusTip
                 visible: library !== null && !library.scanning
-                         && root.statusNotice === ""
-                         && !(updater !== null && updater.updateAvailable)
+                        && root.statusNotice === ""
+                        && !(updater !== null && updater.updateAvailable)
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: theme.tokens.textMuted
@@ -754,13 +831,13 @@ ApplicationWindow {
                 // background release probe finds something newer — click
                 // either state to re-check / open the releases page
                 text: updater !== null && updater.updateAvailable
-                      ? qsTr("update available: ") + updater.latestVersion
-                      + " — click to open"
-                      : "fengrid " + appVersion
+                        ? qsTr("Update Available: ") + updater.latestVersion
+                        + " — Click to Open"
+                        : "fengrid " + appVersion
                 font.family: theme.monoFont
                 font.pixelSize: 11
                 color: updater !== null && updater.updateAvailable
-                       ? theme.tokens.hlInk : theme.tokens.textMuted
+                        ? theme.tokens.hlInk : theme.tokens.textMuted
                 MouseArea {
                     anchors.fill: parent
                     hoverEnabled: true
@@ -984,19 +1061,31 @@ ApplicationWindow {
         interval: 400
         onTriggered: inspectorPanel.bodyFlick.contentY = qaInspectorScroll
     }
+    // QA: FENGRID_QA_SELECT_IDS="1,2,3" pre-checks grid checkboxes so the
+    // inspector's aggregate multi-selection view renders in screenshots
+    Timer {
+        interval: 500
+        running: typeof qaSelectIds !== "undefined" && qaSelectIds.length > 0
+        onTriggered: {
+            grid.selectedIds = qaSelectIds
+            var r = library.row_of_asset(qaSelectIds[0])
+            if (r >= 0)
+                grid.currentIndex = r
+        }
+    }
 
     Shortcut {
         sequence: prefs !== null ? prefs.commandShortcut : "Alt+/"
         enabled: !root.setupOpen && !Shell.capturing
         onActivated: commandPalette.open ? commandPalette.hide()
-                                         : commandPalette.show("")
+                                        : commandPalette.show("")
     }
 
     Shortcut {
         sequence: "/"
         enabled: !searchField.activeFocus && !root.settingsOpen
-                 && !root.setupOpen && !root.paletteOpen
-                 && !Shell.capturing
+                && !root.setupOpen && !root.paletteOpen
+                && !Shell.capturing
         onActivated: {
             searchField.forceActiveFocus()
             searchField.selectAll()
@@ -1005,15 +1094,15 @@ ApplicationWindow {
     Shortcut {
         sequence: "Ctrl+C"
         enabled: grid.currentIndex >= 0 && !root.settingsOpen
-                 && !root.setupOpen && !root.paletteOpen
-                 && !Shell.capturing
+                && !root.setupOpen && !root.paletteOpen
+                && !Shell.capturing
         onActivated: library.copy_name(grid.currentIndex)
     }
     Shortcut {
         sequence: "Escape"
         enabled: grid.currentIndex >= 0 && !root.settingsOpen
-                 && !root.setupOpen && !root.paletteOpen
-                 && !Shell.capturing
+                && !root.setupOpen && !root.paletteOpen
+                && !Shell.capturing
         onActivated: grid.currentIndex = -1
     }
     // Ctrl+, — settings (toggle); blocked while setup is modal
@@ -1024,12 +1113,13 @@ ApplicationWindow {
         enabled: !root.setupOpen && !root.paletteOpen && !Shell.capturing
         onActivated: root.settingsOpen = !root.settingsOpen
     }
-    // Ctrl+1..5 — quick pane switching matching the top-bar order
+    // Ctrl+1..6 — quick pane switching matching the top-bar order
     Shortcut { sequence: "Ctrl+1"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 0 }
     Shortcut { sequence: "Ctrl+2"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 1 }
     Shortcut { sequence: "Ctrl+3"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 2 }
     Shortcut { sequence: "Ctrl+4"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 3 }
     Shortcut { sequence: "Ctrl+5"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 4 }
+    Shortcut { sequence: "Ctrl+6"; enabled: !root.settingsOpen && !root.setupOpen && !root.paletteOpen && !Shell.capturing; onActivated: root.pane = 5 }
 
     // global undo/redo — routes to the FOCUSED pane's undo bridge
     // (project settings changes for Projects, palette edits for Colors;
@@ -1037,22 +1127,22 @@ ApplicationWindow {
     Shortcut {
         sequences: [StandardKey.Undo]
         enabled: !root.settingsOpen && !root.paletteOpen
-                 && ((root.pane === 4 && undoProjects !== null
-                      && undoProjects.canUndo)
-                     || (root.pane === 2 && undoColors !== null
-                         && undoColors.canUndo))
+                && ((root.pane === 4 && undoProjects !== null
+                    && undoProjects.canUndo)
+                    || (root.pane === 2 && undoColors !== null
+                && undoColors.canUndo))
         onActivated: root.pane === 4 ? undoProjects.undo()
-                                     : undoColors.undo()
+                                    : undoColors.undo()
     }
     Shortcut {
         sequences: [StandardKey.Redo]
         enabled: !root.settingsOpen && !root.paletteOpen
-                 && ((root.pane === 4 && undoProjects !== null
-                      && undoProjects.canRedo)
-                     || (root.pane === 2 && undoColors !== null
-                         && undoColors.canRedo))
+                && ((root.pane === 4 && undoProjects !== null
+                    && undoProjects.canRedo)
+                    || (root.pane === 2 && undoColors !== null
+                        && undoColors.canRedo))
         onActivated: root.pane === 4 ? undoProjects.redo()
-                                     : undoColors.redo()
+                                    : undoColors.redo()
     }
     // uncommitted changes pending at close — prompt commit or stash first
     onClosing: function (close) {
@@ -1080,8 +1170,8 @@ ApplicationWindow {
             }
             Text {
                 text: qsTr("The current project has uncommitted changes.")
-                      + " Commit them before closing, or stash them"
-                      + " to return later."
+                        + " Commit them before closing, or stash them"
+                        + " to return later."
                 wrapMode: Text.Wrap
                 font.family: theme.uiFont; font.pixelSize: 11
                 color: theme.tokens.text
@@ -1090,7 +1180,7 @@ ApplicationWindow {
             TextField {
                 id: closeMsg
                 Layout.fillWidth: true
-                placeholderText: qsTr("commit message…")
+                placeholderText: qsTr("Commit Message…")
                 font.family: theme.monoFont; font.pixelSize: 11
             }
         }
@@ -1105,28 +1195,20 @@ ApplicationWindow {
                     right: parent.right; rightMargin: 16
                     bottom: parent.bottom; bottomMargin: 16
                 }
-                Button {
+                FgButton {
                     text: qsTr("Quit anyway")
                     onClicked: closePrompt.closeAndQuit()
-                    background: Rectangle {
-                        radius: 6; color: theme.tokens.surface2
-                        border.color: theme.tokens.border
-                    }
                 }
-                Button {
+                FgButton {
                     text: qsTr("Stash & close")
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Set the changes aside — restore " +
-                                       "them with «Restore stash» in the " +
-                                       "Projects source panel")
+                                        "them with «Restore stash» in the " +
+                                        "Projects source panel")
                     onClicked: {
                         sc.stash(closeMsg.text.trim() !== ""
-                                 ? closeMsg.text : "WIP before close")
+                                ? closeMsg.text : "WIP before close")
                         closePrompt.stashAndClose()
-                    }
-                    background: Rectangle {
-                        radius: 6; color: theme.tokens.surface2
-                        border.color: theme.tokens.border
                     }
                 }
                 Button {
@@ -1167,9 +1249,9 @@ ApplicationWindow {
         title: qsTr("Open database")
         fileMode: FileDialog.OpenFile
         nameFilters: [qsTr("Fengrid database (*.db)"),
-                      qsTr("All files (*)")]
+                        qsTr("All files (*)")]
         onAccepted: dbs !== null
-                     && dbs.openDatabase(Icons.toLocalPath(selectedFile))
+                    && dbs.openDatabase(Icons.toLocalPath(selectedFile))
     }
     FileDialog {
         id: newDbDialog
@@ -1179,7 +1261,7 @@ ApplicationWindow {
         defaultSuffix: "db"
         currentFolder: dbs !== null ? dbs.defaultDir : ""
         onAccepted: dbs !== null
-                     && dbs.createDatabase(Icons.toLocalPath(selectedFile))
+                    && dbs.createDatabase(Icons.toLocalPath(selectedFile))
     }
 
     // QA: --dialog <name> opens a registered modal after load — delayed so
@@ -1215,14 +1297,53 @@ ApplicationWindow {
             if (fontsPane !== null) {
                 fontsPane.openExportCss()
             } else {
-                // Force load and retry
+                // Force load and retry once the loader finishes — signal
+                // handlers are read-only on dynamically created objects,
+                // so the poll exposes a plain property-var callback
                 fontsLoader.active = true
-                fontsLoader.onStatusChanged = function() {
+                var poll = Qt.createQmlObject(
+                    "import QtQuick; Timer { interval: 100; repeat: true;"
+                    + " property var onReady: null;"
+                    + " onTriggered: if (onReady) onReady() }",
+                    fontsLoader, "qaFontsCssPoll")
+                poll.onReady = function() {
                     if (fontsLoader.status === Loader.Ready) {
                         fontsPane = fontsLoader.item
                         fontsPane.openExportCss()
+                        poll.stop()
+                        poll.destroy()
                     }
                 }
+                poll.start()
+            }
+            return
+        }
+        if (name === "colorPicker") {
+            root.pane = 2
+            if (colorsPane === null && colorsLoader.status === Loader.Ready) {
+                colorsPane = colorsLoader.item
+            }
+            if (colorsPane !== null) {
+                Qt.callLater(function() {
+                    if (colorsPane !== null)
+                        colorsPane.openColorPicker()
+                })
+            } else {
+                colorsLoader.active = true
+                var poll2 = Qt.createQmlObject(
+                    "import QtQuick; Timer { interval: 100; repeat: true;"
+                    + " property var onReady: null;"
+                    + " onTriggered: if (onReady) onReady() }",
+                    colorsLoader, "qaColorPickerPoll")
+                poll2.onReady = function() {
+                    if (colorsLoader.status === Loader.Ready) {
+                        colorsPane = colorsLoader.item
+                        colorsPane.openColorPicker()
+                        poll2.stop()
+                        poll2.destroy()
+                    }
+                }
+                poll2.start()
             }
             return
         }
@@ -1279,10 +1400,10 @@ ApplicationWindow {
             return
         }
         var dlg = (sideRail && sideRail.qaModals
-                   && sideRail.qaModals[name])
-                  ? sideRail.qaModals[name]
-                  : (inspectorPanel && inspectorPanel.qaModals
-                     ? inspectorPanel.qaModals[name] : null)
+                    && sideRail.qaModals[name])
+                    ? sideRail.qaModals[name]
+                    : (inspectorPanel && inspectorPanel.qaModals
+                        ? inspectorPanel.qaModals[name] : null)
         if (dlg)
             dlg.open()
     }
@@ -1306,7 +1427,7 @@ ApplicationWindow {
     Timer {
         interval: 6000
         running: root.statusNotice === "" && !root.paletteOpen
-                 && !root.settingsOpen && !root.setupOpen
+                && !root.settingsOpen && !root.setupOpen
         repeat: true
         onTriggered: root.statusTipIdx++
     }

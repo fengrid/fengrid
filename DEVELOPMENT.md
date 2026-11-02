@@ -108,6 +108,7 @@ build/run/browse; `core/projects_git.py` gives every project a git repo
 
 ```bash
 cd qt
+uv sync                                  # materializes .venv from uv.lock (build + dev groups)
 .venv/bin/python -m pytest tests/ -q     # 235 tests, ~50 s
 ```
 

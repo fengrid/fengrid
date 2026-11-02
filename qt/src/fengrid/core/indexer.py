@@ -139,7 +139,11 @@ def identify(path: str) -> dict[str, Any]:
             elif (im.width or 0) * (im.height or 0) > 256 * 1024 * 1024:
                 info["mono"] = 0          # cannot verify: assume colour
             else:
-                small = im.convert("RGB")
+                # #95: P-mode PNGs with palette-BYTE transparency warn on
+                # a direct convert("RGB") — resolve through RGBA first
+                # (PIL's own advice; shared with the export pipeline)
+                from .export import working_rgba
+                small = working_rgba(im).convert("RGB")
                 if small.width * small.height > 4096 * 4096:
                     small = small.resize((256, 256))
                 colors = small.getcolors(maxcolors=100000)
@@ -604,7 +608,7 @@ def _note_woff2_skips(n: int) -> None:
     (issue #63) — never per file."""
     if n:
         print(f"fengrid: skipped WOFF2 identification for {n} font file(s) —"
-              " install brotli (pip install brotli) for full font metadata",
+              " install brotli (uv pip install brotli) for full font metadata",
               file=sys.stderr)
 
 

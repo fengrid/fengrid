@@ -8,7 +8,7 @@ import QtQuick.Layouts
 RowLayout {
     id: row
     property string section: ""  // category key — also drives the
-                                 // section's any-row-visible filter
+    // section's any-row-visible filter
     property string label: ""
     property string desc: ""
     property string keys: ""     // extra search synonyms

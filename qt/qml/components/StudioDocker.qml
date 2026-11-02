@@ -17,7 +17,6 @@ Item {
         color: theme.tokens.accent
     }
 
-
     property var st: null               // Studio bridge
     property string browsePath: "/"
     property string logText: ""
@@ -30,25 +29,22 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             Text {
-                text: st && st.dockerOk
-                      ? qsTr("docker %1 — connected").arg(dockerVersion())
-                      : qsTr("docker daemon not reachable")
-                font.family: theme.monoFont; font.pixelSize: 10
-                color: st && st.dockerOk ? theme.tokens.success
-                                         : theme.tokens.litPane
+                text: st && st.dockerOk ? qsTr("Docker %1 — Connected").arg(dockerVersion()) : qsTr("Docker Daemon Not Reachable")
+                font.family: theme.monoFont
+                font.pixelSize: 10
+                color: st && st.dockerOk ? theme.tokens.success : theme.tokens.litPane
             }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
             Text {
-                property var state: st ? st.dockerState : {"exists": false}
-                text: state.exists
-                      ? (state.running
-                         ? qsTr("● %1 running — %2").arg(state.status)
-                           .arg(state.ports.join(" "))
-                         : qsTr("○ %1 stopped").arg(state.status))
-                      : qsTr("no container yet")
-                font.family: theme.monoFont; font.pixelSize: 10
-                color: state.exists && state.running
-                       ? theme.tokens.success : theme.tokens.textMuted
+                property var state: st ? st.dockerState : {
+                    "exists": false
+                }
+                text: state.exists ? (state.running ? qsTr("● %1 running — %2").arg(state.status).arg(state.ports.join(" ")) : qsTr("○ %1 stopped").arg(state.status)) : qsTr("No Container Yet")
+                font.family: theme.monoFont
+                font.pixelSize: 10
+                color: state.exists && state.running ? theme.tokens.success : theme.tokens.textMuted
             }
         }
 
@@ -58,32 +54,73 @@ Item {
             rowSpacing: 6
             Layout.fillWidth: true
 
-            Text { text: qsTr("image (tag)"); font.family: theme.uiFont
-                   font.pixelSize: 10; color: theme.tokens.textMuted }
-            FormInput { id: cfgImage; Layout.fillWidth: true }
-            Text { text: qsTr("container name"); font.family: theme.uiFont
-                   font.pixelSize: 10; color: theme.tokens.textMuted }
-            FormInput { id: cfgName; Layout.fillWidth: true }
-            Text { text: qsTr("ports (host:cont, …)")
-                   font.family: theme.uiFont; font.pixelSize: 10
-                   color: theme.tokens.textMuted }
-            FormInput { id: cfgPorts; Layout.fillWidth: true }
-            Text { text: qsTr("volumes (/host:/cont, …)")
-                   font.family: theme.uiFont; font.pixelSize: 10
-                   color: theme.tokens.textMuted }
-            FormInput { id: cfgVolumes; Layout.fillWidth: true }
-            Text { text: qsTr("env (NAME=value, …)")
-                   font.family: theme.uiFont; font.pixelSize: 10
-                   color: theme.tokens.textMuted }
-            FormInput { id: cfgEnv; Layout.fillWidth: true }
-            Text { text: qsTr("build context (dir with Dockerfile)")
-                   font.family: theme.uiFont; font.pixelSize: 10
-                   color: theme.tokens.textMuted }
+            Text {
+                text: qsTr("Image (Tag)")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
+            FormInput {
+                id: cfgImage
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Container Name")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
+            FormInput {
+                id: cfgName
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Ports (Host:Cont, …)")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
+            FormInput {
+                id: cfgPorts
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Volumes (/Host:/Cont, …)")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
+            FormInput {
+                id: cfgVolumes
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Env (NAME=Value, …)")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
+            FormInput {
+                id: cfgEnv
+                Layout.fillWidth: true
+            }
+            Text {
+                text: qsTr("Build Context (Dir with Dockerfile)")
+                font.family: theme.uiFont
+                font.pixelSize: 10
+                color: theme.tokens.textMuted
+            }
             RowLayout {
                 Layout.fillWidth: true
-                FormInput { id: cfgCtx; Layout.fillWidth: true }
-                Button {
+                FormInput {
+                    id: cfgCtx
+                    Layout.fillWidth: true
+                }
+                // #113: AlignBottom — VCenter floated Browse beside the
+                // FormInput's (empty) label line, above the field
+                FgButton {
                     text: qsTr("Browse…")
+                    Layout.alignment: Qt.AlignBottom
                     onClicked: ctxDialog.open()
                 }
             }
@@ -92,33 +129,39 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 6
-            Button {
+            FgButton {
                 text: qsTr("Save config")
                 onClicked: dockRoot.writeCfg()
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Stored with the project settings")
             }
-            Button {
+            FgButton {
                 text: qsTr("Build")
                 enabled: st && st.dockerOk
-                onClicked: { dockRoot.writeCfg(); st.dockerBuild() }
+                onClicked: {
+                    dockRoot.writeCfg();
+                    st.dockerBuild();
+                }
             }
-            Button {
+            FgButton {
                 text: qsTr("Run")
                 enabled: st && st.dockerOk
-                onClicked: { dockRoot.writeCfg(); st.dockerRun() }
+                onClicked: {
+                    dockRoot.writeCfg();
+                    st.dockerRun();
+                }
             }
-            Button {
+            FgButton {
                 text: qsTr("Stop")
                 enabled: st && st.dockerOk
                 onClicked: st.dockerStop()
             }
-            Button {
+            FgButton {
                 text: qsTr("Remove")
                 enabled: st && st.dockerOk
                 onClicked: st.dockerRm()
             }
-            Button {
+            FgButton {
                 text: qsTr("Logs")
                 enabled: st && st.dockerOk
                 onClicked: st.dockerLogs(300)
@@ -126,7 +169,9 @@ Item {
         }
 
         // logs
-        SectionLabel { text: qsTr("Logs") }
+        SectionLabel {
+            text: qsTr("Logs")
+        }
         TextArea {
             id: logView
             Layout.fillWidth: true
@@ -134,16 +179,20 @@ Item {
             readOnly: true
             wrapMode: TextArea.Wrap
             text: dockRoot.logText
-            font.family: theme.monoFont; font.pixelSize: 10
+            font.family: theme.monoFont
+            font.pixelSize: 10
             color: theme.tokens.text
             background: Rectangle {
-                radius: 6; color: theme.tokens.bg
+                radius: 6
+                color: theme.tokens.bg
                 border.color: theme.tokens.border
             }
         }
 
         // container filesystem browser
-        SectionLabel { text: qsTr("Container files") }
+        SectionLabel {
+            text: qsTr("Container files")
+        }
         RowLayout {
             Layout.fillWidth: true
             FormInput {
@@ -153,7 +202,7 @@ Item {
                 text: dockRoot.browsePath
                 onEditingFinished: dockRoot.browsePath = text
             }
-            Button {
+            FgButton {
                 text: qsTr("List")
                 enabled: st && st.dockerOk
                 onClicked: dockRoot.refresh()
@@ -165,7 +214,7 @@ Item {
             Layout.preferredHeight: 150
             clip: true
             model: []
-            ScrollBar.vertical: ScrollBar { }
+            ScrollBar.vertical: ScrollBar {}
             delegate: RowLayout {
                 width: fileList.width
                 spacing: 6
@@ -177,29 +226,26 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     text: modelData.name
-                    font.family: theme.monoFont; font.pixelSize: 10
-                    color: modelData.dir ? theme.tokens.accent
-                                         : theme.tokens.text
+                    font.family: theme.monoFont
+                    font.pixelSize: 10
+                    color: modelData.dir ? theme.tokens.accent : theme.tokens.text
                     elide: Text.ElideRight
                     MouseArea {
                         anchors.fill: parent
-                        cursorShape: modelData.dir
-                                     ? Qt.PointingHandCursor
-                                     : Qt.ArrowCursor
+                        cursorShape: modelData.dir ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
                             if (modelData.dir) {
-                                dockRoot.browsePath = modelData.path
-                                dockRoot.refresh()
+                                dockRoot.browsePath = modelData.path;
+                                dockRoot.refresh();
                             }
                         }
                     }
                 }
-                Button {
+                FgButton {
                     text: qsTr("Copy out")
                     flat: true
                     ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Copy into a local scratch dir so " +
-                                       "scans/imports can process it")
+                    ToolTip.text: qsTr("Copy into a local scratch dir so " + "scans/imports can process it")
                     onClicked: st.dockerCopyOut(modelData.path)
                 }
             }
@@ -208,57 +254,75 @@ Item {
                 visible: fileList.count === 0
                 text: qsTr("Run the container, then browse its files here")
                 color: theme.tokens.textMuted
-                font.family: theme.uiFont; font.pixelSize: 10
+                font.family: theme.uiFont
+                font.pixelSize: 10
             }
         }
-        Item { Layout.fillHeight: true }
+        Item {
+            Layout.fillHeight: true
+        }
     }
 
-    function dockerVersion() { return "daemon" }
+    function dockerVersion() {
+        return "daemon";
+    }
 
     function writeCfg() {
-        var env = {}
-        var bits = cfgEnv.text.split(",")
+        var env = {};
+        var bits = cfgEnv.text.split(",");
         for (var i = 0; i < bits.length; i++) {
-            var kv = bits[i].split("=")
+            var kv = bits[i].split("=");
             if (kv.length === 2 && kv[0].trim())
-                env[kv[0].trim()] = kv[1].trim()
+                env[kv[0].trim()] = kv[1].trim();
         }
         var ports = cfgPorts.text.split(",").map(function (s) {
-            return s.trim() }).filter(function (s) { return s !== "" })
+            return s.trim();
+        }).filter(function (s) {
+            return s !== "";
+        });
         var vols = cfgVolumes.text.split(",").map(function (s) {
-            return s.trim() }).filter(function (s) { return s !== "" })
+            return s.trim();
+        }).filter(function (s) {
+            return s !== "";
+        });
         st.setDockerCfg(JSON.stringify({
             image: cfgImage.text.trim(),
             name: cfgName.text.trim(),
-            ports: ports, volumes: vols, env: env,
+            ports: ports,
+            volumes: vols,
+            env: env,
             context: cfgCtx.text.trim()
-        }))
+        }));
     }
 
     function loadCfg() {
-        var cfg = st ? st.dockerCfg : {}
-        cfgImage.text = cfg.image || ""
-        cfgName.text = cfg.name || ""
-        cfgPorts.text = (cfg.ports || []).join(", ")
-        cfgVolumes.text = (cfg.volumes || []).join(", ")
-        var envBits = []
+        var cfg = st ? st.dockerCfg : {};
+        cfgImage.text = cfg.image || "";
+        cfgName.text = cfg.name || "";
+        cfgPorts.text = (cfg.ports || []).join(", ");
+        cfgVolumes.text = (cfg.volumes || []).join(", ");
+        var envBits = [];
         for (var k in (cfg.env || {}))
-            envBits.push(k + "=" + cfg.env[k])
-        cfgEnv.text = envBits.join(", ")
-        cfgCtx.text = cfg.context || ""
+            envBits.push(k + "=" + cfg.env[k]);
+        cfgEnv.text = envBits.join(", ");
+        cfgCtx.text = cfg.context || "";
     }
 
     function refresh() {
-        if (!st) return
-        fileList.model = st.dockerBrowse(browsePath)
+        if (!st)
+            return;
+        fileList.model = st.dockerBrowse(browsePath);
     }
 
     Component.onCompleted: loadCfg()
     Connections {
         target: st
-        function onDockerChanged() { dockRoot.loadCfg() }
-        function onDockerLog(text) { dockRoot.logText = text }
+        function onDockerChanged() {
+            dockRoot.loadCfg();
+        }
+        function onDockerLog(text) {
+            dockRoot.logText = text;
+        }
     }
 
     FolderDialog {

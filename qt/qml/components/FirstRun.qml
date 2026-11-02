@@ -13,7 +13,7 @@ import QtQuick.Dialogs
 Rectangle {
     id: setupRoot
     color: Qt.rgba(0, 0, 0, 0.45)
-    signal finished()
+    signal finished
 
     // modal: absorb every click/hover so nothing behind reacts
     MouseArea {
@@ -23,44 +23,44 @@ Rectangle {
 
     readonly property var customFolders: {
         if (library === null || prefs === null)
-            return []
-        var sys = {}
-        var icons = prefs.systemIconPaths
-        var fontsDirs = prefs.systemFontDirs
+            return [];
+        var sys = {};
+        var icons = prefs.systemIconPaths;
+        var fontsDirs = prefs.systemFontDirs;
         for (var i = 0; i < icons.length; i++)
-            sys[icons[i]] = true
+            sys[icons[i]] = true;
         for (var j = 0; j < fontsDirs.length; j++)
-            sys[fontsDirs[j]] = true
-        var out = []
-        var srcs = library.sources
+            sys[fontsDirs[j]] = true;
+        var out = [];
+        var srcs = library.sources;
         for (var k = 0; k < srcs.length; k++) {
             if (!sys[srcs[k].path])
-                out.push(srcs[k])
+                out.push(srcs[k]);
         }
-        return out
+        return out;
     }
     readonly property var enabledMap: {
-        var map = {}
+        var map = {};
         if (library === null)
-            return map
-        var s = library.sources
+            return map;
+        var s = library.sources;
         for (var i = 0; i < s.length; i++)
-            map[s[i].path] = s[i].enabled
-        return map
+            map[s[i].path] = s[i].enabled;
+        return map;
     }
     function pathEnabled(path) {
         if (library === null)
-            return false
-        return path in enabledMap ? enabledMap[path] : false
+            return false;
+        return path in enabledMap ? enabledMap[path] : false;
     }
     function rescanKind(kind) {
         if (kind === "fontroot")
-            fonts.rescan()
+            fonts.rescan();
         else
-            library.rescan()
+            library.rescan();
     }
     function baseName(path) {
-        return path.replace(/\\/g, "/").split("/").pop()
+        return path.replace(/\\/g, "/").split("/").pop();
     }
 
     Rectangle {
@@ -101,10 +101,8 @@ Rectangle {
                                     width: 9
                                     height: 9
                                     radius: 2
-                                    color: index === 3
-                                           ? theme.tokens.litPane : "transparent"
-                                    border.color: index === 3 ? "transparent"
-                                                              : theme.tokens.accent
+                                    color: index === 3 ? theme.tokens.litPane : "transparent"
+                                    border.color: index === 3 ? "transparent" : theme.tokens.accent
                                     border.width: 1.6
                                 }
                             }
@@ -133,6 +131,41 @@ Rectangle {
                     color: theme.tokens.textMuted
                     Layout.fillWidth: true
                     wrapMode: Text.Wrap
+                }
+                // heads-up: the initial ingest is the one heavy pass —
+                // set expectations before it starts rather than after.
+                // #92: a Rectangle never derives height from anchored
+                // children — without implicitHeight the box was 0 tall
+                // and the wrapped text drew straight through it
+                Rectangle {
+                    Layout.fillWidth: true
+                    radius: 6
+                    color: theme.tokens.surface
+                    border.color: theme.tokens.litPane
+                    implicitHeight: warnRow.implicitHeight + 16
+                    RowLayout {
+                        id: warnRow
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        anchors.topMargin: 8
+                        anchors.bottomMargin: 8
+                        spacing: 10
+                        IconImage {
+                            name: "zap"
+                            px: 14
+                            tint: theme.tokens.litPane
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: qsTr("Heads-up: the initial scan may run hard for a short while — indexing every selected folder at once. That load is temporary; once the library is built, browsing and searching stay light.")
+                            font.family: theme.uiFont
+                            font.pixelSize: 12
+                            color: theme.tokens.text
+                            wrapMode: Text.Wrap
+                        }
+                    }
                 }
             }
 
@@ -164,8 +197,7 @@ Rectangle {
                             wrapMode: Text.Wrap
                         }
                         Repeater {
-                            model: prefs !== null ? prefs.systemIconPaths
-                                                  : []
+                            model: prefs !== null ? prefs.systemIconPaths : []
                             delegate: RowLayout {
                                 id: iconPathRow
                                 required property string modelData
@@ -178,18 +210,16 @@ Rectangle {
                                     checkLabel: setupRoot.baseName(modelData)
                                     checked: setupRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        var isChecked = checked
-                                        Qt.callLater(function() {
-                                            library.set_path_enabled(modelData,
-                                                                     "system",
-                                                                     isChecked)
-                                            library.rescan()
-                                        })
+                                        var isChecked = checked;
+                                        Qt.callLater(function () {
+                                            library.set_path_enabled(modelData, "system", isChecked);
+                                            library.rescan();
+                                        });
                                     }
                                     Connections {
                                         target: library
                                         function onSourcesChanged() {
-                                            iconCheck.checked = setupRoot.pathEnabled(modelData)
+                                            iconCheck.checked = setupRoot.pathEnabled(modelData);
                                         }
                                     }
                                 }
@@ -204,8 +234,7 @@ Rectangle {
                             }
                         }
                         Repeater {
-                            model: prefs !== null ? prefs.systemFontDirs
-                                                  : []
+                            model: prefs !== null ? prefs.systemFontDirs : []
                             delegate: RowLayout {
                                 id: fontPathRow
                                 required property string modelData
@@ -218,18 +247,16 @@ Rectangle {
                                     checkLabel: setupRoot.baseName(modelData)
                                     checked: setupRoot.pathEnabled(modelData)
                                     onToggled: {
-                                        var isChecked = checked
-                                        Qt.callLater(function() {
-                                            library.set_path_enabled(modelData,
-                                                                     "fontroot",
-                                                                     isChecked)
-                                            fonts.rescan()
-                                        })
+                                        var isChecked = checked;
+                                        Qt.callLater(function () {
+                                            library.set_path_enabled(modelData, "fontroot", isChecked);
+                                            fonts.rescan();
+                                        });
                                     }
                                     Connections {
                                         target: library
                                         function onSourcesChanged() {
-                                            fontCheck.checked = setupRoot.pathEnabled(modelData)
+                                            fontCheck.checked = setupRoot.pathEnabled(modelData);
                                         }
                                     }
                                 }
@@ -276,18 +303,14 @@ Rectangle {
                                     spacing: 10
                                     Rectangle {
                                         Layout.preferredHeight: 16
-                                        Layout.preferredWidth:
-                                            kindChipText.implicitWidth + 12
+                                        Layout.preferredWidth: kindChipText.implicitWidth + 12
                                         radius: 3
                                         color: "transparent"
                                         border.color: theme.tokens.border
                                         Text {
                                             id: kindChipText
                                             anchors.centerIn: parent
-                                            text: folderRow.modelData.kind
-                                                  === "fontroot"
-                                                  ? qsTr("FONTS")
-                                                  : qsTr("ICONS")
+                                            text: folderRow.modelData.kind === "fontroot" ? qsTr("FONTS") : qsTr("ICONS")
                                             font.family: theme.monoFont
                                             font.pixelSize: 8
                                             font.letterSpacing: 1
@@ -298,8 +321,7 @@ Rectangle {
                                         Layout.fillWidth: true
                                         spacing: 0
                                         Text {
-                                            text: folderRow.modelData.label
-                                                  || folderRow.modelData.path
+                                            text: folderRow.modelData.label || folderRow.modelData.path
                                             font.family: theme.uiFont
                                             font.pixelSize: 12
                                             color: theme.tokens.text
@@ -316,8 +338,7 @@ Rectangle {
                                         }
                                     }
                                     Text {
-                                        text: qsTr("%1 items").arg(
-                                            folderRow.modelData.n)
+                                        text: qsTr("%1 items").arg(folderRow.modelData.n)
                                         font.family: theme.monoFont
                                         font.pixelSize: 10
                                         color: theme.tokens.textMuted
@@ -327,22 +348,21 @@ Rectangle {
                                         checkLabel: ""
                                         checked: folderRow.modelData.enabled
                                         onToggled: {
-                                            var isChecked = checked
-                                            var p = folderRow.modelData.path
-                                            var k = folderRow.modelData.kind
-                                            Qt.callLater(function() {
-                                                library.set_path_enabled(p, k, isChecked)
-                                                setupRoot.rescanKind(k)
-                                            })
+                                            var isChecked = checked;
+                                            var p = folderRow.modelData.path;
+                                            var k = folderRow.modelData.kind;
+                                            Qt.callLater(function () {
+                                                library.set_path_enabled(p, k, isChecked);
+                                                setupRoot.rescanKind(k);
+                                            });
                                         }
                                     }
                                     IconButton {
                                         icon_name: "trash"
                                         ToolTip.text: qsTr("Remove folder")
                                         onClicked: {
-                                            library.remove_folder(
-                                                folderRow.modelData.id)
-                                            fonts.refresh()
+                                            library.remove_folder(folderRow.modelData.id);
+                                            fonts.refresh();
                                         }
                                     }
                                 }
@@ -353,22 +373,23 @@ Rectangle {
                             Layout.topMargin: 12
                             spacing: 8
                             SettingsButton {
-                                text: qsTr("Add icon folder…")
+                                text: qsTr("Add Icon Folder…")
                                 onClicked: folderDialogLoader.open("folder")
                             }
                             SettingsButton {
-                                text: qsTr("Add font folder…")
+                                text: qsTr("Add Font Folder…")
                                 onClicked: folderDialogLoader.open("fontroot")
                             }
-                            Item { Layout.fillWidth: true }
+                            Item {
+                                Layout.fillWidth: true
+                            }
                             SettingsButton {
-                                text: qsTr("Re-scan icons")
-                                enabled: library !== null
-                                         && !library.scanning
+                                text: qsTr("Re-Scan Icons")
+                                enabled: library !== null && !library.scanning
                                 onClicked: library.rescan()
                             }
                             SettingsButton {
-                                text: qsTr("Re-scan fonts")
+                                text: qsTr("Re-Scan Fonts")
                                 enabled: fonts !== null && !fonts.scanning
                                 onClicked: fonts.rescan()
                             }
@@ -395,22 +416,17 @@ Rectangle {
                                     Layout.preferredWidth: 90
                                     text: qsTr("Dark")
                                     checkable: false
-                                    onClicked: theme !== null
-                                               && theme.set_theme("dark")
+                                    onClicked: theme !== null && theme.set_theme("dark")
                                     background: Rectangle {
                                         radius: 6
-                                        color: theme !== null && theme.isDark
-                                               ? theme.tokens.accent
-                                               : theme.tokens.bg
+                                        color: theme !== null && theme.isDark ? theme.tokens.accent : theme.tokens.bg
                                         border.color: theme.tokens.border
                                     }
                                     contentItem: Text {
                                         text: darkBtn.text
                                         font.family: theme.uiFont
                                         font.pixelSize: 11
-                                        color: theme !== null && theme.isDark
-                                              ? theme.tokens.bg
-                                              : theme.tokens.textMuted
+                                        color: theme !== null && theme.isDark ? theme.tokens.bg : theme.tokens.textMuted
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
                                     }
@@ -420,24 +436,62 @@ Rectangle {
                                     Layout.preferredHeight: 30
                                     Layout.preferredWidth: 90
                                     text: qsTr("Light")
-                                    onClicked: theme !== null
-                                               && theme.set_theme("light")
+                                    onClicked: theme !== null && theme.set_theme("light")
                                     background: Rectangle {
                                         radius: 6
-                                        color: theme !== null && !theme.isDark
-                                               ? theme.tokens.accent
-                                               : theme.tokens.bg
+                                        color: theme !== null && !theme.isDark ? theme.tokens.accent : theme.tokens.bg
                                         border.color: theme.tokens.border
                                     }
                                     contentItem: Text {
                                         text: lightBtn.text
                                         font.family: theme.uiFont
                                         font.pixelSize: 11
-                                        color: theme !== null && !theme.isDark
-                                              ? theme.tokens.bg
-                                              : theme.tokens.textMuted
+                                        color: theme !== null && !theme.isDark ? theme.tokens.bg : theme.tokens.textMuted
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                            }
+                        }
+
+                        SettingRow {
+                            section: "look"
+                            label: qsTr("Accent color")
+                            desc: qsTr("The main accent Fengrid tints active states with — pane outlines, selection, primary buttons. Pick from the brand palette.")
+                            keys: "accent color scheme tint brand teal amber violet coral rose green"
+                            RowLayout {
+                                spacing: 6
+                                Layout.alignment: Qt.AlignVCenter
+                                Repeater {
+                                    model: theme !== null ? theme.accentOptions : []
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        readonly property bool sel: theme !== null && theme.accent === modelData.id
+                                        readonly property color c: theme !== null && theme.isDark ? modelData.dark : modelData.light
+                                        width: 26
+                                        height: 20
+                                        radius: 5
+                                        color: c
+                                        border.width: sel ? 2 : 0
+                                        border.color: theme.tokens.text
+                                        // dim the unselected swatches a touch
+                                        // so the active one reads first
+                                        opacity: sel ? 1 : 0.62
+                                        // #138: coerce to a real bool — on the
+                                        // first binding pass the MouseArea's
+                                        // properties are not initialized yet
+                                        ToolTip.visible: ma ? ma.hovered === true : false
+                                        ToolTip.text: modelData.name
+                                        MouseArea {
+                                            id: ma
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: theme !== null && theme.set_accent(modelData.id)
+                                        }
+                                        Accessible.role: Accessible.RadioButton
+                                        Accessible.name: modelData.name
+                                        Accessible.checked: sel
                                     }
                                 }
                             }
@@ -451,16 +505,14 @@ Rectangle {
                             RowLayout {
                                 spacing: 10
                                 Layout.alignment: Qt.AlignVCenter
-                                Slider {
+                                FgSlider {
                                     id: sizeRow
                                     from: 16
                                     to: 256
                                     stepSize: 16
                                     Layout.preferredWidth: 190
                                     value: prefs !== null ? prefs.iconSize : 32
-                                    onMoved: prefs !== null
-                                             && prefs.set_icon_size(
-                                                 Math.round(value))
+                                    onMoved: prefs !== null && prefs.set_icon_size(Math.round(value))
                                 }
                                 Text {
                                     text: Math.round(sizeRow.value) + "px"
@@ -482,14 +534,10 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("Icons"), qsTr("Fonts"),
-                                        qsTr("Colors"), qsTr("Code"),
-                                        qsTr("Projects")]
-                                Component.onCompleted:
-                                    currentIndex = prefs !== null
-                                                  ? prefs.startupPane : 0
+                                model: [qsTr("Icons"), qsTr("Fonts"), qsTr("Colors"), qsTr("Code"), qsTr("Projects")]
+                                Component.onCompleted: currentIndex = prefs !== null ? prefs.startupPane : 0
                                 onActivated: function (idx) {
-                                    prefs !== null && prefs.set_startup_pane(idx)
+                                    prefs !== null && prefs.set_startup_pane(idx);
                                 }
                                 background: Rectangle {
                                     radius: 6
@@ -526,16 +574,13 @@ Rectangle {
                                     Layout.preferredWidth: 170
                                     Layout.preferredHeight: 30
                                     onSequenceEdited: function (seq) {
-                                        prefs !== null
-                                            && prefs.set_command_shortcut(seq)
+                                        prefs !== null && prefs.set_command_shortcut(seq);
                                     }
                                 }
                                 SettingsButton {
                                     Layout.alignment: Qt.AlignVCenter
                                     text: qsTr("Reset")
-                                    onClicked: prefs !== null
-                                               && prefs.set_command_shortcut(
-                                                   "Alt+/")
+                                    onClicked: prefs !== null && prefs.set_command_shortcut("Alt+/")
                                 }
                             }
                         }
@@ -550,16 +595,10 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("Smart"), qsTr("Fuzzy"),
-                                        qsTr("Regex"), qsTr("Content")]
-                                Component.onCompleted:
-                                    currentIndex = ["smart", "fuzzy", "regex",
-                                                    "content"].indexOf(
-                                        library !== null ? library.searchMode
-                                                         : "smart")
+                                model: [qsTr("Smart"), qsTr("Fuzzy"), qsTr("Regex"), qsTr("Content")]
+                                Component.onCompleted: currentIndex = ["smart", "fuzzy", "regex", "content"].indexOf(library !== null ? library.searchMode : "smart")
                                 onActivated: function (idx) {
-                                    library !== null && library.set_search_mode(
-                                        ["smart", "fuzzy", "regex", "content"][idx])
+                                    library !== null && library.set_search_mode(["smart", "fuzzy", "regex", "content"][idx]);
                                 }
                                 background: Rectangle {
                                     radius: 6
@@ -587,17 +626,15 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("VS Code"), qsTr("Emacs"),
-                                        qsTr("Vim"), qsTr("Readline")]
-                                Component.onCompleted:
-                                    currentIndex = code === null ? 0
-                                        : ({ "vscode": 0, "emacs": 1,
-                                             "vim": 2, "readline": 3 }
-                                           [code.keymap] || 0)
+                                model: [qsTr("VS Code"), qsTr("Emacs"), qsTr("Vim"), qsTr("Readline")]
+                                Component.onCompleted: currentIndex = code === null ? 0 : ({
+                                        "vscode": 0,
+                                        "emacs": 1,
+                                        "vim": 2,
+                                        "readline": 3
+                                    }[code.keymap] || 0)
                                 onActivated: function (idx) {
-                                    code !== null && code.set_keymap(
-                                        ["vscode", "emacs", "vim",
-                                         "readline"][idx])
+                                    code !== null && code.set_keymap(["vscode", "emacs", "vim", "readline"][idx]);
                                 }
                                 background: Rectangle {
                                     radius: 6
@@ -625,22 +662,14 @@ Rectangle {
                                 Layout.preferredWidth: 170
                                 Layout.preferredHeight: 30
                                 Layout.alignment: Qt.AlignVCenter
-                                model: [qsTr("Pleasing mix"), qsTr("Analogous"),
-                                        qsTr("Complementary"), qsTr("Triadic"),
-                                        qsTr("Monochrome"), qsTr("Random")]
+                                model: [qsTr("Pleasing mix"), qsTr("Analogous"), qsTr("Complementary"), qsTr("Triadic"), qsTr("Monochrome"), qsTr("Random")]
                                 Component.onCompleted: {
-                                    var rules = ["pleasing", "analogous",
-                                                 "complementary", "triadic",
-                                                 "monochrome", "random"]
-                                    currentIndex = colors === null ? 0
-                                        : Math.max(0, rules.indexOf(colors.rule))
+                                    var rules = ["pleasing", "analogous", "complementary", "triadic", "monochrome", "random"];
+                                    currentIndex = colors === null ? 0 : Math.max(0, rules.indexOf(colors.rule));
                                 }
                                 onActivated: function (idx) {
-                                    var rules = ["pleasing", "analogous",
-                                                 "complementary", "triadic",
-                                                 "monochrome", "random"]
-                                    colors !== null
-                                        && colors.set_rule(rules[idx])
+                                    var rules = ["pleasing", "analogous", "complementary", "triadic", "monochrome", "random"];
+                                    colors !== null && colors.set_rule(rules[idx]);
                                 }
                                 background: Rectangle {
                                     radius: 6
@@ -667,13 +696,14 @@ Rectangle {
                                 Layout.alignment: Qt.AlignVCenter
                                 checkLabel: ""
                                 checked: prefs !== null && prefs.updateCheck
-                                onToggled: prefs !== null
-                                           && prefs.set_update_check(checked)
+                                onToggled: prefs !== null && prefs.set_update_check(checked)
                             }
                         }
                     }
 
-                    Item { Layout.preferredHeight: 20 }
+                    Item {
+                        Layout.preferredHeight: 20
+                    }
                 }
                 // Basic-style default handles render invisibly on the
                 // card — style it token-driven so sections below the
@@ -690,8 +720,7 @@ Rectangle {
                     contentItem: Rectangle {
                         implicitWidth: 6
                         radius: 3
-                        color: bodyBar.hovered ? theme.tokens.accent
-                                               : theme.tokens.textMuted
+                        color: bodyBar.hovered ? theme.tokens.accent : theme.tokens.textMuted
                     }
                 }
             }
@@ -707,24 +736,14 @@ Rectangle {
                 Layout.margins: 24
                 spacing: 12
                 BusyIndicator {
-                    visible: library !== null && fonts !== null
-                             && (library.scanning || fonts.scanning)
+                    visible: library !== null && fonts !== null && (library.scanning || fonts.scanning)
                     running: visible
                     Layout.preferredWidth: 18
                     Layout.preferredHeight: 18
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: library === null || fonts === null ? ""
-                          : (library.scanning || fonts.scanning)
-                            ? qsTr("Indexing in the background — icons %1 · fonts %2 · add folders whenever you like")
-                                  .arg(library.scanCount)
-                                  .arg(fonts.scanCount)
-                            : (library.totalAssets || fonts.totalFonts)
-                              ? qsTr("%1 assets ready · %2 font files indexed")
-                                    .arg(library.totalAssets)
-                                    .arg(fonts.totalFonts)
-                              : qsTr("Nothing indexed yet — select the paths above (or add folders), then Get started")
+                    text: library === null || fonts === null ? "" : (library.scanning || fonts.scanning) ? qsTr("Indexing in the background — icons %1 · fonts %2 · add folders whenever you like").arg(library.scanCount).arg(fonts.scanCount) : (library.totalAssets || fonts.totalFonts) ? qsTr("%1 assets ready · %2 font files indexed").arg(library.totalAssets).arg(fonts.totalFonts) : qsTr("Nothing indexed yet — select the paths above (or add folders), then Get started")
                     font.family: theme.monoFont
                     font.pixelSize: 11
                     color: theme.tokens.textMuted
@@ -745,27 +764,26 @@ Rectangle {
         sourceComponent: FolderDialog {
             id: folderDialog
             title: qsTr("Choose folder")
-            currentFolder: prefs !== null && prefs.lastDialogDir !== ""
-                           ? encodeURI("file://" + prefs.lastDialogDir) : ""
+            currentFolder: prefs !== null && prefs.lastDialogDir !== "" ? encodeURI("file://" + prefs.lastDialogDir) : ""
             onAccepted: {
-                var p = Icons.toLocalPath(selectedFolder)
-                library.add_folder(p, folderDialogLoader.kind)
+                var p = Icons.toLocalPath(selectedFolder);
+                library.add_folder(p, folderDialogLoader.kind);
                 if (folderDialogLoader.kind === "fontroot")
-                    fonts.rescan()
+                    fonts.rescan();
                 if (prefs !== null)
-                    prefs.rememberDialogDir(folderDialog.currentFolder)
-                folderDialogLoader.active = false
+                    prefs.rememberDialogDir(folderDialog.currentFolder);
+                folderDialogLoader.active = false;
             }
             onRejected: {
                 if (prefs !== null)
-                    prefs.rememberDialogDir(folderDialog.currentFolder)
-                folderDialogLoader.active = false
+                    prefs.rememberDialogDir(folderDialog.currentFolder);
+                folderDialogLoader.active = false;
             }
         }
         function open(kind_) {
-            kind = kind_ || "folder"
-            active = true
-            item.open()
+            kind = kind_ || "folder";
+            active = true;
+            item.open();
         }
     }
 

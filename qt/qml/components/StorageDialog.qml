@@ -18,12 +18,12 @@ FormDialog {
     acceptEnabled: uriField.text.trim().length > 0
 
     function openFor(key, label, hintLine) {
-        backend = key
-        backendLabel = label
-        hint = hintLine
-        uriField.text = ""
-        open()
-        uriField.forceActiveFocus()
+        backend = key;
+        backendLabel = label;
+        hint = hintLine;
+        uriField.text = "";
+        open();
+        uriField.forceActiveFocus();
     }
 
     Text {
@@ -51,8 +51,7 @@ FormDialog {
         id: kindBox
         Layout.fillWidth: true
         Layout.preferredHeight: 30
-        model: [qsTr("Attach as icon folder"),
-                qsTr("Attach as font folder")]
+        model: [qsTr("Attach as icon folder"), qsTr("Attach as font folder")]
         background: Rectangle {
             radius: 6
             color: theme.tokens.surface2
@@ -67,7 +66,5 @@ FormDialog {
             leftPadding: 8
         }
     }
-    onApply: storage.attach(dlg.backend, uriField.text,
-                             kindBox.currentIndex === 1 ? "fontroot"
-                                                        : "folder")
+    onApply: storage.attach(dlg.backend, uriField.text, kindBox.currentIndex === 1 ? "fontroot" : "folder")
 }

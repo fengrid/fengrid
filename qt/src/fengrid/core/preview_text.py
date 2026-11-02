@@ -45,6 +45,16 @@ def bucket_for(px: int) -> str:
     return "medium"
 
 
+def boundaries() -> list[tuple[int, str]]:
+    """(max_px, bucket) ascending — the size classes the picker swaps
+    between. The fonts bridge exposes the two lower edges as properties
+    so the grid's QML picks a specimen without a Python round-trip
+    (#137: per-card slot calls on every grid resize flooded the bridge)."""
+    bps = [(int(bp.get("max_px", 0)), str(bp.get("bucket", "")))
+           for bp in _data().get("breakpoints", [])]
+    return sorted(bps)
+
+
 def candidates(bucket: str) -> list[dict]:
     """Curated 'fit' passages for the bucket, falling back to all."""
     out = []

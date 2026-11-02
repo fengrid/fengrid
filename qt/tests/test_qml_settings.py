@@ -21,6 +21,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 import pytest                                    # noqa: E402
+from PySide6 import QtCore                      # noqa: E402
 from PySide6.QtCore import QUrl                  # noqa: E402
 from PySide6.QtGui import QGuiApplication        # noqa: E402
 from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
@@ -109,7 +110,17 @@ def settings_ui(tmp_path):
     comp = QQmlComponent(
         engine, QUrl.fromLocalFile(
             str(QML_DIR / "components" / "SettingsScreen.qml")))
+    # capture every Qt message emitted while the screen is CREATED —
+    # #138 regression guard: the accent swatches used to log six
+    # "Unable to assign [undefined] to bool" lines at creation
+    creation_msgs: list[str] = []
+
+    def _capture(_mtype, _ctx, msg) -> None:
+        creation_msgs.append(str(msg))
+
+    prev_handler = QtCore.qInstallMessageHandler(_capture)
     root = cast(QQuickItem, comp.create(engine.rootContext()))
+    QtCore.qInstallMessageHandler(prev_handler)
     assert root is not None, [str(e) for e in comp.errors()]
     root.setWidth(1280)
     root.setHeight(800)
@@ -120,8 +131,17 @@ def settings_ui(tmp_path):
     QTest.qWait(80)
 
     yield {"root": root, "win": win, "engine": engine,
+           "creation_msgs": creation_msgs,
            "bridges": {"prefs": prefs, "library": library}}
     _teardown({"win": win, "root": root, "engine": engine})
+
+
+def test_settings_screen_creation_is_log_clean(settings_ui):
+    """#138: opening Settings must not spray 'Unable to assign
+    [undefined] to bool' from the accent swatches at creation."""
+    bad = [m for m in settings_ui["creation_msgs"]
+           if "Unable to assign" in m]
+    assert bad == [], bad
 
 
 @pytest.fixture()
