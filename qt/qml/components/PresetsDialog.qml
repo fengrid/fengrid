@@ -17,6 +17,11 @@ Dialog {
     property int currentLib: -1
     property var entryRows: []
     property string filterText: ""
+    // #141: live download state per entry id — {phase: "clone"|"update"|
+    // "ingest"|"working", pct: 0-100 or -1 (pulse)}. Drives the loading
+    // bars on the cards; survives delegate rebuilds (it lives on the
+    // dialog, not on the cards).
+    property var progressMap: ({})
 
     width: 1000
     height: 660
@@ -93,6 +98,21 @@ Dialog {
 
     function refresh() {
         entryRows = (presets !== null && currentLib >= 0) ? presets.entries(currentLib) : [];
+        // #141: seed live progress for entries the map doesn't know yet
+        // (dialog reopened mid-download) — never clobber live ticks
+        var m = progressMap;
+        for (var i = 0; i < entryRows.length; i++) {
+            var r = entryRows[i];
+            if (m[r.id] !== undefined)
+                continue;
+            if (r.ingesting)
+                m[r.id] = { phase: "ingest", pct: -1 };
+            else if (r.busy)
+                m[r.id] = r.progressPct !== null
+                          ? { phase: "clone", pct: r.progressPct }
+                          : { phase: "working", pct: -1 };
+        }
+        progressMap = m;
     }
 
     onCurrentLibChanged: refresh()
@@ -104,6 +124,22 @@ Dialog {
         }
         function onLibrariesChanged() {
             presetsRoot.refresh();
+        }
+        // #141: live clone/update percent (pct -1 = indeterminate pulse)
+        function onDownloadProgress(entryId, phase, pct) {
+            var m = progressMap;
+            m[entryId] = { phase: phase, pct: pct };
+            progressMap = m;
+        }
+        // #141: "ingest" → pulse while the fresh clone's assets are
+        // indexed; "done" → drop the bar
+        function onDownloadState(entryId, state) {
+            var m = progressMap;
+            if (state === "done")
+                delete m[entryId];
+            else
+                m[entryId] = { phase: state, pct: -1 };
+            progressMap = m;
         }
         function onMessage(msg) {
         }
@@ -246,6 +282,11 @@ Dialog {
                     delegate: Rectangle {
                         id: entryCard
                         required property var modelData
+                        // #141: a clone or index scan is in flight — the
+                        // bridge's busy flag or live progress in the map
+                        readonly property bool progActive:
+                            (modelData.busy === true)
+                            || presetsRoot.progressMap[modelData.id] !== undefined
                         width: presetsRoot.cardW
                         height: presetsRoot.cardH + 108
                         radius: 8
@@ -332,6 +373,108 @@ Dialog {
                                     tint: theme.tokens.bg
                                 }
                             }
+
+                            // ── download / ingestion progress (#141) ──
+                            // a clone or index scan in flight dims the
+                            // preview and pins a chip + bar strip to the
+                            // square's bottom edge, padded clear of the
+                            // border so it never touches the rounded edge
+                            Rectangle {
+                                id: progDim
+                                anchors.fill: parent
+                                radius: 8
+                                color: theme.tokens.bg
+                                opacity: progCol.visible ? 0.45 : 0
+                                visible: opacity > 0
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 160 }
+                                }
+                            }
+
+                            Column {
+                                id: progCol
+                                objectName: "presetProgressOverlay"
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 10
+                                spacing: 6
+                                visible: entryCard.progActive
+
+                                readonly property real pct: {
+                                    var st = presetsRoot.progressMap[entryCard.modelData.id];
+                                    return st !== undefined ? st.pct : -1;
+                                }
+                                readonly property string phase: {
+                                    var st = presetsRoot.progressMap[entryCard.modelData.id];
+                                    return st !== undefined ? st.phase : "working";
+                                }
+
+                                Rectangle {   // status chip
+                                    width: progChipLbl.implicitWidth + 14
+                                    height: progChipLbl.implicitHeight + 8
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    radius: 7
+                                    color: theme.tokens.surface
+                                    opacity: 0.94
+                                    Text {
+                                        id: progChipLbl
+                                        objectName: "presetProgressLabel"
+                                        anchors.centerIn: parent
+                                        text: progCol.pct >= 0
+                                              ? "Cloning  " + Math.round(progCol.pct) + "%"
+                                              : (progCol.phase === "ingest" ? "Indexing…"
+                                                     : progCol.phase === "update" ? "Updating…"
+                                                     : "Preparing…")
+                                        font.family: theme.monoFont
+                                        font.pixelSize: 10
+                                        color: theme.tokens.text
+                                    }
+                                }
+
+                                Rectangle {   // track
+                                    id: progTrack
+                                    objectName: "presetProgressTrack"
+                                    width: parent.width
+                                    height: 5
+                                    radius: 2.5
+                                    color: theme.tokens.surface
+                                    border.color: theme.tokens.border
+
+                                    Rectangle {   // determinate fill
+                                        objectName: "presetProgressFill"
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        anchors.left: parent.left
+                                        anchors.margins: 1
+                                        width: progCol.pct >= 0
+                                               ? Math.max(4, (progTrack.width - 2) * progCol.pct / 100)
+                                               : 0
+                                        radius: 1.5
+                                        color: theme.tokens.accent
+                                        visible: progCol.pct >= 0
+                                    }
+
+                                    Rectangle {   // indeterminate pulse
+                                        id: progPulse
+                                        objectName: "presetProgressPulse"
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        anchors.margins: 1
+                                        width: progTrack.width / 3
+                                        radius: 1.5
+                                        color: theme.tokens.accent
+                                        visible: progCol.pct < 0
+                                        NumberAnimation on x {
+                                            running: progCol.visible && progCol.pct < 0
+                                            loops: Animation.Infinite
+                                            from: 1
+                                            to: progTrack.width - progPulse.width - 1
+                                            duration: 1300
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // ── meta: name, repo, description, tags ──
@@ -390,6 +533,10 @@ Dialog {
                                     entryMenu.popup();
                                     return;
                                 }
+                                // #141: a download/index in flight must
+                                // not be re-triggered by a click
+                                if (entryCard.progActive)
+                                    return;
                                 if (entryCard.modelData.libraryKind === "palette") {
                                     presets.apply_preset(entryCard.modelData.id);
                                 } else if (entryCard.modelData.downloaded) {
@@ -411,6 +558,7 @@ Dialog {
                             FgMenuItem {
                                 visible: entryCard.modelData.libraryKind !== "palette"
                                 text: entryCard.modelData.downloaded ? qsTr("Update (git pull)") : qsTr("Download (git clone)")
+                                enabled: entryCard.progActive !== true
                                 height: 28
                                 onTriggered: presets.download(entryCard.modelData.id)
                             }

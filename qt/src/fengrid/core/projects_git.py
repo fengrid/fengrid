@@ -28,7 +28,9 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 DEFAULT_BRANCH = "fengrid-main"
@@ -39,6 +41,37 @@ LFS_TRACK_PATTERNS = ("*.zip", "*.tar.gz", "*.tgz", "*.woff", "*.woff2",
                       "*.mp4", "*.mp3", "*.pdf", "assets/**")
 
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_\-\.~]{8,}$")
+
+# git streams its clone progress to stderr ("Receiving objects: 45% (…)")
+_PROGRESS_RE = re.compile(
+    r"^(?:remote: )?(?P<stage>Counting objects|Compressing objects|"
+    r"Receiving objects|Resolving deltas|Updating files):"
+    r"\s+(?P<pct>\d{1,3})%")
+
+
+def parse_git_progress(line: str) -> int | None:
+    """Map one git progress line onto an overall clone percent (0-100).
+
+    git reports each stage with its own percent; the stages are weighted
+    onto a single monotonic curve so a caller can feed one number to a
+    progress bar (#141, Preset Libraries download bars):
+      counting 0-2, compressing 2-4, receiving 4-84, deltas 84-98,
+      checkout (Updating files) 98-100. Non-progress lines → None.
+    """
+    m = _PROGRESS_RE.match(line.strip())
+    if m is None:
+        return None
+    pct = min(100, max(0, int(m["pct"])))
+    stage = m["stage"]
+    if stage == "Counting objects":
+        return pct * 2 // 100
+    if stage == "Compressing objects":
+        return 2 + pct * 2 // 100
+    if stage == "Receiving objects":
+        return 4 + pct * 80 // 100
+    if stage == "Resolving deltas":
+        return 84 + pct * 14 // 100
+    return 98 + pct * 2 // 100          # Updating files
 
 
 class GitError(RuntimeError):
@@ -106,12 +139,18 @@ class Repo:
 
     @staticmethod
     def clone(url: str, dest: str | Path, branch: str = "",
-              timeout: int = 900) -> "Repo":
+              timeout: int = 900,
+              progress: Callable[[int], None] | None = None) -> "Repo":
         """Clone a remote repository into dest (must not exist yet).
 
         Preset-library downloads use this: single-branch clone of the
         configured source URL (branch empty = remote HEAD). Long
         timeout — font/icon repos can be tens of megabytes.
+
+        ``progress`` (#141): called with an overall percent 0-100 as git
+        streams its progress report — the Preset Libraries dialog turns
+        that into a live loading bar. Without it the clone is the plain
+        blocking call it always was (existing callers unaffected).
         """
         if not git_available():
             raise GitError("git is not installed", 127)
@@ -120,14 +159,51 @@ class Repo:
         args = ["git", "clone", "--single-branch"]
         if (branch or "").strip():
             args += ["--branch", branch.strip()]
+        if progress is not None:
+            args.append("--progress")     # force the report off a tty
         args += [url, str(dest)]
         env = {**os.environ, "GIT_TERMINAL_PROMPT": "0",
                "GIT_ASKPASS": "echo"}
-        proc = subprocess.run(args, capture_output=True, text=True,
-                              timeout=timeout, env=env)
+        if progress is None:
+            proc = subprocess.run(args, capture_output=True, text=True,
+                                  timeout=timeout, env=env)
+            if proc.returncode != 0:
+                raise GitError((proc.stderr or proc.stdout).strip()[:300],
+                               proc.returncode)
+            return Repo(dest)
+        # #141: stream git's stderr and map its progress lines onto one
+        # overall percent. Progress lines end with \r, so the reader
+        # splits on both \r and \n; monotonic — never emit a step back.
+        proc = subprocess.Popen(args, stderr=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL)
+        watchdog = threading.Timer(timeout, proc.kill)
+        watchdog.daemon = True
+        watchdog.start()
+        last = 0
+        buf = b""
+        try:
+            stream = proc.stderr
+            while stream is not None:
+                ch = stream.read(1)
+                if not ch:
+                    break
+                if ch in (b"\r", b"\n"):
+                    pct = parse_git_progress(buf.decode("utf-8", "replace"))
+                    if pct is not None and pct >= last:
+                        progress(pct)
+                        last = pct
+                    buf = b""
+                else:
+                    buf += ch
+        finally:
+            watchdog.cancel()
+        proc.wait()
         if proc.returncode != 0:
-            raise GitError((proc.stderr or proc.stdout).strip()[:300],
-                           proc.returncode)
+            tail = buf.decode("utf-8", "replace").strip()
+            raise GitError((tail or
+                            f"git clone failed (exit {proc.returncode})"
+                            )[:300], proc.returncode)
+        progress(100)
         return Repo(dest)
 
     def exists(self) -> bool:

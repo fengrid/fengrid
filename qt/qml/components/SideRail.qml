@@ -1354,7 +1354,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 40
+        height: 86
         color: theme.tokens.surface
         Rectangle {
             anchors.top: parent.top
@@ -1363,12 +1363,14 @@ Rectangle {
             height: 1
             color: theme.tokens.border
         }
-        // #141 round 2: TWO sibling actions — the preset-pack catalog is
+        // #141 round 2: TWO stacked actions — the preset-pack catalog is
         // a download function, not a library, so it lives here beside the
-        // import flow instead of inside the Libraries list. Each button
-        // half-width; the Preset Libraries button opens the pack browser
-        // preloaded with the ACTIVE pane's pack (works on every pane).
-        Row {
+        // import flow instead of inside the Libraries list. Stacked
+        // full-width rows (the side-by-side halves squeezed the labels
+        // against the borders) with breathing room around the icon +
+        // label. The Preset Libraries button opens the pack browser
+        // preloaded with the ACTIVE pane's pack (every pane).
+        Column {
             anchors.fill: parent
             anchors.margins: 6
             spacing: 6
@@ -1377,30 +1379,29 @@ Rectangle {
                 property string actionIcon
                 property string actionLabel
                 property bool isPresetAction
-                width: (parent.width - parent.spacing) / 2
-                height: parent.height
+                width: parent.width
+                height: (parent.height - parent.spacing) / 2
                 radius: 6
                 color: ma.containsMouse ? theme.tokens.accent
                                         : theme.tokens.surface2
                 border.color: ma.containsMouse ? theme.tokens.accent
                                                : theme.tokens.border
-                Column {
+                Row {
                     anchors.centerIn: parent
-                    spacing: 3
+                    spacing: 8
                     IconImage {
                         name: actionIcon
                         px: 13
-                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
                         tint: ma.containsMouse ? theme.tokens.bg
                                                : theme.tokens.text
                     }
                     Text {
                         text: actionLabel
                         font.family: theme.uiFont
-                        font.pixelSize: 10
+                        font.pixelSize: 12
                         font.weight: Font.DemiBold
-                        width: parent.width
-                        horizontalAlignment: Text.AlignHCenter
+                        anchors.verticalCenter: parent.verticalCenter
                         color: ma.containsMouse ? theme.tokens.bg
                                                 : theme.tokens.text
                     }
