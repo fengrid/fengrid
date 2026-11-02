@@ -140,7 +140,10 @@ class Presets(QObject):
     @Slot(int)
     def apply_preset(self, entry_id: int) -> None:
         """Apply a palette-kind preset entry: emit its hex colors so the
-        Colors bridge (or any listener) can load them."""
+        Colors bridge (or any listener) can load them. #162: applying IS
+        the palette download — the entry flips local so the dialog badges
+        the card and the library tab counts it, the same vocabulary a
+        cloned icon/font pack gets."""
         row = self._row(entry_id)
         if row is None:
             return
@@ -150,6 +153,12 @@ class Presets(QObject):
         except ValueError:
             hexes = []
         if hexes:
+            self._con.execute(
+                "UPDATE preset_entry SET downloaded = 1 WHERE id = ?",
+                (int(entry_id),))
+            self._con.commit()
+            self.entriesChanged.emit()
+            self.librariesChanged.emit()
             self.presetApplied.emit(entry_id, hexes)
 
     # ------------------------------------------------------------ download

@@ -218,3 +218,90 @@ def test_pack_library_tags_reach_the_read_path(env, tmp_path):
     assert len(ids) == 2, "pack assets not reachable through item_tag"
     counts = core_tax.library_view_kind_counts(con, view["id"])
     assert counts.get("icon") == 2
+
+
+# ------------------------------------------------- #162: palette preset parity
+def _palette_entry(con, name="Complementary Ocean"):
+    return con.execute(
+        "SELECT e.id, e.name, l.name AS pack FROM preset_entry e"
+        " JOIN preset_library l ON l.id = e.library_id"
+        " WHERE l.kind = 'palette' AND e.name = ?", (name,)).fetchone()
+
+
+def test_save_as_preset_with_entry_files_downloaded_collections(env):
+    """#162: applying a palette preset is the Colors pane's "download" —
+    the saved palette must be filed into the per-type 'Downloaded'
+    collection and a collection named after its preset library, the
+    same treatment an icon/font pack download gets."""
+    con, tmp = env
+    core_presets.ensure_presets(con)
+    entry = _palette_entry(con)
+    bridge = Colors(con)
+    bridge.load_hexes(["#03045E", "#0077B6", "#90E0EF"])
+    bridge.save_as_preset(entry["name"], entry_id=entry["id"])
+
+    pid = con.execute("SELECT id FROM palette WHERE name = ?",
+                      (entry["name"],)).fetchone()["id"]
+    filed = {r["name"] for r in con.execute(
+        "SELECT c.name FROM collection_ref cr"
+        " JOIN collection c ON c.id = cr.collection_id"
+        " WHERE cr.item_kind = 'palette' AND cr.item_id = ?", (pid,))}
+    assert filed >= {"Downloaded", entry["pack"], "Default"}, filed
+    # still a 'preset'-tagged saved palette (the Saved Presets row)
+    tags = [r[0] for r in con.execute(
+        "SELECT t.name FROM item_tag it JOIN tag t ON t.id = it.tag_id"
+        " WHERE it.item_kind = 'palette' AND it.item_id = ?", (pid,))]
+    assert "preset" in tags
+
+
+def test_save_as_preset_without_entry_files_nothing(env):
+    """Boundary: a palette saved without a preset entry behind it
+    (manual save path) must not gain collection filing — only the
+    preset apply flow files."""
+    con, tmp = env
+    core_presets.ensure_presets(con)
+    bridge = Colors(con)
+    bridge.load_hexes(["#123456"])
+    bridge.save_as_preset("My Manual Scheme")
+    pid = con.execute("SELECT id FROM palette WHERE name = ?",
+                      ("My Manual Scheme",)).fetchone()["id"]
+    refs = con.execute(
+        "SELECT COUNT(*) FROM collection_ref"
+        " WHERE item_kind = 'palette' AND item_id = ?", (pid,)).fetchone()[0]
+    assert refs == 0
+
+
+def test_filing_an_applied_preset_refreshes_the_rail(env, tmp_path):
+    """#162: the rail's collections list is the Library bridge's
+    snapshot — an applied scheme's filing must poke its refresh (the
+    bound library), or the Downloaded/pack rows stay invisible until a
+    restart."""
+    con, tmp = env
+    core_presets.ensure_presets(con)
+    entry = _palette_entry(con)
+    from fengrid.bridges.library import Library
+    library = Library(con, str(tmp_path / "t.db"), no_scan=True)
+    bridge = Colors(con)
+    bridge.bind_library(library)
+    bridge.load_hexes(["#03045E", "#0077B6", "#90E0EF"])
+    bridge.save_as_preset(entry["name"], entry_id=entry["id"])
+    library._refresh_lists()   # the coalesced timer's synchronous twin
+    names = {c["name"]: c["kind"] for c in library.collections}
+    assert names.get("Downloaded") == "palette"
+    assert names.get(entry["pack"]) == "palette"
+
+
+def test_filing_an_applied_preset_is_idempotent(env):
+    con, tmp = env
+    core_presets.ensure_presets(con)
+    entry = _palette_entry(con)
+    bridge = Colors(con)
+    bridge.load_hexes(["#03045E", "#0077B6", "#90E0EF"])
+    bridge.save_as_preset(entry["name"], entry_id=entry["id"])
+    bridge.save_as_preset(entry["name"], entry_id=entry["id"])   # re-apply
+    pid = con.execute("SELECT id FROM palette WHERE name = ?",
+                      (entry["name"],)).fetchone()["id"]
+    n = con.execute(
+        "SELECT COUNT(*) FROM collection_ref"
+        " WHERE item_kind = 'palette' AND item_id = ?", (pid,)).fetchone()[0]
+    assert n == 3   # Default + Downloaded + pack — no duplicate refs
