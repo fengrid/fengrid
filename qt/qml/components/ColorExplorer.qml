@@ -624,13 +624,19 @@ Item {
                                 ToolTip.text:
                                     stripCol.modelData.hex.toUpperCase()
                             }
-                            // RowLayout (see the preset strip note): a
-                            // plain Row whose children bind to its own
-                            // width polish()-loops
-                            RowLayout {
+                            // Deliberately a plain Row (NOT the
+                            // preset-strip RowLayout fix): its children
+                            // bind to the strip's own width here without
+                            // cycling, because the parent column's width
+                            // comes from the palette RowLayout with no
+                            // implicit-size feedback path — and this
+                            // exact taper (width−3 over 3.2 weights)
+                            // is the reference look. Verified: no
+                            // polish() warnings from this item.
+                            Row {
                                 id: shadeStrip
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 18
+                                height: 18
                                 spacing: 1
                                 Repeater {
                                     model: [0, 1, 3, 4]   // ramp sans base
@@ -639,15 +645,12 @@ Item {
                                         required property int index
                                         required property int modelData
                                         objectName: "explorer-ramp-swatch"
-                                        // proportional fillWidth children:
-                                        // sizing off the Row's own width
-                                        // (as this once did) is the same
-                                        // polish() loop as the preset strip
                                         readonly property real w:
                                             [0.6, 1.0, 1.0, 0.6][index]
-                                        Layout.fillWidth: true
-                                        Layout.preferredWidth: w * 30
-                                        Layout.fillHeight: true
+                                        width: shadeStrip.width > 0
+                                               ? (shadeStrip.width - 3)
+                                                 * w / 3.2 : 0
+                                        height: shadeStrip.height
                                         color: explorerRoot.simColor(
                                             stripCol.modelData.ramp[
                                                 rampSw.modelData])
