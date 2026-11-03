@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fengrid"
+version = "0.3.0.dev0"
+description = "Fengrid — the UI asset explorer (Qt 6 workbench)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    # Qt 6.8 LTS line, per docs/architecture/0001-qt6-rewrite.md §2
+    "PySide6>=6.8,<6.10",
+    "pillow>=10.4",
+    "defusedxml>=0.7",
+    # SEC-7 (#9): C-level `timeout=` aborts catastrophic user regexes —
+    # stdlib re cannot be preempted (a whole match is one GIL-held C call)
+    "regex>=2024.4",
+    # Fonts pane: family/specimen identification degenerates without it
+    # (soft-guarded in core/fonts.py, but the pane is a headline feature)
+    "fonttools>=4.55",
+    # WOFF2 encoder backend — the webfont export (exportplus.convert_font,
+    # default font_fmts=["woff2"]) hard-requires it; the quiet scan-skip
+    # probe (issue #63) stays for environments that somehow lack it
+    "brotli>=1.0",
+    # Data directory location (soft-guarded in __main__.py; keeps the
+    # per-OS default paths correct on macOS/Windows)
+    "platformdirs>=4.3",
+]
+
+[project.scripts]
+fengrid = "fengrid.__main__:main"
+
+# Build/QA tooling — NOT runtime deps of the shipped app. The pipelines and
+# developer environments install them as uv dependency-groups:
+#   prod pipeline : uv sync --frozen --no-dev --group build
+#   dev pipeline  : uv sync --frozen --group build   (dev group default-on)
+#   local dev     : uv sync
+[dependency-groups]
+build = ["pyinstaller>=6.10,<7"]
+dev = ["pytest>=8.3", "ruff>=0.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

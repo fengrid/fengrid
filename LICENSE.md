@@ -53,9 +53,10 @@ distributed under the MIT license:
 
 ### Python standard library
 
-`server/serve.py` uses only the Python standard library (http.server,
-socketserver, argparse, …) under the [PSF License](https://docs.python.org/3/license.html)
-— nothing is bundled or distributed from it.
+Fengrid's REST API (`api/v1/`) uses only the Python standard library
+(http.server, argparse, …) under the
+[PSF License](https://docs.python.org/3/license.html) — nothing is
+bundled or distributed from it.
 
 ### Optional external tools (not bundled, no distribution required)
 
