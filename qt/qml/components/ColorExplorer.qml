@@ -90,8 +90,16 @@ Item {
                             }
                             onClicked: colorex !== null
                                 && colorex.set_scheme(schemeBtn.modelData.key)
+                            // the selection ring must sit OUTSIDE the
+                            // sprite: the sprite's disc fills its 38px
+                            // cell and would otherwise overdraw the
+                            // border (observed as a half-ring on the
+                            // active scheme button)
                             background: Rectangle {
-                                radius: 19
+                                anchors.centerIn: schemeBtn
+                                width: schemeBtn.width + 6
+                                height: schemeBtn.height + 6
+                                radius: width / 2
                                 color: schemeBtn.hovered
                                        ? theme.tokens.scrimSoft
                                        : "transparent"
@@ -184,6 +192,7 @@ Item {
                     }
                     Rectangle {
                         id: distChip
+                        objectName: "explorer-dist-chip"
                         // mono/freeform have no Distance parameter — the
                         // reference UI only shows the box for the models
                         // whose dots move apart
@@ -228,8 +237,15 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: distPopup.popup(distChip, 0,
-                                                       distChip.height + 4)
+                            onClicked: {
+                                // scene coords (mapToItem(null)) match
+                                // the popup's Overlay.overlay parent;
+                                // Item has no mapToScene() in QML
+                                var p = distChip.mapToItem(null, 0, 0)
+                                distPopup.x = p.x
+                                distPopup.y = p.y + distChip.height + 4
+                                distPopup.open()
+                            }
                         }
                     }
                     Item { Layout.fillWidth: true }
@@ -397,17 +413,32 @@ Item {
                                         }
                                         contentItem: ColumnLayout {
                                             spacing: 3
-                                            Row {
+                                            // RowLayout, not a plain Row:
+                                            // a plain Row's implicitWidth
+                                            // (sum of child widths) feeds
+                                            // back through fillWidth and
+                                            // the child widths re-bind off
+                                            // the Row's own width — a
+                                            // polish() loop that thrashes
+                                            // the layout engine ~2000x per
+                                            // run and starves real layout
+                                            // passes (observed as mis-laid
+                                            // -out/missing UI). Proportional
+                                            // fillWidth children carry no
+                                            // width→implicit cycle.
+                                            RowLayout {
                                                 id: presetStrip
                                                 Layout.fillWidth: true
-                                                height: 16
+                                                Layout.preferredHeight: 16
+                                                spacing: 1
                                                 Repeater {
                                                     model: 5
                                                     delegate: Rectangle {
                                                         required property int index
                                                         readonly property real w: [0.6, 1.0, 1.6, 1.0, 0.6][index]
-                                                        width: (presetStrip.width - 4) * w / 4.8
-                                                        height: presetStrip.height
+                                                        Layout.fillWidth: true
+                                                        Layout.preferredWidth: w * 30
+                                                        Layout.fillHeight: true
                                                         color: presetCell.stripColors[index]
                                                     }
                                                 }
@@ -593,10 +624,13 @@ Item {
                                 ToolTip.text:
                                     stripCol.modelData.hex.toUpperCase()
                             }
-                            Row {
+                            // RowLayout (see the preset strip note): a
+                            // plain Row whose children bind to its own
+                            // width polish()-loops
+                            RowLayout {
                                 id: shadeStrip
                                 Layout.fillWidth: true
-                                height: 18
+                                Layout.preferredHeight: 18
                                 spacing: 1
                                 Repeater {
                                     model: [0, 1, 3, 4]   // ramp sans base
@@ -605,12 +639,15 @@ Item {
                                         required property int index
                                         required property int modelData
                                         objectName: "explorer-ramp-swatch"
+                                        // proportional fillWidth children:
+                                        // sizing off the Row's own width
+                                        // (as this once did) is the same
+                                        // polish() loop as the preset strip
                                         readonly property real w:
                                             [0.6, 1.0, 1.0, 0.6][index]
-                                        width: shadeStrip.width > 0
-                                               ? (shadeStrip.width - 3)
-                                                 * w / 3.2 : 0
-                                        height: shadeStrip.height
+                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: w * 30
+                                        Layout.fillHeight: true
                                         color: explorerRoot.simColor(
                                             stripCol.modelData.ramp[
                                                 rampSw.modelData])
@@ -1075,8 +1112,14 @@ Item {
     // ── dist popup: slider + default reset ──
     Popup {
         id: distPopup
+        objectName: "explorer-dist-popup"
         width: 210
         padding: 10
+        // window-overlay parent so the chip's scene position (set at
+        // open time) maps 1:1 onto the popup's x/y — Popup has NO
+        // popup(parent, x, y) convenience (that's Menu's), so the chip
+        // click positions it explicitly
+        parent: Overlay.overlay
         background: Rectangle {
             radius: 8
             color: theme.tokens.surface

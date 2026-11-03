@@ -28,10 +28,13 @@ _FIRST_X = 1
 
 # (body, detail) per (theme, state) — Fengrid brand tokens. The light
 # idle body must clearly read against the white surface (the first
-# light pass used #DFE5EA and the discs vanished).
+# light pass used #DFE5EA and the discs vanished). The dark SELECTED
+# body must also read against the pane surface (~#161B21): the first
+# dark sel pass used #101418 and the active disc vanished into the
+# background — only its details and a half-occluded ring survived.
 _REMAPS = {
     ("dark", "idle"): ("#262C33", "#8B97A1"),
-    ("dark", "sel"): ("#101418", "#E7EDF2"),
+    ("dark", "sel"): ("#262C33", "#E7EDF2"),
     ("light", "idle"): ("#C6CED4", "#46505A"),
     ("light", "sel"): ("#16202B", "#F7F8F9"),
 }

@@ -214,6 +214,56 @@ def test_wheel_hue_drag_rotates_scheme(explorer_ui):
     assert offs == pytest.approx([-30.0, 0.0, 30.0], abs=1)
 
 
+def test_dist_popup_opens_at_chip_with_model_range(explorer_ui):
+    """Clicking the Dist chip opens the slider popup anchored under the
+    chip, inside the window, with a range that follows the model (the
+    arc-from-base Distance): triad 120..180, adjacent 0..90. Regression:
+    the chip once called Popup.popup() (a Menu-only API) and every click
+    threw a TypeError with no popup at all."""
+    ed = explorer_ui
+    bridge, win, root = ed["ex"], ed["win"], ed["root"]
+    bridge.set_scheme("triad")
+    _qapp().processEvents()
+
+    chips = _find_by_name(root, "explorer-dist-chip")
+    assert chips, "dist chip missing"
+    chip = chips[0]
+    origin = chip.mapToScene(QPointF(0, 0))
+    _window_click(win, QPointF(origin.x() + chip.width() / 2,
+                               origin.y() + chip.height() / 2))
+
+    hits = _find_dialog_by_name(root, "explorer-dist-popup")
+    assert hits and hits[0].property("visible"), "dist popup did not open"
+    pop = hits[0]
+    # anchored under the chip …
+    assert pop.property("x") == pytest.approx(origin.x(), abs=1)
+    assert pop.property("y") == pytest.approx(
+        origin.y() + chip.height() + 4, abs=1)
+    # … and fully inside the interface (never clipped at an edge; the
+    # offscreen fixture's window reports a 1x1 geometry, so bound
+    # against the root item's size — the real app's overlay matches it)
+    assert pop.property("x") + pop.property("width") <= root.width() + 1
+    assert pop.property("y") + pop.property("height") <= root.height() + 1
+
+    # the slider range follows the model's arc-from-base range
+    sliders = [o for o in _walk(win.contentItem())
+               if "Slider" in o.metaObject().className()]
+    assert sliders, "dist popup slider not found"
+    assert sliders[0].property("from") == 120
+    assert sliders[0].property("to") == 180
+
+    # adjacent's range is 0..90 — the chip + popup stay consistent
+    bridge.set_scheme("adjacent")
+    _qapp().processEvents()
+    assert chips[0].property("visible") is True
+    origin2 = chip.mapToScene(QPointF(0, 0))
+    _window_click(win, QPointF(origin2.x() + chip.width() / 2,
+                               origin2.y() + chip.height() / 2))
+    assert pop.property("visible"), "dist popup did not reopen"
+    assert sliders[0].property("from") == 0
+    assert sliders[0].property("to") == 90
+
+
 def test_wheel_size_stable_across_schemes(explorer_ui):
     """Free style must not rescale the wheel: its count selector lives
     in the readout row, so no layout row grows (regression: the

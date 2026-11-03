@@ -68,6 +68,33 @@ Item {
     // shade point (s, l) → local point (S left→right, L top→bottom)
     function discX(s) { return cx - rDisc + (s / 100) * 2 * rDisc }
     function discY(l) { return cy - rDisc + (1 - l / 100) * 2 * rDisc }
+    // shade point → ON-DISC dot position: the disc only shows the square
+    // field's inscribed circle, so dots whose (S, L) falls into a corner
+    // of the field map in polar coordinates onto the rim and curve along
+    // the circumference there (e.g. pale pastel presets land up-left on
+    // the rim instead of floating off the disc)
+    function discDotPos(s, l) {
+        var x = discX(s), y = discY(l)
+        var dx = x - cx, dy = y - cy
+        var r = Math.sqrt(dx * dx + dy * dy)
+        if (r > rDisc) {
+            var k = rDisc / r
+            return { x: cx + dx * k, y: cy + dy * k }
+        }
+        return { x: x, y: y }
+    }
+    // drag point → clamped onto the disc, then inverted (S left→right,
+    // L top→bottom) — near the rim the dot follows the mouse AROUND the
+    // circumference instead of wandering outside the disc
+    function discPoint(x, y) {
+        var dx = x - cx, dy = y - cy
+        var r = Math.sqrt(dx * dx + dy * dy)
+        if (r > rDisc && r > 0) {
+            var k = rDisc / r
+            dx *= k; dy *= k
+        }
+        return { x: cx + dx, y: cy + dy }
+    }
     function discSAt(x) {
         return Math.max(0, Math.min(100,
             (x - (cx - rDisc)) / (2 * rDisc) * 100))
@@ -128,16 +155,18 @@ Item {
             // disc marker to hit (the rest sit exactly on the base)
             if (!cols[i].is_base && !cols[i].ind)
                 continue
-            dx = x - discX(cols[i].s)
-            dy = y - discY(cols[i].l)
+            var dp = discDotPos(cols[i].s, cols[i].l)
+            dx = x - dp.x
+            dy = y - dp.y
             d = Math.sqrt(dx * dx + dy * dy)
             if (d < Math.max(12, discDotBaseR + 5)
                     && (best === null || d < best.d))
                 best = { wheel: 2, idx: i, d: d }
         }
         for (i = 0; i < tones.length; i++) {
-            dx = x - discX(tones[i].s)
-            dy = y - discY(tones[i].l)
+            dp = discDotPos(tones[i].s, tones[i].l)
+            dx = x - dp.x
+            dy = y - dp.y
             d = Math.sqrt(dx * dx + dy * dy)
             if (d < Math.max(12, toneDotR + 5)
                     && (best === null || d < best.d))
@@ -347,8 +376,9 @@ Item {
             // follow the shade point and are individually draggable
             var tones = wheelRoot.bridge.tones
             for (i = 0; i < tones.length; i++) {
-                mx = wheelRoot.discX(tones[i].s)
-                my = wheelRoot.discY(tones[i].l)
+                var tp = wheelRoot.discDotPos(tones[i].s, tones[i].l)
+                mx = tp.x
+                my = tp.y
                 ctx.beginPath()
                 ctx.arc(mx, my, wheelRoot.toneDotR + 1.6, 0, 2 * Math.PI)
                 ctx.strokeStyle = "rgba(0,0,0,0.6)"
@@ -366,8 +396,9 @@ Item {
             }
 
             for (i = 0; i < cols.length; i++) {
-                mx = wheelRoot.discX(cols[i].s)
-                my = wheelRoot.discY(cols[i].l)
+                var cp = wheelRoot.discDotPos(cols[i].s, cols[i].l)
+                mx = cp.x
+                my = cp.y
                 if (cols[i].is_base) {
                     // solid white dot — the shared shade point
                     ctx.beginPath()
@@ -409,15 +440,17 @@ Item {
                 } else if (hv === 3) {
                     var ht = wheelRoot.bridge.tones[wheelRoot.hoverIdx]
                     if (ht !== undefined) {
-                        hx = wheelRoot.discX(ht.s)
-                        hy = wheelRoot.discY(ht.l)
+                        var htp = wheelRoot.discDotPos(ht.s, ht.l)
+                        hx = htp.x
+                        hy = htp.y
                         ok = true
                     }
                 } else {
                     var hc = wheelRoot.bridge.colors[wheelRoot.hoverIdx]
                     if (hc !== undefined) {
-                        hx = wheelRoot.discX(hc.s)
-                        hy = wheelRoot.discY(hc.l)
+                        var hcp = wheelRoot.discDotPos(hc.s, hc.l)
+                        hx = hcp.x
+                        hy = hcp.y
                         ok = true
                     }
                 }
@@ -522,12 +555,14 @@ Item {
     function _applyDisc(x, y, idx, shift) {
         if (bridge === null)
             return
-        bridge.shade_drag(discSAt(x), discLAt(y), shift, idx)
+        var p = discPoint(x, y)   // keep the dot on the disc (polar clamp)
+        bridge.shade_drag(discSAt(p.x), discLAt(p.y), shift, idx)
     }
 
     function _applyTone(x, y, idx) {
         if (bridge === null)
             return
-        bridge.tone_drag(idx, discSAt(x), discLAt(y))
+        var p = discPoint(x, y)
+        bridge.tone_drag(idx, discSAt(p.x), discLAt(p.y))
     }
 }
