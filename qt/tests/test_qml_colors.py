@@ -68,6 +68,9 @@ def colors_ui(tmp_path):
     root.setParentItem(win.contentItem())
     win.show()
     _qapp().processEvents()
+    # the Explorer is the pane's default surface now; the harmony
+    # generator tests run against mode 0 (see _open_harmonies)
+    _open_harmonies(root)
 
     yield {"root": root, "win": win, "colors": colors_bridge, "con": con}
 
@@ -114,6 +117,14 @@ def _sw_tool_buttons(root):
     hits.sort(key=lambda b: (b.mapToScene(QPointF(0, 0)).y(),
                              b.mapToScene(QPointF(0, 0)).x()))
     return hits
+
+
+def _open_harmonies(root):
+    """The Explorer is the Colors pane's default surface now; the
+    harmony-generator tests need mode 0 back. Set the property directly
+    (the mode Button carries its label on a custom contentItem Text, so
+    there is no `text` handle to click)."""
+    root.setProperty("subMode", 0)
 
 
 def test_lock_button_click_flips_lock_state(colors_ui):

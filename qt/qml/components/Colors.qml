@@ -12,11 +12,11 @@ Item {
 
     // 0 = harmony generator (the 0.x port), 1 = Explorer wheel (the
     // Color palette scheme workspace), 2 = terminal designer;
-    // --term / --explorer (QA) open straight into those surfaces
+    // the Explorer is the default surface (spec: it IS the colors
+    // workspace), --term opens the terminal designer, and --explorer
+    // is still accepted for QA scripts but matches the default
     property int subMode: typeof initialTerm !== "undefined" && initialTerm
-                          ? 2
-                          : (typeof initialExplorer !== "undefined"
-                             && initialExplorer ? 1 : 0)
+                          ? 2 : 1
     readonly property bool termMode: subMode === 2
     readonly property bool explorerMode: subMode === 1
 
