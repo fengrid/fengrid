@@ -16,7 +16,8 @@ IDEA.md
 .cache/
 .DS_Store
 Thumbs.db
-tmp/*
+./tmp
+./tmp/*
 
 # python bytecode caches
 __pycache__/
