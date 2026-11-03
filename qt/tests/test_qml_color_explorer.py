@@ -5,6 +5,7 @@ events (the same delivery path as test_qml_colors.py): scheme sprite
 buttons, the wheel's hue drag, the palette info dialog's set-as-base
 action and the preset grid.
 """
+import math
 import os
 import sys
 from pathlib import Path
@@ -51,6 +52,8 @@ def explorer_ui(tmp_path):
                                 Path(__file__).resolve().parents[2]
                                 / "qt" / "resources" / "icons"
                                 / "sprites.png")))
+    from fengrid.bridges.field_provider import SphereFieldProvider
+    engine.addImageProvider("fgfield", SphereFieldProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("theme", theme)
     ctx.setContextProperty("colorex", explorer_bridge)
@@ -308,8 +311,16 @@ def test_tone_dot_drag_reshapes_the_ramp(explorer_ui):
     r_disc = side * 0.252
 
     def disc_scene(s, l):
-        return QPointF(center.x() - r_disc + (s / 100) * 2 * r_disc,
-                       center.y() - r_disc + (1 - l / 100) * 2 * r_disc)
+        """Scene position of a shade's dot — the same sphere projection
+        the wheel paints with (disc radius = sin(ρ·π/2)·rDisc, ρ = the
+        shade's distance from the field centre, pinned at the rim)."""
+        u = (s - 50) / 50
+        v = (50 - l) / 50
+        rho = min(1.0, math.hypot(u, v))
+        th = math.atan2(v, u)
+        r = r_disc * math.sin(rho * math.pi / 2)
+        return QPointF(center.x() + r * math.cos(th),
+                       center.y() + r * math.sin(th))
 
     # tone dot 0 = the lightest step (default offset L +25, S held)
     t0 = bridge.tones[0]
