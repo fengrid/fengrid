@@ -557,3 +557,58 @@ def test_settings_key_is_global(explorer):
     # the explorer state must survive a database switch — it lives in
     # the registry-backed GLOBAL key set
     assert "colors_explorer" in settings_mod.GLOBAL_KEYS
+
+
+# ------------------------------------------------------- sphere field
+def test_sphere_field_provider_renders_reference_colors():
+    """The disc field is the S/L square projected onto a sphere — each
+    pixel shows the shade whose dot projects there. Reference points:
+    rim right = pure hue, top rim = white, left rim = desaturated grey,
+    centre = hsl(h, 50, 50), corners transparent."""
+    from fengrid.bridges.field_provider import SphereFieldProvider
+
+    p = SphereFieldProvider()
+    n = 128
+    img = p.requestImage(f"0x{n * 2}", core_qp_size(), core_qp_size())
+    assert img.width() == n and img.height() == n
+    half = n / 2
+
+    def px(x, y):
+        c = img.pixelColor(int(x), int(y))
+        return c.red(), c.green(), c.blue(), c.alpha()
+
+    # centre: hsl(0, 50, 50) ≈ (191, 64, 64)
+    r, g, b, a = px(half, half)
+    assert a == 255
+    assert (r, g, b) == pytest.approx((191, 64, 64), abs=6)
+    # rim right (S 100, L 50): pure hue ≈ (255, 0, 0) — the outermost
+    # pixel ring carries the exact rim colors
+    r, g, b, a = px(n - 1, half)
+    assert a == 255
+    assert (r, g, b) == pytest.approx((255, 0, 0), abs=12)
+    # top rim (S 50, L 100): white
+    r, g, b, a = px(half, 0)
+    assert a == 255
+    assert (r, g, b) == pytest.approx((255, 255, 255), abs=6)
+    # bottom rim (S 50, L 0): black
+    r, g, b, a = px(half, n - 1)
+    assert a == 255
+    assert (r, g, b) == pytest.approx((0, 0, 0), abs=12)
+    # left rim (S 0, L 50): hsl(0, 0, 50) ≈ (128, 128, 128)
+    r, g, b, a = px(0, half)
+    assert a == 255
+    assert (r, g, b) == pytest.approx((128, 128, 128), abs=8)
+    # outside the inscribed circle: transparent
+    assert px(0, 0)[3] == 0
+    assert px(n - 1, 0)[3] == 0
+    # a second hue must differ on the rim, and the cache must serve
+    # identical bytes for the same key
+    img2 = p.requestImage(f"120x{n * 2}", core_qp_size(), core_qp_size())
+    assert img2.pixelColor(n - 2, half).green() > 100  # hue 120 rim = green
+    img3 = p.requestImage(f"0x{n * 2}", core_qp_size(), core_qp_size())
+    assert img3.pixelColor(half, half).red() == img.pixelColor(half, half).red()
+
+
+def core_qp_size():
+    from PySide6.QtCore import QSize
+    return QSize()

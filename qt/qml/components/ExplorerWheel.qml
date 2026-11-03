@@ -68,32 +68,43 @@ Item {
     // shade point (s, l) → local point (S left→right, L top→bottom)
     function discX(s) { return cx - rDisc + (s / 100) * 2 * rDisc }
     function discY(l) { return cy - rDisc + (1 - l / 100) * 2 * rDisc }
-    // shade point → ON-DISC dot position: the disc only shows the square
-    // field's inscribed circle, so dots whose (S, L) falls into a corner
-    // of the field map in polar coordinates onto the rim and curve along
-    // the circumference there (e.g. pale pastel presets land up-left on
-    // the rim instead of floating off the disc)
-    function discDotPos(s, l) {
-        var x = discX(s), y = discY(l)
-        var dx = x - cx, dy = y - cy
-        var r = Math.sqrt(dx * dx + dy * dy)
-        if (r > rDisc) {
-            var k = rDisc / r
-            return { x: cx + dx * k, y: cy + dy * k }
-        }
-        return { x: x, y: y }
+    // shade point (s, l) → linear square coords (u right+, v down+;
+    // u,v ∈ −1..1). The disc shows this square mapped ONTO A SPHERE:
+    // the disc centre is the sphere's apex, the square's edge midpoints
+    // (ρ=1) reach the equator (the rim), and square corners beyond the
+    // equator pin onto the rim. Orthographic projection of the sphere:
+    // disc radius = sin(ρ·π/2)·rDisc — the mapping is linear at the
+    // centre and bends progress increasingly around the circumference
+    // toward the edge, so drags follow the sphere's curvature.
+    function discUV(s, l) {
+        return { u: (s - 50) / 50, v: (50 - l) / 50 }
     }
-    // drag point → clamped onto the disc, then inverted (S left→right,
-    // L top→bottom) — near the rim the dot follows the mouse AROUND the
-    // circumference instead of wandering outside the disc
-    function discPoint(x, y) {
+    function discToSphere(u, v) {
+        var rho = Math.sqrt(u * u + v * v)
+        var th = Math.atan2(v, u)
+        var r = rho >= 1 ? rDisc
+                         : rDisc * Math.sin(rho * Math.PI / 2)
+        return { x: cx + r * Math.cos(th), y: cy + r * Math.sin(th) }
+    }
+    function discFromSphere(x, y) {
         var dx = x - cx, dy = y - cy
         var r = Math.sqrt(dx * dx + dy * dy)
-        if (r > rDisc && r > 0) {
-            var k = rDisc / r
-            dx *= k; dy *= k
-        }
-        return { x: cx + dx, y: cy + dy }
+        var th = Math.atan2(dy, dx)
+        var rho = r >= rDisc ? 1
+                             : 2 / Math.PI * Math.asin(Math.max(0, r / rDisc))
+        return { u: rho * Math.cos(th), v: rho * Math.sin(th) }
+    }
+    // shade point → ON-DISC dot position (sphere projection)
+    function discDotPos(s, l) {
+        var uv = discUV(s, l)
+        return discToSphere(uv.u, uv.v)
+    }
+    // drag point → the LINEAR square point that inverts the sphere
+    // projection (discSAt/discLAt then read S/L straight off it) — near
+    // the rim the dot follows the mouse AROUND the circumference
+    function discPoint(x, y) {
+        var m = discFromSphere(x, y)
+        return { x: cx + m.u * rDisc, y: cy + m.v * rDisc }
     }
     function discSAt(x) {
         return Math.max(0, Math.min(100,
@@ -216,7 +227,26 @@ Item {
         ctx.globalAlpha = 1
     }
 
-    // ── static wheel: ring + teeth + ticks + shade disc ──
+    // ── shade field: the sphere-projected S/L field of the base hue,
+    // rendered by the fgfield image provider (bridges/field_provider) —
+    // under both canvases so the ring/grid/dots layer over it
+    Image {
+        id: fieldImage
+        anchors.centerIn: parent
+        width: wheelRoot.rDisc * 2
+        height: width
+        visible: wheelRoot.side > 40 && wheelRoot.bridge !== null
+        asynchronous: true
+        cache: false
+        // the provider caches per (hue, size) — hue drags re-request one
+        // texture per new degree; async decode keeps the drag smooth
+        source: visible
+                ? "image://fgfield/" + wheelRoot.bridge.hueReadout
+                  + "x" + Math.round(wheelRoot.rDisc * 2)
+                : ""
+    }
+
+    // ── static wheel: ring + teeth + ticks over the shade field ──
     // (repaints only on hue/theme/size changes — see the Connections below)
     Canvas {
         id: staticCanvas
@@ -228,9 +258,14 @@ Item {
             ctx.reset()
             if (wheelRoot.side < 40 || wheelRoot.bridge === null)
                 return
-            var baseH = wheelRoot.bridge.hueReadout
             var ink = String(theme.tokens.text)
             var i
+
+            // ── shade disc: the S/L square mapped ONTO A SPHERE, painted by the
+            // fgfield image provider (image://fgfield/<hue>x<px>) and
+            // layered UNDER this canvas — see bridges/field_provider.
+            // Each pixel shows the shade whose dot projects there, so
+            // dots sit on their own colors and drags follow the sphere.
 
             // hue ring: 72 segments with hairline gaps — drawn DIM (the
             // reference wheel mutes everything except the scheme hues,
@@ -258,39 +293,6 @@ Item {
             }
             ctx.globalAlpha = 1
 
-            // ── shade disc: S→x, L→y field of the base hue ──
-            ctx.save()
-            ctx.beginPath()
-            ctx.arc(wheelRoot.cx, wheelRoot.cy, wheelRoot.rDisc,
-                    0, 2 * Math.PI)
-            ctx.clip()
-            // pure hue base
-            ctx.fillStyle = Qt.hsla(baseH / 360, 1, 0.5, 1)
-            ctx.fillRect(wheelRoot.cx - wheelRoot.rDisc,
-                         wheelRoot.cy - wheelRoot.rDisc,
-                         wheelRoot.rDisc * 2, wheelRoot.rDisc * 2)
-            // white overlay fading left→right desaturates the left half
-            var gW = ctx.createLinearGradient(
-                wheelRoot.cx - wheelRoot.rDisc, 0,
-                wheelRoot.cx + wheelRoot.rDisc, 0)
-            gW.addColorStop(0, Qt.rgba(1, 1, 1, 0.97))
-            gW.addColorStop(0.55, Qt.rgba(1, 1, 1, 0.45))
-            gW.addColorStop(1, Qt.rgba(1, 1, 1, 0))
-            ctx.fillStyle = gW
-            ctx.fillRect(wheelRoot.cx - wheelRoot.rDisc,
-                         wheelRoot.cy - wheelRoot.rDisc,
-                         wheelRoot.rDisc * 2, wheelRoot.rDisc * 2)
-            // black overlay top→bottom shades the lower half
-            var gB = ctx.createLinearGradient(
-                0, wheelRoot.cy - wheelRoot.rDisc,
-                0, wheelRoot.cy + wheelRoot.rDisc)
-            gB.addColorStop(0, Qt.rgba(0, 0, 0, 0))
-            gB.addColorStop(0.55, Qt.rgba(0, 0, 0, 0.38))
-            gB.addColorStop(1, Qt.rgba(0, 0, 0, 0.9))
-            ctx.fillStyle = gB
-            ctx.fillRect(wheelRoot.cx - wheelRoot.rDisc,
-                         wheelRoot.cy - wheelRoot.rDisc,
-                         wheelRoot.rDisc * 2, wheelRoot.rDisc * 2)
             // polar grid: concentric circles + spokes
             ctx.strokeStyle = ink
             ctx.globalAlpha = 0.14
@@ -311,7 +313,6 @@ Item {
                 ctx.stroke()
             }
             ctx.globalAlpha = 1
-            ctx.restore()
             // disc rim hairline
             ctx.beginPath()
             ctx.arc(wheelRoot.cx, wheelRoot.cy, wheelRoot.rDisc,

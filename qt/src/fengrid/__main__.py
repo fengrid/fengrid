@@ -449,6 +449,10 @@ def main(argv=None) -> int:
     engine.addImageProvider(
         "fgscheme", SchemeSpriteProvider(
             _asset_dir("resources", "icons", "sprites.png")))
+    # the Explorer disc's sphere-projected shade field (per-hue render,
+    # cached — see bridges/field_provider)
+    from fengrid.bridges.field_provider import SphereFieldProvider
+    engine.addImageProvider("fgfield", SphereFieldProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("theme", theme)
     ctx.setContextProperty("library", library)
