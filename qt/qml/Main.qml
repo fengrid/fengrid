@@ -1285,6 +1285,7 @@ ApplicationWindow {
             presetsDialog.openLibrary(
                 -1, root.pane === 0 ? "icon"
                     : root.pane === 1 ? "font"
+                    : root.pane === 2 ? "palette"
                     : root.pane === 4 ? "template" : "")
             return
         }

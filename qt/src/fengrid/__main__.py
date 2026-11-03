@@ -360,6 +360,23 @@ def main(argv=None) -> int:
     app.aboutToQuit.connect(freeze_watchdog.stop)
     QTimer.singleShot(0, freeze_watchdog.start)
 
+    # curated preset libraries (fonts / icon sets / site templates):
+    # register pack rows (idempotent), never download anything.
+    # #162: this MUST run BEFORE any bridge construction — Library
+    # refreshes its rail lists and Colors snapshots its saved-palette
+    # list at construction, so a sync landing after them leaves the
+    # saved strip empty and the typed collections (Default /
+    # Downloaded / pack-named) invisible until the next mutation.
+    core_presets.ensure_presets(con)
+    # downloaded preset clones become scan sources (#37) — startup sync
+    # covers entries downloaded by older builds or on another machine;
+    # _start_initial_scans rescans exactly the kinds that registered
+    preset_sources = core_presets.sync_downloaded_sources(con)
+    core_presets.sync_default_library(con)
+    # #141 round 2: packs downloaded by earlier builds get their
+    # discrete libraries on startup too
+    core_presets.sync_pack_libraries(con)
+
     theme = Theme(con, _asset_dir("fonts"))
     if args.theme:
         theme.set_theme(args.theme)
@@ -411,6 +428,9 @@ def main(argv=None) -> int:
         lambda d: explorer_bridge.restore_state(d),
         lambda d: explorer_bridge.restore_state(d))
     explorer_bridge.bind_undo(colors_undo)
+    # #162: preset filing creates palette collections the rail's
+    # Library snapshot must refresh to show
+    colors_bridge.bind_library(library)
     # demo suite: files under the data dir so removal never touches user folders
     demo_bridge = Demo(con, os.path.join(data_dir, "demo-assets"),
                        _asset_dir("fonts"))
@@ -463,17 +483,6 @@ def main(argv=None) -> int:
     ctx.setContextProperty("startupNotice", startup_notice)
     taxonomy_bridge = Taxonomy(con, data_dir)
     ctx.setContextProperty("taxonomy", taxonomy_bridge)
-    # curated preset libraries (fonts / icon sets / site templates):
-    # register pack rows (idempotent), never download anything
-    core_presets.ensure_presets(con)
-    # downloaded preset clones become scan sources (#37) — startup sync
-    # covers entries downloaded by older builds or on another machine;
-    # _start_initial_scans rescans exactly the kinds that registered
-    preset_sources = core_presets.sync_downloaded_sources(con)
-    core_presets.sync_default_library(con)
-    # #141 round 2: packs downloaded by earlier builds get their
-    # discrete libraries on startup too
-    core_presets.sync_pack_libraries(con)
     presets_bridge = Presets(con, data_dir)
     ctx.setContextProperty("presets", presets_bridge)
 
@@ -506,7 +515,7 @@ def main(argv=None) -> int:
         row = con.execute("SELECT name FROM preset_entry WHERE id = ?",
                           (int(entry_id),)).fetchone()
         colors_bridge.load_hexes(hexes)
-        colors_bridge.save_as_preset(row["name"] if row else "")
+        colors_bridge.save_as_preset(row["name"] if row else "", entry_id)
 
     presets_bridge.presetApplied.connect(_on_preset_applied)
 
