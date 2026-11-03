@@ -8,8 +8,10 @@ import QtQuick
 //                   `cached: true`, repainted only when the base hue,
 //                   theme or size actually changes.
 //   markerCanvas  — the palette dots (solid disc = base, ring/outline =
-//                   computed colors) on both wheels, repaints per state
-//                   change.
+//                   computed colors) on the hue ring, the base dot and
+//                   individually-adjusted colors on the disc, and the
+//                   four interactive tone dots (the shade-ramp steps),
+//                   repaints per state change.
 //
 // Interaction (single MouseArea, standard cursors):
 //   - press/drag a hue-ring dot → the whole scheme rotates so that dot
@@ -17,7 +19,10 @@ import QtQuick
 //   - Shift + drag a secondary hue dot → moves that color individually
 //     (freeform: its own offset; fixed models: adjusts Dist);
 //   - press/drag the shade disc → moves the shared shade point (every
-//     color follows); Shift + drag a disc dot → that color only;
+//     color and the tone dots follow); Shift + drag a disc dot → that
+//     color only;
+//   - press/drag a tone dot → moves that shade-ramp step's offset from
+//     the shade point (reshapes every color's shade ramp);
 //   - clicking empty ring space rotates the base hue there.
 import "."
 
@@ -28,21 +33,26 @@ Item {
     readonly property bool isDark: theme.isDark
 
     // ── geometry (all derived from the square side) ──
+    // Proportions follow the reference screenshots: the hue band is the
+    // dominant element (~0.26→0.46 of the side) and the shade disc is
+    // about half the outer wheel's diameter, nearly touching the band.
     readonly property real side: Math.min(width, height)
     readonly property real cx: width / 2
     readonly property real cy: height / 2
     readonly property real rTeethOut: side * 0.492
     readonly property real rRingOut: side * 0.462
-    readonly property real rRingIn: side * 0.378
-    readonly property real rDisc: side * 0.345
+    readonly property real rRingIn: side * 0.264
+    readonly property real rDisc: side * 0.252
     readonly property real rMid: (rRingOut + rRingIn) / 2
-    readonly property real dotBaseR: side * 0.020
-    readonly property real dotSubR: side * 0.0145
-    readonly property real discDotBaseR: side * 0.017
-    readonly property real discDotSubR: side * 0.0125
+    readonly property real dotBaseR: side * 0.018
+    readonly property real dotSubR: side * 0.0135
+    readonly property real discDotBaseR: side * 0.015
+    readonly property real discDotSubR: side * 0.011
+    readonly property real toneDotR: side * 0.011
 
     // hover/drag state
     property int hoverWheel: 0      // 0 none · 1 hue ring · 2 shade disc
+                                    // · 3 tone dot
     property int hoverIdx: -1
     property int dragWheel: 0
     property int dragIdx: -1
@@ -68,12 +78,40 @@ Item {
     }
 
     // nearest marker hit → {wheel, idx}
+    // wheel 1 = hue ring dot · 2 = shade disc (point / color dot) ·
+    // 3 = tone dot (the shade-ramp steps shown in the palette display)
+    function ringDotPos(i) {
+        // dots that share a hue (dist 0, converged models) fan out
+        // slightly along the ring so each stays visible and grabbable
+        var cols = bridge !== null ? bridge.colors : []
+        var h = cols[i].h
+        var clash = 0
+        for (var j = 0; j < i; j++) {
+            var d = ((h - cols[j].h) % 360 + 540) % 360 - 180
+            if (Math.abs(d) < 1.2)
+                clash++
+        }
+        var x = ringX(h, rMid), y = ringY(h, rMid)
+        if (clash > 0) {
+            // spread by ~a dot diameter per collision so a stack of
+            // same-hue dots reads as the separate colors it represents
+            var mag = Math.ceil(clash / 2) * dotSubR * 2.2
+            var sgn = (clash % 2 === 1) ? -1 : 1
+            var t = h * Math.PI / 180
+            x += sgn * mag * Math.cos(t)
+            y += sgn * mag * Math.sin(t)
+        }
+        return { x: x, y: y }
+    }
+
     function hitTest(x, y) {
         var cols = bridge !== null ? bridge.colors : []
+        var r = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))
         var best = null
+        // 1. hue ring dots (nearest wins)
         for (var i = 0; i < cols.length; i++) {
-            var dx = x - ringX(cols[i].h, rMid)
-            var dy = y - ringY(cols[i].h, rMid)
+            var p = ringDotPos(i)
+            var dx = x - p.x, dy = y - p.y
             var d = Math.sqrt(dx * dx + dy * dy)
             if (d < Math.max(13, dotBaseR + 6)
                     && (best === null || d < best.d))
@@ -81,10 +119,10 @@ Item {
         }
         if (best !== null)
             return { wheel: 1, idx: best.idx }
-        var r = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))
-        if (r >= rRingIn - 4 && r <= rTeethOut + 2)
-            return { wheel: 1, idx: 0 }
-        best = null
+        // 2. disc dots: the shade point (base), individually-adjusted
+        // colors, and the tone dots — nearest wins so a tone dot next
+        // to the base dot stays reachable
+        var tones = bridge !== null ? bridge.tones : []
         for (i = 0; i < cols.length; i++) {
             // only the base dot and individually-adjusted colors have a
             // disc marker to hit (the rest sit exactly on the base)
@@ -97,10 +135,22 @@ Item {
                     && (best === null || d < best.d))
                 best = { wheel: 2, idx: i, d: d }
         }
+        for (i = 0; i < tones.length; i++) {
+            dx = x - discX(tones[i].s)
+            dy = y - discY(tones[i].l)
+            d = Math.sqrt(dx * dx + dy * dy)
+            if (d < Math.max(12, toneDotR + 5)
+                    && (best === null || d < best.d))
+                best = { wheel: 3, idx: i, d: d }
+        }
         if (best !== null)
-            return { wheel: 2, idx: best.idx }
+            return { wheel: best.wheel, idx: best.idx }
+        // 3. plain disc → move the shared shade point (tone dots follow)
         if (r <= rDisc)
             return { wheel: 2, idx: -1 }
+        // 4. ring band → rotate the base hue there
+        if (r >= rRingIn - 4 && r <= rTeethOut + 2)
+            return { wheel: 1, idx: 0 }
         return { wheel: 0, idx: -1 }
     }
 
@@ -159,7 +209,8 @@ Item {
             var SEG = 5
             for (i = 0; i < 72; i++)
                 wheelRoot.paintRingSegment(ctx, i, i * SEG, 0.38)
-            // tick ring just inside the hue band (the sprites' knurl)
+            // tick ring crossing the hue band's inner edge (the
+            // reference wheel's knurl sits over the color band)
             ctx.strokeStyle = ink
             ctx.globalAlpha = 0.28
             ctx.lineWidth = 1
@@ -171,9 +222,9 @@ Item {
                            wheelRoot.cy + (wheelRoot.rRingIn - 1.5)
                            * Math.sin(ta))
                 ctx.lineTo(wheelRoot.cx + (wheelRoot.rRingIn
-                           - wheelRoot.side * 0.014) * Math.cos(ta),
+                           + wheelRoot.side * 0.016) * Math.cos(ta),
                            wheelRoot.cy + (wheelRoot.rRingIn
-                           - wheelRoot.side * 0.014) * Math.sin(ta))
+                           + wheelRoot.side * 0.016) * Math.sin(ta))
                 ctx.stroke()
             }
             ctx.globalAlpha = 1
@@ -230,19 +281,6 @@ Item {
                            wheelRoot.cy + wheelRoot.rDisc * Math.sin(sa))
                 ctx.stroke()
             }
-            // the reference disc's shade-scale chain: small translucent
-            // dots along the pale→dark diagonal (NW→SE), never move
-            ctx.fillStyle = ink
-            for (gi = 0; gi < 4; gi++) {
-                var t = [0.25, 0.417, 0.583, 0.75][gi]
-                ctx.beginPath()
-                ctx.arc(wheelRoot.discX(100 * t),
-                        wheelRoot.discY(100 * (1 - t)),
-                        wheelRoot.side * (gi === 0 || gi === 3
-                                          ? 0.009 : 0.013), 0, 2 * Math.PI)
-                ctx.globalAlpha = 0.20
-                ctx.fill()
-            }
             ctx.globalAlpha = 1
             ctx.restore()
             // disc rim hairline
@@ -282,8 +320,9 @@ Item {
             }
 
             for (i = 0; i < cols.length; i++) {
-                mx = wheelRoot.ringX(cols[i].h, wheelRoot.rMid)
-                my = wheelRoot.ringY(cols[i].h, wheelRoot.rMid)
+                var rp = wheelRoot.ringDotPos(i)
+                mx = rp.x
+                my = rp.y
                 var r = cols[i].is_base ? wheelRoot.dotBaseR
                                         : wheelRoot.dotSubR
                 // backdrop halo separates the dot from the ring colors
@@ -300,6 +339,29 @@ Item {
                 ctx.fill()
                 ctx.lineWidth = cols[i].is_base ? 2 : 1.6
                 ctx.strokeStyle = "rgba(0,0,0,0.75)"
+                ctx.stroke()
+            }
+
+            // tone dots: the four shade-ramp steps (light → dark) at
+            // their (S, L) offsets from the shared shade point — they
+            // follow the shade point and are individually draggable
+            var tones = wheelRoot.bridge.tones
+            for (i = 0; i < tones.length; i++) {
+                mx = wheelRoot.discX(tones[i].s)
+                my = wheelRoot.discY(tones[i].l)
+                ctx.beginPath()
+                ctx.arc(mx, my, wheelRoot.toneDotR + 1.6, 0, 2 * Math.PI)
+                ctx.strokeStyle = "rgba(0,0,0,0.6)"
+                ctx.lineWidth = 2.4
+                ctx.stroke()
+                ctx.beginPath()
+                ctx.arc(mx, my, wheelRoot.toneDotR, 0, 2 * Math.PI)
+                ctx.globalAlpha = 0.78
+                ctx.fillStyle = tones[i].hex
+                ctx.fill()
+                ctx.globalAlpha = 1
+                ctx.lineWidth = 1
+                ctx.strokeStyle = "rgba(0,0,0,0.5)"
                 ctx.stroke()
             }
 
@@ -339,16 +401,29 @@ Item {
 
             // hover/active highlight
             if (wheelRoot.hoverWheel !== 0 && wheelRoot.hoverIdx >= 0) {
-                var c = wheelRoot.bridge.colors[wheelRoot.hoverIdx]
-                if (c) {
-                    mx = wheelRoot.hoverWheel === 1
-                        ? wheelRoot.ringX(c.h, wheelRoot.rMid)
-                        : wheelRoot.discX(c.s)
-                    my = wheelRoot.hoverWheel === 1
-                        ? wheelRoot.ringY(c.h, wheelRoot.rMid)
-                        : wheelRoot.discY(c.l)
+                var hv = wheelRoot.hoverWheel
+                var hx = 0, hy = 0, ok = false
+                if (hv === 1) {
+                    var hp = wheelRoot.ringDotPos(wheelRoot.hoverIdx)
+                    hx = hp.x; hy = hp.y; ok = true
+                } else if (hv === 3) {
+                    var ht = wheelRoot.bridge.tones[wheelRoot.hoverIdx]
+                    if (ht !== undefined) {
+                        hx = wheelRoot.discX(ht.s)
+                        hy = wheelRoot.discY(ht.l)
+                        ok = true
+                    }
+                } else {
+                    var hc = wheelRoot.bridge.colors[wheelRoot.hoverIdx]
+                    if (hc !== undefined) {
+                        hx = wheelRoot.discX(hc.s)
+                        hy = wheelRoot.discY(hc.l)
+                        ok = true
+                    }
+                }
+                if (ok) {
                     ctx.beginPath()
-                    ctx.arc(mx, my, wheelRoot.dotBaseR + 5, 0, 2 * Math.PI)
+                    ctx.arc(hx, hy, wheelRoot.dotBaseR + 5, 0, 2 * Math.PI)
                     ctx.strokeStyle = accent
                     ctx.lineWidth = 1.6
                     ctx.stroke()
@@ -402,6 +477,8 @@ Item {
             else if (hit.wheel === 2)
                 wheelRoot._applyDisc(mouse.x, mouse.y, hit.idx,
                                      mouse.modifiers & Qt.ShiftModifier)
+            else if (hit.wheel === 3)
+                wheelRoot._applyTone(mouse.x, mouse.y, hit.idx)
             else
                 wheelRoot.bridge.cancel_drag()
         }
@@ -413,6 +490,8 @@ Item {
             if (wheelRoot.dragWheel === 1)
                 wheelRoot._applyRing(mouse.x, mouse.y, wheelRoot.dragIdx,
                                      mouse.modifiers & Qt.ShiftModifier)
+            else if (wheelRoot.dragWheel === 3)
+                wheelRoot._applyTone(mouse.x, mouse.y, wheelRoot.dragIdx)
             else
                 wheelRoot._applyDisc(mouse.x, mouse.y, wheelRoot.dragIdx,
                                      mouse.modifiers & Qt.ShiftModifier)
@@ -420,6 +499,8 @@ Item {
         onReleased: function (mouse) {
             if (wheelRoot.bridge !== null && wheelRoot.dragWheel === 1)
                 wheelRoot.bridge.commit_drag(qsTr("Wheel hue"))
+            else if (wheelRoot.bridge !== null && wheelRoot.dragWheel === 3)
+                wheelRoot.bridge.commit_drag(qsTr("Wheel tone"))
             else if (wheelRoot.bridge !== null && wheelRoot.dragWheel === 2)
                 wheelRoot.bridge.commit_drag(qsTr("Wheel shade"))
             wheelRoot.dragWheel = 0
@@ -442,5 +523,11 @@ Item {
         if (bridge === null)
             return
         bridge.shade_drag(discSAt(x), discLAt(y), shift, idx)
+    }
+
+    function _applyTone(x, y, idx) {
+        if (bridge === null)
+            return
+        bridge.tone_drag(idx, discSAt(x), discLAt(y))
     }
 }

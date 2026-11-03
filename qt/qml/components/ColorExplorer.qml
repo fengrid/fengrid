@@ -143,34 +143,6 @@ Item {
                                 onToggled: colorex !== null
                                     && colorex.set_add_comp(checked)
                             }
-                            ComboBox {
-                                id: freeCountBox
-                                visible: colorex !== null
-                                         && colorex.scheme === "freeform"
-                                Layout.preferredWidth: 96
-                                Layout.preferredHeight: 24
-                                model: ["2 colors", "3 colors", "4 colors",
-                                        "5 colors"]
-                                currentIndex: colorex !== null
-                                        ? colorex.freeCount - 2 : 2
-                                onActivated: function (idx) {
-                                    colorex !== null
-                                        && colorex.set_free_count(idx + 2)
-                                }
-                                background: Rectangle {
-                                    radius: 5
-                                    color: theme.tokens.surface2
-                                    border.color: theme.tokens.border
-                                }
-                                contentItem: Text {
-                                    text: freeCountBox.displayText
-                                    font.family: theme.monoFont
-                                    font.pixelSize: 10
-                                    color: theme.tokens.text
-                                    verticalAlignment: Text.AlignVCenter
-                                    leftPadding: 8
-                                }
-                            }
                         }
                     }
                     Item { Layout.fillWidth: true }
@@ -242,7 +214,10 @@ Item {
                             }
                             Text {
                                 Layout.alignment: Qt.AlignHCenter
-                                text: qsTr("default: 30°")
+                                text: colorex !== null
+                                      ? qsTr("default: %1°")
+                                        .arg(colorex.distDefault)
+                                      : ""
                                 font.family: theme.monoFont
                                 font.pixelSize: 8
                                 color: theme.tokens.textMuted
@@ -258,6 +233,42 @@ Item {
                         }
                     }
                     Item { Layout.fillWidth: true }
+                    // free-style color count — lives in the readout row
+                    // (the reference puts it with the hue/dist chips);
+                    // it must NOT sit in the scheme row: its width lifts
+                    // that row's minimum past the panel and the wheel
+                    // grows with it (observed as a free-style-only
+                    // scale change that overflowed the borders)
+                    ComboBox {
+                        id: freeCountBox
+                        visible: colorex !== null
+                                 && colorex.scheme === "freeform"
+                        Layout.preferredWidth: 92
+                        Layout.minimumWidth: 92
+                        Layout.preferredHeight: 34
+                        Layout.minimumHeight: 34
+                        model: ["2 colors", "3 colors", "4 colors",
+                                "5 colors"]
+                        currentIndex: colorex !== null
+                                ? colorex.freeCount - 2 : 2
+                        onActivated: function (idx) {
+                            colorex !== null
+                                && colorex.set_free_count(idx + 2)
+                        }
+                        background: Rectangle {
+                            radius: 6
+                            color: theme.tokens.surface2
+                            border.color: theme.tokens.border
+                        }
+                        contentItem: Text {
+                            text: freeCountBox.displayText
+                            font.family: theme.monoFont
+                            font.pixelSize: 10
+                            color: theme.tokens.text
+                            verticalAlignment: Text.AlignVCenter
+                            leftPadding: 8
+                        }
+                    }
                     ExpTextButton {
                         label: qsTr("Randomize")
                         tip: qsTr("New random base color — the scheme stays")
@@ -1076,8 +1087,11 @@ Item {
             FgSlider {
                 id: distSlider
                 Layout.fillWidth: true
-                from: 0
-                to: 90
+                // Distance is the arc around the wheel from the base
+                // color — each model validates its own range (triad's
+                // pair flanks the opposite point: 120..180)
+                from: colorex !== null ? colorex.distLo : 0
+                to: colorex !== null ? colorex.distHi : 90
                 stepSize: 1
                 value: colorex !== null ? colorex.dist : 30
                 onMoved: colorex !== null && colorex.set_dist(value)
@@ -1100,10 +1114,14 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
                 ExpTextButton {
-                    label: qsTr("default: 30°")
+                    label: colorex !== null
+                           ? qsTr("default: %1°").arg(colorex.distDefault)
+                           : qsTr("default: 30°")
                     onClicked: {
-                        distSlider.value = 30
-                        colorex !== null && colorex.set_dist(30)
+                        if (colorex !== null) {
+                            distSlider.value = colorex.distDefault
+                            colorex.set_dist(colorex.distDefault)
+                        }
                     }
                 }
             }

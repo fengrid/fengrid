@@ -6,6 +6,7 @@ its inversion, CIELAB, and the bridge's state machine: drags, presets,
 undo snapshots (the same UndoBridge contract __main__ registers) and
 the GLOBAL settings persistence roundtrip.
 """
+import json
 import os
 import sys
 from pathlib import Path
@@ -32,9 +33,10 @@ def test_scheme_offsets_reference_layouts():
     assert ce.scheme_offsets("mono") == [0.0]
     # adjacent: base ± dist
     assert ce.scheme_offsets("adjacent", 30) == [0.0, 30.0, -30.0]
-    # triad converges toward the opposite point as dist grows
-    assert ce.scheme_offsets("triad", 30) == [0.0, 150.0, 210.0]
-    assert ce.scheme_offsets("triad", 60) == [0.0, 180.0, 180.0]
+    # triad: base ± dist — the pair flanks the base-opposite axis and
+    # dist IS the arc around the wheel from the base (reference 150)
+    assert ce.scheme_offsets("triad", 150) == [0.0, 150.0, -150.0]
+    assert ce.scheme_offsets("triad", 180) == [0.0, 180.0, -180.0]
     # tetrad: two complementary pairs offset by dist
     assert ce.scheme_offsets("tetrad", 30) == [0.0, 30.0, 180.0, 210.0]
     # freeform keeps user offsets, first pinned at 0
@@ -42,13 +44,27 @@ def test_scheme_offsets_reference_layouts():
                              free_count=2) == [0.0, 190.0]
 
 
+def test_dist_range_per_model():
+    # Distance = the arc around the wheel from the base color
+    assert ce.dist_range("adjacent") == (0, 90)
+    assert ce.dist_range("tetrad") == (0, 90)
+    assert ce.dist_range("triad") == (120, 180)
+    assert ce.DEFAULT_TRIAD_DIST == 150
+
+
 def test_dist_for_drag_per_dot_inverse():
     # adjacent: either outer dot's angle sets |dist| (either side)
     assert ce.dist_for_drag("adjacent", 1, 0.0, 40.0) == pytest.approx(40)
     assert ce.dist_for_drag("adjacent", 2, 0.0, 330.0) == pytest.approx(30)
-    # triad: dot 1 rides 120+dist, dot 2 rides 240-dist
-    assert ce.dist_for_drag("triad", 1, 0.0, 150.0) == pytest.approx(30)
-    assert ce.dist_for_drag("triad", 2, 0.0, 210.0) == pytest.approx(30)
+    # triad: both dots sit ±dist around the opposite axis — Distance is
+    # the dragged dot's arc from the base, not the drift from a default
+    assert ce.dist_for_drag("triad", 1, 0.0, 150.0) == pytest.approx(150)
+    assert ce.dist_for_drag("triad", 1, 0.0, 170.0) == pytest.approx(170)
+    assert ce.dist_for_drag("triad", 2, 0.0, 210.0) == pytest.approx(150)
+    assert ce.dist_for_drag("triad", 2, 0.0, 190.0) == pytest.approx(170)
+    # dragging past the opposite point parks the pair there (180)
+    assert ce.dist_for_drag("triad", 1, 0.0, 200.0) == pytest.approx(180)
+    assert ce.dist_for_drag("triad", 1, 0.0, 90.0) == pytest.approx(120)
     # tetrad: dot 1 rides +dist, dot 3 rides 180+dist; the 180° anchor
     # (dot 2) has no dist parameter
     assert ce.dist_for_drag("tetrad", 1, 0.0, 30.0) == pytest.approx(30)
@@ -96,9 +112,9 @@ def test_complementary_append_and_dup_guard():
     cols = ce.build_palette(0, 50, 50, "tetrad", dist=30, add_comp=True)
     assert len(cols) == 4
     assert not any(c["is_comp"] for c in cols)
-    # triad at dist 60 puts both secondaries ON the opposite point —
-    # the guard skips the append (no duplicate), colors stay 3
-    cols = ce.build_palette(0, 50, 50, "triad", dist=60, add_comp=True)
+    # triad converged (dist 180) puts both secondaries ON the opposite
+    # point — the guard skips the append (no duplicate), colors stay 3
+    cols = ce.build_palette(0, 50, 50, "triad", dist=180, add_comp=True)
     assert len(cols) == 3
     assert cols[1]["h"] == pytest.approx(180.0)
     assert cols[2]["h"] == pytest.approx(180.0)
@@ -244,16 +260,17 @@ def test_hue_drag_plain_outer_dot_adjusts_dist(explorer):
 
 def test_hue_drag_plain_outer_dot_per_scheme(explorer):
     b = explorer["bridge"]
-    # triad dot 1 rides 120+dist; dot 2 rides 240-dist
+    # triad: Distance is the dragged dot's arc around the wheel from
+    # the base color (default 150 → dots at 150/210)
     b.set_scheme("triad")
-    b.set_dist(30)
+    assert b.dist == 150   # remapped from adjacent's default 30
     b.begin_drag()
     b.hue_drag(1, b.hueReadout + 150.0, False)
-    assert b.dist == 30   # dragged onto the current position — no change
+    assert b.dist == 150   # dragged onto the current position — no change
     b.hue_drag(1, b.hueReadout + 170.0, False)
-    assert b.dist == 50
+    assert b.dist == 170
     b.hue_drag(2, b.hueReadout + 190.0, False)
-    assert b.dist == 50   # 240-190 = 50
+    assert b.dist == 170   # 360 - 190 = 170 — same arc, other side
     # tetrad dot 3 rides 180+dist; dot 2 (the 180° anchor) rotates instead
     b.set_scheme("tetrad")
     b.set_dist(30)
@@ -315,6 +332,59 @@ def test_shade_drag_shared_and_shift_individual(explorer):
     assert b.colors[0]["s"] == pytest.approx(70)
     assert b.colors[1]["s"] == pytest.approx(40)
     assert b.colors[1]["l"] == pytest.approx(60)
+
+
+def test_tones_are_the_ramp_steps_at_their_offsets(explorer):
+    b = explorer["bridge"]
+    b.set_scheme("adjacent")
+    base = b.colors[0]
+    tones = b.tones
+    assert len(tones) == 4
+    # defaults = the reference ramp offsets (L ±, S held)
+    assert [t["l"] for t in tones] == pytest.approx(
+        [base["l"] + 25, base["l"] + 7, base["l"] - 15, base["l"] - 33])
+    assert all(t["s"] == pytest.approx(base["s"]) for t in tones)
+    # each tone's hex is the base color's ramp step it represents
+    for tone, step in zip(tones, (0, 1, 3, 4)):
+        assert tone["hex"] == base["ramp"][step]
+
+
+def test_tone_drag_moves_the_shade_ramp(explorer):
+    b = explorer["bridge"]
+    b.set_scheme("adjacent")
+    base = b.colors[0]
+    b.begin_drag()
+    # drag the darkest tone dot (idx 3) to S 40 / L 20
+    b.tone_drag(3, 40.0, 20.0)
+    b.commit_drag("Wheel tone")
+    tones = b.tones
+    assert tones[3]["s"] == pytest.approx(40)
+    assert tones[3]["l"] == pytest.approx(20)
+    # the palette color itself is untouched — only its ramp moves
+    assert b.colors[0]["s"] == pytest.approx(base["s"])
+    assert b.colors[0]["l"] == pytest.approx(base["l"])
+    from fengrid.core import colors as core_colors
+    l_dark = core_colors.rgb2hsl(
+        *core_colors.hex2rgb(b.colors[0]["ramp"][4]))[2]
+    assert l_dark == pytest.approx(20)
+    # undo walks the tone gesture back
+    explorer["undo"].undo()
+    assert b.tones[3]["l"] == pytest.approx(base["l"] - 33)
+
+
+def test_tones_follow_the_shared_shade_point(explorer):
+    b = explorer["bridge"]
+    b.set_scheme("adjacent")
+    before = [(t["s"], t["l"]) for t in b.tones]
+    b.begin_drag()
+    b.shade_drag(60, 40, False, -1)
+    b.commit_drag("Wheel shade")
+    after = [(t["s"], t["l"]) for t in b.tones]
+    # the tone dots ride along: +10 S, −4.9 L (the shared shade point
+    # moved from 50.2/44.9 to 60/40)
+    for (s0, l0), (s1, l1) in zip(before, after):
+        assert s1 == pytest.approx(s0 + 9.8, abs=0.1)
+        assert l1 == pytest.approx(l0 - 4.9, abs=0.1)
 
 
 def test_drag_commit_records_one_undo_step(explorer):
@@ -406,10 +476,30 @@ def test_set_dist_clamps_to_scheme_geometry(explorer):
     b = explorer["bridge"]
     b.set_scheme("triad")
     b.set_dist(90)
-    assert b.dist == 60   # the pair converges at 60 — no crossing
+    assert b.dist == 120   # the arc from the base never drops below 120
+    b.set_dist(200)
+    assert b.dist == 180   # the pair converges ON the opposite point
     b.set_scheme("adjacent")
+    assert b.dist == 0     # 180 - 180: a converged pair maps to ±0
     b.set_dist(90)
     assert b.dist == 90
+
+
+def test_triad_dist_migration_lifts_old_drift_values(tmp_path):
+    con = core_db.connect(tmp_path / "t.db")
+    # a pre-arc state: triad with dist stored as the pair's drift from
+    # the 120/240 points (30 → dots at 150/210)
+    settings_mod.set(con, "colors_explorer", json.dumps(
+        {"scheme": "triad", "dist": 30}))
+    b = ColorExplorer(con)
+    assert b.dist == 150
+    hues = sorted(c["h"] % 360 for c in b.colors[1:])
+    assert hues == [150.0, 210.0]
+    # fresh (post-arc) values pass through untouched
+    b2 = ColorExplorer(con)
+    b2._dist = 170.0
+    b2._migrate_dist()
+    assert b2.dist == 170
 
 
 def test_persistence_roundtrip(tmp_path):
@@ -421,6 +511,9 @@ def test_persistence_roundtrip(tmp_path):
     b.hue_drag(1, 210 + 75.0, True)   # individual hue offset
     b.commit_drag("Wheel hue")
     b.fine_tune("saturation", 5)
+    b.tone_drag(2, 55.0, 25.0)        # a reshaped tone step
+    b.commit_drag("Wheel tone")
+    tones_before = [(t["s"], t["l"]) for t in b.tones]
     # a fresh bridge over the same DB restores the persisted state
     b2 = ColorExplorer(con)
     assert b2.scheme == "adjacent"
@@ -431,6 +524,8 @@ def test_persistence_roundtrip(tmp_path):
     assert b2.colors[0]["hex"] == b.colors[0]["hex"]
     assert b2.colors[1]["h"] == pytest.approx((210 + 75) % 360)
     assert b2.colors[1]["ind"] is True
+    # the tone offsets ride along (they shape every color's ramp)
+    assert [(t["s"], t["l"]) for t in b2.tones] == tones_before
 
 
 def test_freeform_count_grows_offsets(explorer):

@@ -28,16 +28,36 @@ SCHEME_LABELS = {
 }
 
 DEFAULT_DIST = 30
+DEFAULT_TRIAD_DIST = 150
 DEFAULT_BASE_HEX = "#AC3939"   # the reference scheme red
 # the reference base's own shade point (hsl 0°, 50.2%, 44.9%) — the
 # explorer opens on the same red the reference screenshots show
 DEFAULT_S, DEFAULT_L = 50.2, 44.9
+
+# The Distance parameter is THE ARC AROUND THE WHEEL FROM THE BASE
+# COLOR to the model's adjustable dots (the reference semantics), so
+# each model has its own valid range: adjacent/tetrad dots hug the base
+# (0..90), triad's pair flanks the opposite point (120..180).
+DIST_RANGES = {
+    "adjacent": (0, 90),
+    "triad": (120, 180),
+    "tetrad": (0, 90),
+}
+
+
+def dist_range(scheme: str) -> tuple[int, int]:
+    """Valid (lo, hi) Distance values for a scheme (mono/freeform: n/a)."""
+    return DIST_RANGES.get(scheme, (0, 90))
 
 FREE_COUNT_RANGE = (2, 5)
 
 # shade ramp: lightness offsets from a color's own L (saturation held),
 # read off the reference tables (FE9A00 base → 74.7/56.5/49.8/34.9/16.9)
 RAMP_L = (25.0, 7.0, 0.0, -15.0, -33.0)
+# the four tone steps as (ΔS, ΔL) offsets from a color's own shade
+# point — what the wheel's inner tone dots show and drag; defaults
+# match RAMP_L sans the base step (the reference tables keep S fixed)
+DEFAULT_SHADES = ((0.0, 25.0), (0.0, 7.0), (0.0, -15.0), (0.0, -33.0))
 # relative segment widths in the tables view — base widest, tapering out
 RAMP_WIDTH = (0.6, 1.0, 1.6, 1.0, 0.6)
 
@@ -75,8 +95,9 @@ def scheme_offsets(scheme: str, dist: float = DEFAULT_DIST,
 
     mono     — [0]
     adjacent — base ± dist (analogous)
-    triad    — 120+dist and 240-dist: dist converges the pair toward the
-               opposite point (dist 30 → 150/210, the reference layout)
+    triad    — base ± dist: the pair flanks the base-opposite axis, so
+               dist is the arc around the wheel from the base color
+               (120..180; the reference default 150 → 150/210)
     tetrad   — two complementary pairs: 0/dist and 180/180+dist
     freeform — per-color offsets (first pinned at 0), grown by the
                golden angle when the count rises
@@ -86,7 +107,7 @@ def scheme_offsets(scheme: str, dist: float = DEFAULT_DIST,
     if scheme == "adjacent":
         return [0.0, float(dist), -float(dist)]
     if scheme == "triad":
-        return [0.0, 120.0 + dist, 240.0 - dist]
+        return [0.0, float(dist), -float(dist)]
     if scheme == "tetrad":
         return [0.0, float(dist), 180.0, 180.0 + dist]
     if scheme == "freeform":
@@ -103,21 +124,27 @@ def dist_for_drag(scheme: str, idx: int, base_h: float,
                   angle: float) -> float | None:
     """The Distance an outer hue dot sits at when dragged to `angle`.
 
-    Per scheme + dot index — a dot whose position is dist-independent
-    (tetrad's opposite anchor at 180°, or any model's appended
-    complementary dot) has no Distance parameter: the caller rotates the
-    whole scheme instead. mono/freeform have no dist at all.
+    Distance is the arc around the wheel from the base color (reference
+    semantics), clamped to the scheme's valid range — NOT the drift
+    from a dot's default position. A dot whose position is
+    dist-independent (tetrad's opposite anchor at 180°, or any model's
+    appended complementary dot) has no Distance parameter: the caller
+    rotates the whole scheme instead. mono/freeform have no dist at all.
     """
     if scheme == "adjacent":
         if idx in (1, 2):
             return max(0.0, min(90.0, abs(angle_between(base_h, angle))))
         return None
     if scheme == "triad":
-        # offsets 120+dist / 240-dist converge on the opposite point
-        if idx == 1:
-            return max(0.0, min(60.0, angle_between(base_h + 120.0, angle)))
-        if idx == 2:
-            return max(0.0, min(60.0, -angle_between(base_h + 240.0, angle)))
+        # both dots sit ±dist around the base-opposite axis; the arc
+        # from the base defines dist (120..180, opposite point = 180)
+        if idx in (1, 2):
+            arc = angle_between(base_h, angle)
+            if idx == 2:
+                arc = -arc
+            if arc < 0.0:
+                arc += 360.0
+            return max(120.0, min(180.0, arc))
         return None
     if scheme == "tetrad":
         if idx == 1:
@@ -163,12 +190,23 @@ def invert_fine_tune(h: float, s: float, l: float,
     return (h - dh) % 360, clamp(s - ds), l_raw
 
 
-def ramp_for(h: float, s: float, l: float) -> list[str]:
-    """The 5-step shade ramp of one color: light → base → dark."""
+def ramp_for(h: float, s: float, l: float,
+             shades: list | None = None) -> list[str]:
+    """The 5-step shade ramp of one color: light → base → dark.
+
+    `shades` carries the four tone steps as (ΔS, ΔL) offsets from the
+    color's own shade point (the wheel's tone dots); None falls back to
+    the reference RAMP_L lightness offsets with saturation held.
+    """
+    if shades is None:
+        shades = [(0.0, RAMP_L[0]), (0.0, RAMP_L[1]),
+                  (0.0, RAMP_L[3]), (0.0, RAMP_L[4])]
+    steps = list(shades[:2]) + [None] + list(shades[2:4])
     out = []
-    for off in RAMP_L:
-        li = clamp(l + off, 2.0, 98.0)
-        out.append(rgb2hex(*hsl2rgb(h % 360, s, li)))
+    for step in steps:
+        ds, dl = (0.0, 0.0) if step is None else step
+        out.append(rgb2hex(*hsl2rgb(h % 360, clamp(s + ds),
+                                    clamp(l + dl, 2.0, 98.0))))
     return out
 
 
@@ -178,7 +216,8 @@ def build_palette(base_h: float, s0: float, l0: float, scheme: str,
                   free_count: int = 4,
                   shade_overrides: list | None = None,
                   hue_overrides: list | None = None,
-                  ft: dict | None = None) -> list[dict]:
+                  ft: dict | None = None,
+                  shades: list | None = None) -> list[dict]:
     """The full explorer palette: one entry per scheme color (plus the
     optional complementary color last).
 
@@ -211,7 +250,7 @@ def build_palette(base_h: float, s0: float, l0: float, scheme: str,
             "dh": dh, "is_comp": is_comp, "is_base": i == 0,
             "ind": abs(ho) > 1e-6 or abs(ds) > 1e-6 or abs(dl) > 1e-6,
             "h": h, "s": s, "l": l, "hex": hx,
-            "ramp": ramp_for(h, s, l),
+            "ramp": ramp_for(h, s, l, shades),
             "name": color_name(hx),
             "ink": best_ink(rgb),
             "cw": round(contrast(rgb, (255, 255, 255)), 1),

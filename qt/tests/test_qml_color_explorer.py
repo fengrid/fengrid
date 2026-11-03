@@ -214,6 +214,70 @@ def test_wheel_hue_drag_rotates_scheme(explorer_ui):
     assert offs == pytest.approx([-30.0, 0.0, 30.0], abs=1)
 
 
+def test_wheel_size_stable_across_schemes(explorer_ui):
+    """Free style must not rescale the wheel: its count selector lives
+    in the readout row, so no layout row grows (regression: the
+    free-style ComboBox once lifted the scheme row's minimum width past
+    the panel and the wheel overflowed its borders)."""
+    ed = explorer_ui
+    bridge, root = ed["ex"], ed["root"]
+    wheels = [o for o in _walk(root)
+              if "ExplorerWheel" in o.metaObject().className()]
+    assert wheels, "ExplorerWheel instance not found"
+    wheel = wheels[0]
+
+    bridge.set_scheme("adjacent")
+    _qapp().processEvents()
+    base_w = wheel.property("width")
+    base_h = wheel.property("height")
+    assert base_w > 0 and abs(base_w - base_h) < 0.1
+
+    bridge.set_scheme("freeform")
+    _qapp().processEvents()
+    assert wheel.property("width") == pytest.approx(base_w, abs=0.5), \
+        "free style must not change the wheel's scale"
+    assert wheel.property("height") == pytest.approx(base_h, abs=0.5)
+    # and it still fits its container
+    assert wheel.property("width") <= wheel.parentItem().width() + 0.5
+
+
+def test_tone_dot_drag_reshapes_the_ramp(explorer_ui):
+    """The inner wheel's tone dots are interactive: dragging one moves
+    that shade step and the palette display's ramps follow."""
+    ed = explorer_ui
+    bridge, win, root = ed["ex"], ed["win"], ed["root"]
+    bridge.set_scheme("adjacent")
+    _qapp().processEvents()
+
+    wheel = [o for o in _walk(root)
+             if "ExplorerWheel" in o.metaObject().className()]
+    assert wheel, "ExplorerWheel instance not found"
+    wheel = wheel[0]
+    side = min(wheel.property("width"), wheel.property("height"))
+    center = wheel.mapToScene(QPointF(wheel.width() / 2, wheel.height() / 2))
+    r_disc = side * 0.252
+
+    def disc_scene(s, l):
+        return QPointF(center.x() - r_disc + (s / 100) * 2 * r_disc,
+                       center.y() - r_disc + (1 - l / 100) * 2 * r_disc)
+
+    # tone dot 0 = the lightest step (default offset L +25, S held)
+    t0 = bridge.tones[0]
+    start = disc_scene(t0["s"], t0["l"])
+    target_s, target_l = 25.0, 78.0
+    end = disc_scene(target_s, target_l)
+
+    _window_drag(win, start, end)
+    moved = bridge.tones[0]
+    assert moved["s"] == pytest.approx(target_s, abs=1.5), moved
+    assert moved["l"] == pytest.approx(target_l, abs=1.5), moved
+    # the palette color itself is untouched — only the ramp moved
+    from fengrid.core import colors as core_colors
+    l_light = core_colors.rgb2hsl(
+        *core_colors.hex2rgb(bridge.colors[0]["ramp"][0]))[2]
+    assert l_light == pytest.approx(target_l, abs=1.5)
+
+
 def _walk(obj):
     stack = [obj]
     while stack:

@@ -39,6 +39,7 @@ _DEFAULTS = {
     "free_count": 4,
     "overrides": [],
     "hue_overrides": [],
+    "shades": [list(o) for o in core_ex.DEFAULT_SHADES],
     "ft": {},
     "name": "",
 }
@@ -75,9 +76,30 @@ class ColorExplorer(QObject):
         self._free_count = int(state["free_count"])
         self._overrides = [list(o) for o in state["overrides"]]
         self._hue_overrides = [float(o) for o in state["hue_overrides"]]
+        self._shades = self._norm_shades(state["shades"])
         self._ft = dict(state["ft"])
         self._name = str(state["name"] or "")
         self._palette_id = None
+        self._migrate_dist()
+
+    @staticmethod
+    def _norm_shades(raw) -> list:
+        """Four tone steps as [ΔS, ΔL] float pairs (padded with defaults)."""
+        out = [list(o) for o in core_ex.DEFAULT_SHADES]
+        if isinstance(raw, list):
+            for i, o in enumerate(raw[:4]):
+                try:
+                    out[i] = [float(o[0]), float(o[1])]
+                except (TypeError, ValueError, IndexError):
+                    pass
+        return out
+
+    def _migrate_dist(self) -> None:
+        """Pre-arc triad states stored the dist as the pair's drift from
+        the 120/240 points (0..60); Distance is now the arc from the
+        base (120..180), so lift old values onto the same dots."""
+        if (self._scheme == "triad" and 0.0 <= self._dist <= 60.0):
+            self._dist += 120.0
 
     # ------------------------------------------------------------- undo
     def bind_undo(self, undo) -> None:
@@ -92,6 +114,7 @@ class ColorExplorer(QObject):
             "free_count": self._free_count,
             "overrides": [list(o) for o in self._overrides],
             "hue_overrides": list(self._hue_overrides),
+            "shades": [list(o) for o in self._shades],
             "ft": dict(self._ft), "name": self._name,
         }
 
@@ -108,8 +131,10 @@ class ColorExplorer(QObject):
         self._overrides = [list(o) for o in snap.get("overrides", [])]
         self._hue_overrides = [float(o)
                                for o in snap.get("hue_overrides", [])]
+        self._shades = self._norm_shades(snap.get("shades"))
         self._ft = dict(snap.get("ft", {}))
         self._name = str(snap.get("name", "") or "")
+        self._migrate_dist()
         self._emit_all()
 
     def _begin(self):
@@ -155,6 +180,20 @@ class ColorExplorer(QObject):
         return int(round(self._dist))
 
     @Property(int, notify=stateChanged)
+    def distLo(self) -> int:
+        return core_ex.dist_range(self._scheme)[0]
+
+    @Property(int, notify=stateChanged)
+    def distHi(self) -> int:
+        return core_ex.dist_range(self._scheme)[1]
+
+    @Property(int, notify=stateChanged)
+    def distDefault(self) -> int:
+        if self._scheme == "triad":
+            return core_ex.DEFAULT_TRIAD_DIST
+        return core_ex.DEFAULT_DIST
+
+    @Property(int, notify=stateChanged)
     def freeCount(self) -> int:
         return self._free_count
 
@@ -191,7 +230,28 @@ class ColorExplorer(QObject):
             dist=self._dist, add_comp=self._add_comp,
             free_offsets=self._free_offsets, free_count=self._free_count,
             shade_overrides=self._overrides,
-            hue_overrides=self._hue_overrides, ft=self._ft)
+            hue_overrides=self._hue_overrides, ft=self._ft,
+            shades=self._shades)
+
+    @Property("QVariantList", notify=stateChanged)
+    def tones(self) -> list:
+        """The four tone dots on the inner wheel: each tone step's final
+        (s, l) and hex — the base color's shade ramp sans its base step,
+        spread by the tone offsets (ΔS/ΔL from the shared shade point)."""
+        cols = self._palette()
+        if not cols:
+            return []
+        base = cols[0]
+        ramp = base["ramp"]
+        out = []
+        for k, step in enumerate((0, 1, 3, 4)):
+            ds, dl = self._shades[k]
+            out.append({
+                "s": core_ex.clamp(base["s"] + ds),
+                "l": core_ex.clamp(base["l"] + dl),
+                "hex": ramp[step],
+            })
+        return out
 
     @Slot(int, int, result="QVariant")
     def color_info(self, idx: int, ramp_idx: int = 2) -> dict:
@@ -244,12 +304,19 @@ class ColorExplorer(QObject):
         if scheme not in core_ex.SCHEMES or scheme == self._scheme:
             return
         pre = self._begin()
+        old = self._scheme
         self._scheme = scheme
         if scheme == "freeform":
             # materialize the current offsets so dot drags edit real state
             self._free_offsets = core_ex.scheme_offsets(
                 "freeform", free_offsets=self._free_offsets,
                 free_count=self._free_count)
+        # models parameterize Distance differently (arc from the base
+        # color): remap so the dots keep a sane spread across switches
+        if scheme == "triad" and old != "triad" and self._dist < 120.0:
+            self._dist = float(max(120.0, min(180.0, 180.0 - self._dist)))
+        elif old == "triad" and scheme != "triad" and self._dist >= 120.0:
+            self._dist = float(max(0.0, min(90.0, 180.0 - self._dist)))
         self._overrides = []
         self._hue_overrides = []
         self._end(pre, "Scheme model")
@@ -267,10 +334,11 @@ class ColorExplorer(QObject):
 
     @Slot(int)
     def set_dist(self, dist: int) -> None:
-        # triad's pair converges on the opposite point at 60° — beyond
-        # that the two secondary dots would cross
-        hi = 60 if self._scheme == "triad" else 90
-        dist = max(0, min(hi, int(dist)))
+        # Distance is the arc around the wheel from the base color;
+        # each model clamps to its own valid range (triad's pair flanks
+        # the opposite point, so its range starts at 120)
+        lo, hi = core_ex.dist_range(self._scheme)
+        dist = max(lo, min(hi, int(dist)))
         if dist == int(round(self._dist)):
             return
         self._dist = float(dist)
@@ -374,6 +442,24 @@ class ColorExplorer(QObject):
             self._l0 = l
         self.stateChanged.emit()
 
+    @Slot(int, float, float)
+    def tone_drag(self, idx: int, s: float, l: float) -> None:
+        """Drag a tone dot on the inner wheel: sets that tone step's
+        (ΔS, ΔL) offset from the shared shade point — the offset that
+        shapes every color's shade ramp (the variants the palette
+        display and the tables render)."""
+        if not (0 <= idx < len(core_ex.DEFAULT_SHADES)):
+            return
+        s = core_ex.clamp(s)
+        l = core_ex.clamp(l)
+        cols = self._palette()
+        s_f, l_f = cols[0]["s"], cols[0]["l"]
+        while len(self._shades) < len(core_ex.DEFAULT_SHADES):
+            self._shades.append([0.0, 0.0])
+        self._shades[idx] = [core_ex.clamp(s - s_f, -s_f, 100.0 - s_f),
+                             core_ex.clamp(l - l_f, -l_f, 100.0 - l_f)]
+        self.stateChanged.emit()
+
     # ── drag bookkeeping: QML calls begin_drag() at press, commit_drag()
     # at release (one coalesced undo step per gesture) or cancel_drag()
     # when nothing moved ──
@@ -454,6 +540,7 @@ class ColorExplorer(QObject):
         self._free_count = 4
         self._overrides = []
         self._hue_overrides = []
+        self._shades = self._norm_shades(None)
         self._ft = {}
         self._end(pre, "Reset explorer")
 
