@@ -10,9 +10,15 @@ import "."
 Item {
     id: colorsRoot
 
-    // false = harmony generator (the 0.x port), true = terminal designer;
-    // --term (QA) opens straight into the designer
-    property bool termMode: typeof initialTerm !== "undefined" ? initialTerm : false
+    // 0 = harmony generator (the 0.x port), 1 = Explorer wheel (the
+    // Color palette scheme workspace), 2 = terminal designer;
+    // the Explorer is the default surface (spec: it IS the colors
+    // workspace), --term opens the terminal designer, and --explorer
+    // is still accepted for QA scripts but matches the default
+    property int subMode: typeof initialTerm !== "undefined" && initialTerm
+                          ? 2 : 1
+    readonly property bool termMode: subMode === 2
+    readonly property bool explorerMode: subMode === 1
 
     // `colors !== null` guards: context properties are nulled during app
     // teardown while lingering bindings re-evaluate (same as SideRail)
@@ -31,25 +37,26 @@ Item {
             anchors.rightMargin: 10
             spacing: 10
 
-            // sub-tab toggle: harmony generator vs terminal theme designer
+            // sub-tab toggle: harmony generator / explorer / terminal
             RowLayout {
                 spacing: 2
                 Repeater {
-                    model: [qsTr("Harmonies"), qsTr("Terminal")]
+                    model: [qsTr("Harmonies"), qsTr("Explorer"),
+                            qsTr("Terminal")]
                     delegate: Button {
                         id: modeBtn
                         required property int index
                         required property string modelData
                         Layout.preferredHeight: 26
-                        onClicked: colorsRoot.termMode = index === 1
+                        onClicked: colorsRoot.subMode = modeBtn.index
                         background: Rectangle {
                             radius: 5
-                            color: (colorsRoot.termMode === modeBtn.index) ? theme.tokens.accentColor : "transparent"
+                            color: (colorsRoot.subMode === modeBtn.index) ? theme.tokens.accentColor : "transparent"
                             border.color: theme.tokens.border
                         }
                         contentItem: Text {
                             text: modeBtn.modelData
-                            color: (colorsRoot.termMode === modeBtn.index) ? "#101418" : theme.tokens.textMuted
+                            color: (colorsRoot.subMode === modeBtn.index) ? "#101418" : theme.tokens.textMuted
                             font.family: theme.monoFont
                             font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
@@ -64,11 +71,11 @@ Item {
             }
 
             // ── HARMONY MODE: rule picker + generator + palette naming ──
-            // (hidden in Terminal mode — the top bar switches contexts and
-            // shows the terminal theme's own name/save/export controls)
+            // (hidden in Terminal AND Explorer mode — those modes swap in
+            // their own name/save context below)
             ComboBox {
                 id: ruleBox
-                visible: !colorsRoot.termMode
+                visible: !colorsRoot.termMode && !colorsRoot.explorerMode
                 Layout.preferredWidth: 160
                 Layout.preferredHeight: 28
                 model: [qsTr("Pleasing mix"), qsTr("Analogous"), qsTr("Complementary"), qsTr("Triadic"), qsTr("Monochrome"), qsTr("Random")]
@@ -98,7 +105,7 @@ Item {
 
             Button {
                 id: genBtn
-                visible: !colorsRoot.termMode
+                visible: !colorsRoot.termMode && !colorsRoot.explorerMode
                 text: qsTr("Generate")
                 ToolTip.visible: hovered
                 ToolTip.delay: 350
@@ -122,7 +129,7 @@ Item {
 
             Rectangle {
                 id: nameBox
-                visible: !colorsRoot.termMode
+                visible: !colorsRoot.termMode && !colorsRoot.explorerMode
                 Layout.preferredWidth: 170
                 Layout.preferredHeight: 28
                 radius: 6
@@ -143,6 +150,39 @@ Item {
                 }
                 Text {
                     visible: nameField.text === ""
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("Palette Name…")
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
+                    color: theme.tokens.textMuted
+                }
+            }
+            // ── EXPLORER MODE: the wheel workspace's own palette name ──
+            Rectangle {
+                id: explorerNameBox
+                visible: colorsRoot.explorerMode
+                Layout.preferredWidth: 170
+                Layout.preferredHeight: 28
+                radius: 6
+                color: theme.tokens.surface2
+                border.color: explorerNameField.activeFocus ? theme.tokens.accent : theme.tokens.border
+                TextInput {
+                    id: explorerNameField
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    verticalAlignment: TextInput.AlignVCenter
+                    font.family: theme.uiFont
+                    font.pixelSize: 11
+                    color: theme.tokens.text
+                    clip: true
+                    text: colorex !== null ? colorex.paletteName : ""
+                    onTextEdited: colorex !== null && colorex.set_name(text)
+                }
+                Text {
+                    visible: explorerNameField.text === ""
                     anchors.fill: parent
                     anchors.leftMargin: 8
                     verticalAlignment: Text.AlignVCenter
@@ -259,12 +299,19 @@ Item {
             color: theme.tokens.surface
             border.color: theme.tokens.border
         }
-        // ── harmony generator mode ──
+        // ── harmony generator mode (also serves the Explorer — whichever
+        // workspace is active saves through its own bridge) ──
         FgMenuItem {
             text: qsTr("Save scheme…")
             height: 28
             visible: !colorsRoot.termMode
-            onTriggered: colors !== null && colors.save(tagsField.text)
+            onTriggered: {
+                if (colorsRoot.explorerMode) {
+                    colorex !== null && colorex.save(tagsField.text)
+                } else {
+                    colors !== null && colors.save(tagsField.text)
+                }
+            }
         }
         FgMenuSeparator {
             visible: !colorsRoot.termMode
@@ -397,10 +444,12 @@ Item {
         headline: qsTr("Export palette")
         onDoExport: function (formats, dest) {
             colorsRoot.exportDest = dest;
-            if (colors === null)
+            // the Explorer routes through its own bridge (same core writer)
+            var target = colorsRoot.explorerMode ? colorex : colors;
+            if (target === null)
                 return;
             for (var i = 0; i < formats.length; i++)
-                colors.export(formats[i], dest);
+                target.export(formats[i], dest);
         }
     }
 
@@ -871,10 +920,14 @@ Item {
         }
     }
 
-    // space = reroll (only when this pane is visible and no field is in edit)
+    // space = reroll (only when this pane is visible and no field is in edit;
+    // Explorer and Terminal modes have their own interactions)
     Shortcut {
         sequence: "Space"
-        enabled: colorsRoot.visible && !nameField.activeFocus && !tagsField.activeFocus && !hexField.activeFocus && !Shell.overlayOpen
+        enabled: colorsRoot.visible && !colorsRoot.termMode
+                && !colorsRoot.explorerMode && !nameField.activeFocus
+                && !tagsField.activeFocus && !hexField.activeFocus
+                && !Shell.overlayOpen
         onActivated: colors !== null && colors.generate()
     }
 
@@ -995,6 +1048,25 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: colorsRoot.termMode
+        z: 2
+
+        // opaque backdrop so the harmony generator never bleeds through
+        Rectangle {
+            anchors.fill: parent
+            color: theme.tokens.bg
+            z: -1
+        }
+    }
+
+    // Explorer overlay — Color palette scheme workspace; covers everything
+    // below the toolbar when the Explorer sub-tab is active (same pattern
+    // as the Terminal designer: the harmony UI stays mounted beneath)
+    ColorExplorer {
+        anchors.top: genBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: colorsRoot.explorerMode
         z: 2
 
         // opaque backdrop so the harmony generator never bleeds through
