@@ -172,6 +172,9 @@ def main(argv=None) -> int:
     parser.add_argument("--term", action="store_true",
                         help="open the Colors pane on the Terminal designer"
                              " (QA screenshots)")
+    parser.add_argument("--explorer", action="store_true",
+                        help="open the Colors pane on the Explorer tab"
+                             " (QA screenshots)")
     parser.add_argument("--version", action="version",
                         version=f"fengrid {__version__}")
     parser.add_argument("--webengine-probe", action="store_true",
@@ -357,6 +360,23 @@ def main(argv=None) -> int:
     app.aboutToQuit.connect(freeze_watchdog.stop)
     QTimer.singleShot(0, freeze_watchdog.start)
 
+    # curated preset libraries (fonts / icon sets / site templates):
+    # register pack rows (idempotent), never download anything.
+    # #162: this MUST run BEFORE any bridge construction — Library
+    # refreshes its rail lists and Colors snapshots its saved-palette
+    # list at construction, so a sync landing after them leaves the
+    # saved strip empty and the typed collections (Default /
+    # Downloaded / pack-named) invisible until the next mutation.
+    core_presets.ensure_presets(con)
+    # downloaded preset clones become scan sources (#37) — startup sync
+    # covers entries downloaded by older builds or on another machine;
+    # _start_initial_scans rescans exactly the kinds that registered
+    preset_sources = core_presets.sync_downloaded_sources(con)
+    core_presets.sync_default_library(con)
+    # #141 round 2: packs downloaded by earlier builds get their
+    # discrete libraries on startup too
+    core_presets.sync_pack_libraries(con)
+
     theme = Theme(con, _asset_dir("fonts"))
     if args.theme:
         theme.set_theme(args.theme)
@@ -399,6 +419,18 @@ def main(argv=None) -> int:
         lambda d: colors_bridge.restore_state(d),
         lambda d: colors_bridge.restore_state(d))
     colors_bridge.bind_undo(colors_undo)
+    # Explorer tab (Color palette wheel) — same undo bridge, own handler;
+    # the global Ctrl+Z routes by pane, so both editors share the stack
+    from fengrid.bridges.color_explorer import ColorExplorer
+    explorer_bridge = ColorExplorer(con)
+    colors_undo.register(
+        "colors.explorer",
+        lambda d: explorer_bridge.restore_state(d),
+        lambda d: explorer_bridge.restore_state(d))
+    explorer_bridge.bind_undo(colors_undo)
+    # #162: preset filing creates palette collections the rail's
+    # Library snapshot must refresh to show
+    colors_bridge.bind_library(library)
     # demo suite: files under the data dir so removal never touches user folders
     demo_bridge = Demo(con, os.path.join(data_dir, "demo-assets"),
                        _asset_dir("fonts"))
@@ -411,11 +443,22 @@ def main(argv=None) -> int:
         if _offline_qa or not prefs_bridge.updateCheck else 4000)
 
     engine = QQmlApplicationEngine()
+    # Explorer tab scheme-button sprites (theme-remapped slices of the
+    # vendored sheet) — registered before any QML can bind the source
+    from fengrid.bridges.explorer_sprites import SchemeSpriteProvider
+    engine.addImageProvider(
+        "fgscheme", SchemeSpriteProvider(
+            _asset_dir("resources", "icons", "sprites.png")))
+    # the Explorer disc's sphere-projected shade field (per-hue render,
+    # cached — see bridges/field_provider)
+    from fengrid.bridges.field_provider import SphereFieldProvider
+    engine.addImageProvider("fgfield", SphereFieldProvider())
     ctx = engine.rootContext()
     ctx.setContextProperty("theme", theme)
     ctx.setContextProperty("library", library)
     ctx.setContextProperty("fonts", fonts)
     ctx.setContextProperty("colors", colors_bridge)
+    ctx.setContextProperty("colorex", explorer_bridge)
     ctx.setContextProperty("terms", term_bridge)
     ctx.setContextProperty("code", code_bridge)
     # real QSyntaxHighlighter for the snippet editor — one layout for
@@ -444,17 +487,6 @@ def main(argv=None) -> int:
     ctx.setContextProperty("startupNotice", startup_notice)
     taxonomy_bridge = Taxonomy(con, data_dir)
     ctx.setContextProperty("taxonomy", taxonomy_bridge)
-    # curated preset libraries (fonts / icon sets / site templates):
-    # register pack rows (idempotent), never download anything
-    core_presets.ensure_presets(con)
-    # downloaded preset clones become scan sources (#37) — startup sync
-    # covers entries downloaded by older builds or on another machine;
-    # _start_initial_scans rescans exactly the kinds that registered
-    preset_sources = core_presets.sync_downloaded_sources(con)
-    core_presets.sync_default_library(con)
-    # #141 round 2: packs downloaded by earlier builds get their
-    # discrete libraries on startup too
-    core_presets.sync_pack_libraries(con)
     presets_bridge = Presets(con, data_dir)
     ctx.setContextProperty("presets", presets_bridge)
 
@@ -467,6 +499,29 @@ def main(argv=None) -> int:
             fonts.rescan()
         else:
             library.rescan()
+
+    # #141: a completed library/fonts scan means every preset entry that
+    # was still "ingesting" (fresh clone's assets being indexed) is done
+    # — its loading bar in the Preset Libraries dialog goes away. A scan
+    # of unrelated sources clears the pulse too; the pack is functional
+    # either way.
+    def _on_any_scan_finished(_report: dict) -> None:
+        presets_bridge.note_scan_finished()
+
+    library.scanFinished.connect(_on_any_scan_finished)
+    fonts.scanFinished.connect(_on_any_scan_finished)
+
+    # #141: applying a palette-kind preset from the Preset Libraries
+    # dialog loads it into the Colors pane editor and files it as a
+    # palette tagged 'preset' (Saved Presets row) — previously the
+    # signal had no consumer, so Apply did nothing visible
+    def _on_preset_applied(entry_id: int, hexes: list) -> None:
+        row = con.execute("SELECT name FROM preset_entry WHERE id = ?",
+                          (int(entry_id),)).fetchone()
+        colors_bridge.load_hexes(hexes)
+        colors_bridge.save_as_preset(row["name"] if row else "", entry_id)
+
+    presets_bridge.presetApplied.connect(_on_preset_applied)
 
     presets_bridge.sourceAdded.connect(_on_preset_source)
     preview_profile = make_preview_profile(con, app)
@@ -481,6 +536,7 @@ def main(argv=None) -> int:
         "initialPane",
         args.pane if args.pane is not None else prefs_bridge.startupPane)
     ctx.setContextProperty("initialTerm", args.term)
+    ctx.setContextProperty("initialExplorer", args.explorer)
     # first-run setup shows when the flag is unset — but never in
     # --screenshot runs (pane shots must stay clean on a fresh DB;
     # QA forces the screen with --dialog firstRun)

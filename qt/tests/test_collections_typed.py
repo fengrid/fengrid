@@ -190,11 +190,12 @@ def test_sync_pack_libraries_creates_tagged_pack_library(lib, tmp_path):
     assert row is not None
     assert row["tags"] == "Flat Icons" and row["match_all"] == 0
 
-    # the pack's indexed assets carry the pack tag
+    # the pack's indexed assets carry the pack tag (kind-aware
+    # item_tag — the store the library filters actually read)
     n = con.execute(
-        "SELECT COUNT(*) AS n FROM asset_tag at"
-        " JOIN tag t ON t.id = at.tag_id"
-        " JOIN asset a ON a.id = at.asset_id"
+        "SELECT COUNT(*) AS n FROM item_tag it"
+        " JOIN tag t ON t.id = it.tag_id"
+        " JOIN asset a ON a.id = it.item_id AND it.item_kind = a.kind"
         " WHERE t.name = 'Flat Icons'").fetchone()["n"]
     assert n == 2
 
@@ -204,8 +205,8 @@ def test_sync_pack_libraries_creates_tagged_pack_library(lib, tmp_path):
         "SELECT COUNT(*) AS n FROM library_view"
         " WHERE name = 'Flat Icons'").fetchone()["n"] == 1
     n2 = con.execute(
-        "SELECT COUNT(*) AS n FROM asset_tag at"
-        " JOIN tag t ON t.id = at.tag_id"
+        "SELECT COUNT(*) AS n FROM item_tag it"
+        " JOIN tag t ON t.id = it.tag_id"
         " WHERE t.name = 'Flat Icons'").fetchone()["n"]
     assert n2 == 2
 

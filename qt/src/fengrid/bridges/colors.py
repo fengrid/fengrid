@@ -15,6 +15,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 from ..core import colors as core_colors
 from ..core import db as core_db
 from ..core import paths as core_paths
+from ..core import presets as core_presets
 from ..core import settings
 
 
@@ -30,6 +31,7 @@ class Colors(QObject):
     selectionChanged = Signal()
     nameChanged = Signal()
     ruleChanged = Signal()
+    presetCountChanged = Signal()
 
     def __init__(self, con, parent=None):
         super().__init__(parent)
@@ -52,12 +54,17 @@ class Colors(QObject):
         # comma tag list + match_all, filtered in Python over row["tags"]
         self._lib_tags: list[str] = []
         self._lib_match_all = True
+        # #141: palettes filed from applied Preset Libraries presets
+        self._preset_count = 0
         # active smart collection (sidebar) — criteria filtered in Python
         self._smart_id = 0
         # optional undo bridge (projects.bind_source_control pattern):
         # every editor-scale mutation snapshots the swatch list so
         # Ctrl+Z can walk it back (spec: undo for fields/options)
         self._undo_ref = None
+        # #162: the Library bridge (rail collections snapshot) — bound at
+        # startup so preset filing pokes its rail refresh
+        self._library = None
         self._refresh_palettes()
         # seed the pane with one roll so it never opens empty
         self._swatches = core_colors.generate(self._rule, [], mode="dark")
@@ -65,6 +72,13 @@ class Colors(QObject):
     # ---------------------------------------------------------------- undo
     def bind_undo(self, undo) -> None:
         self._undo_ref = undo
+
+    def bind_library(self, library) -> None:
+        """#162: the rail's collections list is the Library bridge's
+        snapshot — filing an applied preset pokes its coalesced refresh
+        (same bind pattern as bind_undo), so the new Downloaded/pack
+        collection rows appear without a restart."""
+        self._library = library
 
     def _snapshot(self) -> dict:
         return {
@@ -197,6 +211,13 @@ class Colors(QObject):
     @Property(str, notify=libTagsChanged)
     def libraryTagFilter(self) -> str:
         return ",".join(self._lib_tags)
+
+    # #141: palettes filed by applying a Preset Libraries palette
+    # preset (tagged 'preset') — the rail's Saved Presets row counts
+    # and browses them on the Colors pane
+    @Property(int, notify=presetCountChanged)
+    def presetPaletteCount(self) -> int:
+        return self._preset_count
 
     @Slot(str, bool)
     def set_library_tags(self, tags_csv: str, match_all: bool = True) -> None:
@@ -335,6 +356,43 @@ class Colors(QObject):
         self._refresh_palettes()
         self.message.emit(f"Saved: {name}")
 
+    def save_as_preset(self, name: str, entry_id: int | None = None) -> None:
+        """#141: file an applied palette preset — save (or update, when
+        a palette of that preset name already exists) the working
+        swatches as a palette tagged 'preset', so it lands in the
+        Colors pane's list and the rail's Saved Presets row can count
+        and browse it. Automatic: applying a preset from the Preset
+        Libraries dialog needs no further user action.
+
+        #162: with a preset entry id (the apply flow) the saved palette
+        is also FILED like a downloaded pack — into the per-type
+        'Downloaded' collection and a collection named after its preset
+        library — and the entry gains the palette backref. A manual
+        save (no entry) only tags."""
+        name = (name or "").strip() or "Preset palette"
+        hexes = [s["hex"] for s in self._swatches]
+        if not hexes:
+            return
+        existing = self._con.execute(
+            "SELECT id FROM palette WHERE name = ?", (name,)).fetchone()
+        pid = existing["id"] if existing else None
+        self._palette_id = core_colors.save_palette(
+            self._con, name, hexes, "preset", pid)
+        core_db._sync_item_tags(self._con, self._palette_id,
+                                "palette", "preset")
+        if entry_id is not None:
+            core_presets.file_applied_palette(
+                self._con, int(entry_id), self._palette_id)
+            if self._library is not None:
+                # the rail's collections snapshot must learn about the
+                # filed rows — mutations poke the coalesced refresh
+                self._library._mark_lists_dirty()
+        self._name = name
+        self.nameChanged.emit()
+        self._refresh_palettes()
+        self.message.emit(
+            f"Applied {name} — saved to the Colors pane")
+
     @Slot(int)
     def open_palette(self, palette_id: int) -> None:
         rows = self._con.execute(
@@ -418,6 +476,17 @@ class Colors(QObject):
             self._palettes = [p for p in self._palettes
                               if _tags_match(p.get("tags"), self._lib_tags,
                                              self._lib_match_all)]
+        # #141: palettes filed by applying a palette preset (tagged
+        # 'preset') — feeds the rail's Saved Presets row
+        n = self._con.execute(
+            "SELECT COUNT(*) FROM palette p"
+            " JOIN item_tag it ON it.item_id = p.id"
+            " AND it.item_kind = 'palette'"
+            " JOIN tag t ON t.id = it.tag_id"
+            " WHERE t.name = 'preset'").fetchone()[0]
+        if n != self._preset_count:
+            self._preset_count = n
+            self.presetCountChanged.emit()
         self.palettesChanged.emit()
 
 

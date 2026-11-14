@@ -280,7 +280,12 @@ def delete_field(con: sqlite3.Connection, field_id: int) -> None:
 def library_view_kind_counts(con: sqlite3.Connection, view_id: int) -> dict[str, int]:
     """Per-asset-kind row counts for a saved library view. The rail's
     pane-scoped lists need icon vs font counts so a library only shows
-    on panes where it has displayable assets. Empty view → {}."""
+    on panes where it has displayable assets. Empty view → {}.
+
+    Palettes and snippets are not asset rows — they carry a tags column
+    of their own, so their counts come from matching that column
+    against the view's tags (#141: the Colors/Snippets panes' Libraries
+    rows must show real counts, not a constant 0)."""
     row = con.execute("SELECT tags, match_all FROM library_view WHERE id = ?",
                       (view_id,)).fetchone()
     if row is None:
@@ -304,7 +309,20 @@ def library_view_kind_counts(con: sqlite3.Connection, view_id: int) -> dict[str,
                " JOIN tag t ON t.id = it.tag_id WHERE t.name IN (%s)"
                " GROUP BY a.kind" % marks)
         params = list(tags)
-    return {r["kind"]: r["n"] for r in con.execute(sql, params)}
+    counts = {r["kind"]: r["n"] for r in con.execute(sql, params)}
+    # palettes and snippets are not asset rows — match their own tags
+    # column against the view (case-insensitive, all/any)
+    for table, kind in (("palette", "palette"), ("snippet", "snippet")):
+        n = 0
+        for r in con.execute("SELECT tags FROM %s" % table):
+            have = {t.strip().lower() for t in (r[0] or "").split(",")
+                    if t.strip()}
+            hits = [t.lower() in have for t in tags]
+            if all(hits) if row["match_all"] else any(hits):
+                n += 1
+        if n:
+            counts[kind] = counts.get(kind, 0) + n
+    return counts
 
 
 def _item_exists(con: sqlite3.Connection, kind: str, item_id: int) -> bool:

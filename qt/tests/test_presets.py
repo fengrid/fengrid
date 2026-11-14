@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from fengrid.bridges.presets import Presets           # noqa: E402
+from fengrid.core import colors as core_colors        # noqa: E402
 from fengrid.core import db as core_db                # noqa: E402
 from fengrid.core import presets as core_presets      # noqa: E402
 from fengrid.core import taxonomy as core_tax         # noqa: E402
@@ -214,6 +215,138 @@ def test_preview_source_empty_clone(tmp_path):
 
 
 # ------------------------------------------------- fallback card render
+# ------------------------------------------------- download progress
+def _wait_for(predicate, timeout=30.0):
+    """Pump the Qt loop until predicate() turns true (worker threads +
+    queued signals need a running loop; tests have none)."""
+    import time
+    from PySide6.QtCore import QCoreApplication
+    deadline = time.time() + timeout
+    while not predicate() and time.time() < deadline:
+        QCoreApplication.processEvents()
+        time.sleep(0.02)
+    return predicate()
+
+
+def test_download_reports_progress_and_ingest_state(env, tmp_path):
+    """#141: an icon-pack download streams clone percent, then flips to
+    the 'ingest' pulse (the scan indexes the fresh clone), and
+    note_scan_finished drops the bar."""
+    bridge, con, tmp = env
+    src = _mk_source_repo(tmp_path / "icon-src")
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(src), row["id"]))
+    con.commit()
+
+    progress: list[tuple[int, str, int]] = []
+    states: list[tuple[int, str]] = []
+    bridge.downloadProgress.connect(
+        lambda eid, phase, pct: progress.append((eid, phase, pct)))
+    bridge.downloadState.connect(
+        lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])
+    assert _wait_for(lambda: states), "no downloadState within timeout"
+
+    # clone phase: starts indeterminate, ends at exactly 100
+    clone = [p for p in progress if p[0] == row["id"]]
+    assert clone[0] == (row["id"], "clone", -1), clone
+    assert clone[-1] == (row["id"], "clone", 100), clone
+    pcts = [p[2] for p in clone]
+    assert pcts == sorted(pcts), f"progress stepped back: {pcts}"
+    # the clone landed → the entry ingests until the scan finishes
+    assert (row["id"], "ingest") in states
+    assert (row["id"], "done") not in states
+    rows = bridge.entries(icon_lib["id"])
+    me = [r for r in rows if r["id"] == row["id"]][0]
+    assert me["ingesting"] is True and me["busy"] is False
+
+    # the library/fonts scan finishes → the bar goes away
+    bridge.note_scan_finished()
+    assert (row["id"], "done") in states
+    me = [r for r in bridge.entries(icon_lib["id"]) if r["id"] == row["id"]][0]
+    assert me["ingesting"] is False
+
+
+def test_download_template_entry_goes_straight_to_done(env, tmp_path):
+    """Template clones are never indexed (#37) — no ingest pulse, the
+    bar clears as soon as the clone lands."""
+    bridge, con, tmp = env
+    src = _mk_source_repo(tmp_path / "tpl-src")
+    tpl_lib = [l for l in bridge.libraries if l["kind"] == "template"][0]
+    row = bridge.entries(tpl_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(src), row["id"]))
+    con.commit()
+
+    states: list[tuple[int, str]] = []
+    bridge.downloadState.connect(lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])
+    assert _wait_for(lambda: (row["id"], "done") in states)
+    assert (row["id"], "ingest") not in states
+
+
+def test_failed_clone_clears_the_bar(env, tmp_path):
+    """A clone that never lands must not leave a stuck loading bar."""
+    bridge, con, tmp = env
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(tmp_path / "no-such-repo"), row["id"]))
+    con.commit()
+
+    states: list[tuple[int, str]] = []
+    bridge.downloadState.connect(lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])
+    assert _wait_for(lambda: (row["id"], "done") in states)
+
+
+def test_entries_snapshot_carries_progress_for_reopens(env):
+    """entries() seeds the dialog's bar after a reopen mid-download."""
+    bridge, con, tmp = env
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    bridge._busy.add(row["id"])
+    bridge._progress[row["id"]] = 42
+    me = [r for r in bridge.entries(icon_lib["id"])
+          if r["id"] == row["id"]][0]
+    assert me["busy"] is True and me["progressPct"] == 42
+    bridge._busy.discard(row["id"])
+    me = [r for r in bridge.entries(icon_lib["id"])
+          if r["id"] == row["id"]][0]
+    assert me["busy"] is False and me["progressPct"] is None
+
+
+def test_update_refresh_reports_indeterminate_progress(env, tmp_path):
+    """Updating an already-downloaded pack (git pull) pulses: phase
+    'update', percent -1."""
+    bridge, con, tmp = env
+    src = _mk_source_repo(tmp_path / "upd-src")
+    icon_lib = [l for l in bridge.libraries if l["kind"] == "icon"][0]
+    row = bridge.entries(icon_lib["id"])[0]
+    con.execute("UPDATE preset_entry SET url = ? WHERE id = ?",
+                (str(src), row["id"]))
+    con.commit()
+
+    bridge.download(row["id"])
+    assert _wait_for(lambda: row_is_downloaded(con, row["id"]))
+
+    progress: list[tuple[int, str, int]] = []
+    bridge.downloadProgress.connect(
+        lambda eid, phase, pct: progress.append((eid, phase, pct)))
+    states: list[tuple[int, str]] = []
+    bridge.downloadState.connect(lambda eid, st: states.append((eid, st)))
+    bridge.download(row["id"])          # second call → update path
+    assert _wait_for(lambda: (row["id"], "update", -1) in progress)
+
+
+def row_is_downloaded(con, entry_id):
+    r = con.execute("SELECT downloaded FROM preset_entry WHERE id = ?",
+                    (entry_id,)).fetchone()
+    return r is not None and r["downloaded"] == 1
+
+
 def test_fallback_preview_rendered_when_no_imagery(env, tmp_path):
     bridge, con, tmp = env
     src_dir = tmp_path / "plain-repo"
@@ -442,3 +575,80 @@ def test_sync_default_library_idempotent(env):
         "SELECT COUNT(*) AS n FROM collection_ref WHERE collection_id = ?",
         (default_id,)).fetchone()["n"]
     assert members == 12
+
+
+# --------------------------------------------- #162: palette download parity
+def test_apply_preset_marks_the_entry_local(env):
+    """Applying a palette scheme IS its download: the entry flips local
+    so the dialog badges the card and the library tab counts it — the
+    same vocabulary a cloned icon/font pack gets."""
+    bridge, con, tmp = env
+    ch = [l for l in bridge.libraries if l["kind"] == "palette"][0]
+    row = bridge.entries(ch["id"])[0]
+    assert row["downloaded"] is False
+    bridge.apply_preset(row["id"])
+    assert con.execute(
+        "SELECT downloaded FROM preset_entry WHERE id = ?",
+        (row["id"],)).fetchone()[0] == 1
+    # the dialog's live views reflect it
+    assert bridge.entries(ch["id"])[0]["downloaded"] is True
+    live = [l for l in bridge.libraries if l["kind"] == "palette"][0]
+    assert live["downloaded"] == 1
+
+
+def test_file_applied_palette_files_parity_collections(env):
+    """Core-level: filing an applied palette preset creates the
+    per-type 'Downloaded' + pack-named + Default palette collections
+    with the ref, backrefs the entry, and is idempotent."""
+    bridge, con, tmp = env
+    ch = [l for l in bridge.libraries if l["kind"] == "palette"][0]
+    row = bridge.entries(ch["id"])[0]
+    pid = core_colors.save_palette(con, row["name"], ["#111111"], "preset")
+    core_presets.file_applied_palette(con, row["id"], pid)
+    filed = {r["name"] for r in con.execute(
+        "SELECT c.name FROM collection_ref cr"
+        " JOIN collection c ON c.id = cr.collection_id"
+        " WHERE cr.item_kind = 'palette' AND cr.item_id = ?", (pid,))}
+    assert filed >= {"Downloaded", ch["name"], "Default"}, filed
+    # backref: the startup default-library sync reuses THIS row
+    # instead of materialising a second palette for the entry
+    assert con.execute(
+        "SELECT palette_id FROM preset_entry WHERE id = ?",
+        (row["id"],)).fetchone()[0] == pid
+    # idempotent — a second filing adds no duplicate refs
+    core_presets.file_applied_palette(con, row["id"], pid)
+    n = con.execute(
+        "SELECT COUNT(*) FROM collection_ref"
+        " WHERE item_kind = 'palette' AND item_id = ?", (pid,)).fetchone()[0]
+    assert n == 3
+
+
+# --------------------------------------- #162: startup visibility order
+def test_colors_bridge_sees_startup_materialised_schemes(env):
+    """#162: with the preset syncs ordered before bridge construction
+    (main), a Colors bridge built on the synced DB snapshots the
+    materialised harmony schemes immediately — the saved strip is
+    populated at boot, not empty until the first apply."""
+    _bridge, con, tmp = env
+    core_presets.ensure_presets(con)
+    core_presets.sync_default_library(con)
+    from fengrid.bridges.colors import Colors
+    bridge = Colors(con)
+    assert len(bridge.palettes) == 12
+    assert bridge.presetPaletteCount == 0
+
+def test_startup_preset_sync_runs_before_bridges(env):
+    """#162 recurrence guard: Library refreshes its rail lists and
+    Colors snapshots its saved-palette list at CONSTRUCTION, so the
+    preset syncs (which materialise the harmony palettes and create the
+    Default/Downloaded collections) must run BEFORE any bridge is
+    constructed — otherwise the saved strip starts empty and the typed
+    collections stay invisible until the next mutation. Pins the order
+    in main() against regression."""
+    import inspect
+    import fengrid.__main__ as main_mod
+    src = inspect.getsource(main_mod.main)
+    sync_at = src.index("core_presets.sync_default_library(con)")
+    assert sync_at < src.index("library = Library(con")
+    assert sync_at < src.index("colors_bridge = Colors(con)")
+    assert src.index("core_presets.ensure_presets(con)") < sync_at

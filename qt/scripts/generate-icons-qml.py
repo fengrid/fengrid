@@ -41,6 +41,7 @@ MAPPING = {
     "grid": "misc/grid",
     "hard-drive": "hardware/hdd",
     "help": "misc/help",
+    "eye": "action/eye",
     "image": "file/picture",
     "kanban": "action/kanban",
     "layers": "navigation/layers-2",

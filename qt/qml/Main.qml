@@ -1285,6 +1285,7 @@ ApplicationWindow {
             presetsDialog.openLibrary(
                 -1, root.pane === 0 ? "icon"
                     : root.pane === 1 ? "font"
+                    : root.pane === 2 ? "palette"
                     : root.pane === 4 ? "template" : "")
             return
         }
@@ -1480,6 +1481,13 @@ ApplicationWindow {
     }
     Connections {
         target: colors
+        function onMessage(msg) { toast.show(msg) }
+        function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
+        function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }
+    }
+    // Explorer tab (wheel workspace) — same notice plumbing as `colors`
+    Connections {
+        target: typeof colorex !== "undefined" ? colorex : null
         function onMessage(msg) { toast.show(msg) }
         function onExportDone(path) { toast.show(qsTr("Exported to %1").arg(path)) }
         function onExportFailed(err) { toast.show(qsTr("Export failed: %1").arg(err)) }

@@ -542,9 +542,14 @@ def sync_pack_libraries(con: sqlite3.Connection) -> None:
                 "SELECT id FROM source WHERE path = ?",
                 (str(Path(r["local_path"]).resolve()),)).fetchone()
             if src is not None:
+                # tag the pack's assets through the kind-aware item_tag
+                # store — the same table every library/collection filter
+                # reads (asset_tag is the legacy pre-taxonomy table; a
+                # write there is invisible to the rail)
                 con.execute(
-                    "INSERT OR IGNORE INTO asset_tag(asset_id, tag_id)"
-                    " SELECT a.id, ? FROM asset a WHERE a.source_id = ?",
+                    "INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
+                    " tag_id) SELECT a.id, a.kind, ? FROM asset a"
+                    " WHERE a.source_id = ?",
                     (tag_id, src["id"]))
         if con.execute("SELECT 1 FROM library_view WHERE name = ?",
                        (name,)).fetchone() is None:
@@ -630,6 +635,42 @@ def _sync_default_palettes(con: sqlite3.Connection, default_id: int) -> None:
             "INSERT OR IGNORE INTO collection_ref"
             " (collection_id, item_kind, item_id) VALUES (?, 'palette', ?)",
             (default_id, pid))
+
+
+def file_applied_palette(con: sqlite3.Connection, entry_id: int,
+                         palette_id: int) -> None:
+    """#162: an APPLIED palette preset gets the download parity icon/
+    font packs get — the palette row is filed into the per-type
+    'Downloaded' collection, a collection named after its preset
+    library (the pack), and 'Default', and the entry gains the
+    palette_id backref so the startup default-library sync reuses this
+    row instead of materialising a second palette for the entry.
+
+    Idempotent — called on every apply; re-applying a scheme (or a
+    restart re-running the chain) must not duplicate refs."""
+    if not palette_id:
+        return
+    row = con.execute(
+        "SELECT l.name AS pack FROM preset_entry e"
+        " JOIN preset_library l ON l.id = e.library_id"
+        " WHERE e.id = ?", (int(entry_id),)).fetchone()
+    if row is None:
+        return
+    # the entry -> palette link (a name match alone would duplicate
+    # when the user renamed their palette)
+    con.execute("UPDATE preset_entry SET palette_id = ? WHERE id = ?",
+                (int(palette_id), int(entry_id)))
+    ids = [_ensure_typed_collection(con, "Default", "palette"),
+           _ensure_typed_collection(con, "Downloaded", "palette")]
+    pack = (row["pack"] or "").strip()
+    if pack:
+        ids.append(_ensure_typed_collection(con, pack, "palette"))
+    for cid in ids:
+        con.execute(
+            "INSERT OR IGNORE INTO collection_ref"
+            "(collection_id, item_kind, item_id) VALUES (?, 'palette', ?)",
+            (cid, int(palette_id)))
+    con.commit()
 
 
 def sync_downloaded_sources(con: sqlite3.Connection) -> list[dict]:
