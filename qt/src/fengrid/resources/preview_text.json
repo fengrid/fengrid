@@ -1,0 +1,62 @@
+{
+  "comment": "Default font-specimen preview text for Fengrid. All entries are public domain (classic haiku rendered into English; pre-1930 poems; US government/19th-century orations). 'fit' marks curated passages whose word shapes sit well in the specimen: 'large' = short, for big preview sizes; 'medium'; 'small' = longer passages that fill small preview sizes. The picker swaps between exactly three breakpoints as the preview size changes.",
+  "breakpoints": [
+    {"max_px": 19, "bucket": "small"},
+    {"max_px": 47, "bucket": "medium"},
+    {"max_px": 999, "bucket": "large"}
+  ],
+  "groups": {
+    "haiku": [
+      {"text": "An old silent pond— a frog jumps into the water. Sound of splashing.", "source": "Matsuo Bashō", "fit": "medium"},
+      {"text": "Light of the fireflies drifts through the pines at dusk.", "source": "Matsuo Bashō", "fit": "large"},
+      {"text": "The first cold shower. Even the monkey seems to want a little straw raincoat.", "source": "Matsuo Bashō", "fit": "medium"},
+      {"text": "Sitting quietly, doing nothing, spring comes, and the grass grows by itself.", "source": "Zenrin kushū", "fit": "small"},
+      {"text": "O snail, climb Mount Fuji, but slowly, slowly!", "source": "Kobayashi Issa", "fit": "large"},
+      {"text": "In the plum blossom haze the sun rises early — the eastern sky.", "source": "Yosa Buson", "fit": "medium"},
+      {"text": "Winter seclusion — once, twice, I have kicked the faded quilt.", "source": "Kobayashi Issa", "fit": "medium"},
+      {"text": "A world of dew, and within every dewdrop a world of struggle.", "source": "Kobayashi Issa", "fit": "medium"},
+      {"text": "The short night — broken, on the shore's edge a thread of moonlight.", "source": "Matsuo Bashō", "fit": "small"},
+      {"text": "Temple bells die out. The fragrant blossoms remain. A perfect evening!", "source": "Matsuo Bashō", "fit": "medium"},
+      {"text": "Coolness of the moon — the voice of the blind woman as she sells herbs.", "source": "Yosa Buson", "fit": "small"},
+      {"text": "Butterflies sleep on the temple bell — soft in the shadows.", "source": "Uejima Onitsura", "fit": "large"}
+    ],
+    "poems": [
+      {"text": "Because I could not stop for Death, he kindly stopped for me.", "source": "Emily Dickinson", "fit": "medium"},
+      {"text": "Hope is the thing with feathers that perches in the soul.", "source": "Emily Dickinson", "fit": "medium"},
+      {"text": "Two roads diverged in a wood, and I took the one less traveled by.", "source": "Robert Frost", "fit": "medium"},
+      {"text": "The woods are lovely, dark and deep, but I have promises to keep.", "source": "Robert Frost", "fit": "medium"},
+      {"text": "A thing of beauty is a joy for ever: its loveliness increases.", "source": "John Keats", "fit": "medium"},
+      {"text": "Season of mists and mellow fruitfulness, close bosom-friend of the maturing sun.", "source": "John Keats", "fit": "small"},
+      {"text": "I am large, I contain multitudes.", "source": "Walt Whitman", "fit": "large"},
+      {"text": "O Captain! my Captain! our fearful trip is done.", "source": "Walt Whitman", "fit": "medium"},
+      {"text": "Shall I compare thee to a summer's day? Thou art more lovely and more temperate.", "source": "William Shakespeare", "fit": "small"},
+      {"text": "Tiger, tiger, burning bright, in the forests of the night.", "source": "William Blake", "fit": "medium"},
+      {"text": "To see a World in a Grain of Sand, and a Heaven in a Wild Flower.", "source": "William Blake", "fit": "medium"},
+      {"text": "O wild West Wind, thou breath of Autumn's being.", "source": "Percy Bysshe Shelley", "fit": "medium"},
+      {"text": "I wandered lonely as a cloud that floats on high o'er vales and hills.", "source": "William Wordsworth", "fit": "medium"},
+      {"text": "Tyger of the mind: the hand that framed thy fearful symmetry.", "source": "William Blake", "fit": "small"},
+      {"text": "Once upon a midnight dreary, while I pondered, weak and weary.", "source": "Edgar Allan Poe", "fit": "medium"},
+      {"text": "Water, water, every where, nor any drop to drink.", "source": "Samuel Taylor Coleridge", "fit": "large"},
+      {"text": "The moon doth shine as bright as day, while in the wood the nightingale sings on.", "source": "Christina Rossetti", "fit": "small"},
+      {"text": "Ring out, wild bells, to the wild sky, the flying cloud, the frosty light.", "source": "Alfred, Lord Tennyson", "fit": "medium"},
+      {"text": "There was a Young Lady whose chin, resembled the tapering pin.", "source": "Edward Lear", "fit": "large"},
+      {"text": "And the night shall be filled with music, and the cares that infest the day shall fold their tents like the Arabs, and as silently steal away.", "source": "Henry Wadsworth Longfellow", "fit": "small"}
+    ],
+    "speeches": [
+      {"text": "Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal.", "source": "Abraham Lincoln, Gettysburg Address", "fit": "small"},
+      {"text": "Government of the people, by the people, for the people, shall not perish from the earth.", "source": "Abraham Lincoln", "fit": "medium"},
+      {"text": "With malice toward none, with charity for all, with firmness in the right as God gives us to see the right.", "source": "Abraham Lincoln", "fit": "small"},
+      {"text": "We choose to go to the moon in this decade and do the other things, not because they are easy, but because they are hard.", "source": "John F. Kennedy", "fit": "small"},
+      {"text": "Ask not what your country can do for you — ask what you can do for your country.", "source": "John F. Kennedy", "fit": "medium"},
+      {"text": "The only thing we have to fear is fear itself.", "source": "Franklin D. Roosevelt", "fit": "large"},
+      {"text": "Give me liberty, or give me death!", "source": "Patrick Henry", "fit": "large"},
+      {"text": "The sunlight that brought light and healing to you, has brought stripes and death to millions — this Fourth of July is yours, not mine.", "source": "Frederick Douglass", "fit": "small"},
+      {"text": "It is not the critic who counts; not the man who points out how the strong man stumbles. The credit belongs to the man who is actually in the arena.", "source": "Theodore Roosevelt", "fit": "small"},
+      {"text": "We hold these truths to be self-evident: that all men are created equal.", "source": "Declaration of Independence", "fit": "medium"},
+      {"text": "I know not what course others may take; but as for me, give me liberty or give me death!", "source": "Patrick Henry", "fit": "medium"},
+      {"text": "Fellow-citizens, we cannot escape history.", "source": "Abraham Lincoln", "fit": "large"},
+      {"text": "The world must be made safe for democracy.", "source": "Woodrow Wilson", "fit": "large"},
+      {"text": "In the future days, which we seek to make secure, we look forward to a world founded upon four essential human freedoms.", "source": "Franklin D. Roosevelt", "fit": "small"}
+    ]
+  }
+}

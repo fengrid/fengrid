@@ -32,9 +32,59 @@ from pathlib import Path
 MANIFEST_NAME = "backup-manifest.json"
 PACKAGE_SUFFIX = ".tar.gz"
 
+# sidecar recording what the last auto-backup captured: (size, mtime_ns)
+# of every backed-up database file. Written OUTSIDE the databases on
+# purpose — recording the state in the DB itself would dirty the very
+# files it describes and force a backup on every quit.
+_AUTO_STATE_NAME = "auto-backup-state.json"
+
 
 class BackupError(Exception):
     pass
+
+
+def auto_backup_fingerprint(db_path, registry_path: str = "") -> dict:
+    """(size, mtime_ns) per backed-up database file — the dirty check for
+    the skip-when-clean auto-backup. Any write to either file changes
+    mtime, so this is conservative: it may occasionally demand a backup
+    after a checkpoint, never skip one after real data loss."""
+    out: dict[str, list] = {}
+    for key, path in (("library", db_path), ("registry", registry_path)):
+        p = Path(path) if path else None
+        if p is not None and p.is_file():
+            st = p.stat()
+            out[key] = [st.st_size, st.st_mtime_ns]
+    return out
+
+
+def auto_backup_needed(db_path, dest_dir, registry_path: str = "") -> bool:
+    """True when at least one backed-up file changed since the state the
+    last successful auto-backup recorded (or no recorded state exists)."""
+    state_file = Path(dest_dir) / _AUTO_STATE_NAME
+    current = auto_backup_fingerprint(db_path, registry_path)
+    try:
+        recorded = json.loads(state_file.read_text())
+    except (OSError, ValueError):
+        return True                       # no state yet — back up
+    if not current:
+        return False                      # nothing to back up
+    return recorded.get("files") != current
+
+
+def record_auto_backup_state(db_path, dest_dir, registry_path: str = ""):
+    """Persist the CURRENT file fingerprint as the clean baseline.
+
+    Call with the fingerprint taken BEFORE the backup runs: the backup
+    writes snapshots into dest_dir but never into the databases
+    themselves, so the recorded mtimes stay valid for the next quit.
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    state = auto_backup_fingerprint(db_path, registry_path)
+    state_file = dest_dir / _AUTO_STATE_NAME
+    tmp = dest_dir / f".{_AUTO_STATE_NAME}.tmp"
+    tmp.write_text(json.dumps({"recorded": time.time(), "files": state}))
+    os.replace(tmp, state_file)
 
 
 def backup(db_path: str | Path, dest_dir: str | Path, *,

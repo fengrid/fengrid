@@ -8,8 +8,19 @@ per-pane server SQLite) into one database with unified tags and collections
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import sys
+import time
+import uuid
 from pathlib import Path
+
+
+def new_guid() -> str:
+    """Canonical 36-char GUID — generated once when a row is first
+    tracked, stable for its lifetime."""
+    return str(uuid.uuid4())
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS source (
@@ -35,7 +46,9 @@ CREATE TABLE IF NOT EXISTS asset (
     colorspace  TEXT,
     color_count INTEGER,
     mono        INTEGER,              -- 1 monochrome, 0 color, NULL unknown
-    mtime       REAL
+    mtime       REAL,
+    guid        TEXT,                 -- generated unique GUID (set at ingest)
+    slug        TEXT                  -- user-defined short link name ('' default)
 );
 CREATE INDEX IF NOT EXISTS idx_asset_theme ON asset(theme);
 CREATE INDEX IF NOT EXISTS idx_asset_ext   ON asset(ext);
@@ -52,8 +65,14 @@ CREATE TABLE IF NOT EXISTS asset_tag (
 );
 CREATE TABLE IF NOT EXISTS collection (
     id   INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    query TEXT
+    name TEXT NOT NULL,
+    kind TEXT,                          -- asset type this collection holds
+                                        -- (#141: single-type collections;
+                                        --  NULL = legacy/untyped)
+    query TEXT,
+    guid TEXT,
+    slug TEXT,
+    UNIQUE(name, kind)
 );
 CREATE TABLE IF NOT EXISTS collection_item (
     collection_id INTEGER NOT NULL REFERENCES collection(id) ON DELETE CASCADE,
@@ -66,7 +85,9 @@ CREATE TABLE IF NOT EXISTS palette (
     name    TEXT NOT NULL,
     tags    TEXT,
     created REAL,
-    updated REAL
+    updated REAL,
+    guid    TEXT,
+    slug    TEXT
 );
 CREATE TABLE IF NOT EXISTS palette_color (
     palette_id INTEGER NOT NULL REFERENCES palette(id) ON DELETE CASCADE,
@@ -94,7 +115,9 @@ CREATE TABLE IF NOT EXISTS snippet (
     js          TEXT NOT NULL DEFAULT '',
     tags        TEXT NOT NULL DEFAULT '',
     created     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-    updated     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+    updated     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    guid        TEXT,
+    slug        TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_snippet_updated ON snippet(updated DESC);
 
@@ -105,8 +128,70 @@ CREATE TABLE IF NOT EXISTS projects (
     tags        TEXT NOT NULL DEFAULT '',
     settings    TEXT NOT NULL DEFAULT '{}',
     created     TEXT NOT NULL DEFAULT (datetime('now')),
-    updated     TEXT NOT NULL DEFAULT (datetime('now'))
+    updated     TEXT NOT NULL DEFAULT (datetime('now')),
+    guid        TEXT,
+    slug        TEXT
 );
+CREATE TABLE IF NOT EXISTS preset_library (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    kind       TEXT NOT NULL DEFAULT '',
+    summary    TEXT NOT NULL DEFAULT '',
+    tags       TEXT NOT NULL DEFAULT '',
+    remote_url TEXT NOT NULL DEFAULT '',
+    branch     TEXT NOT NULL DEFAULT '',
+    remote     INTEGER NOT NULL DEFAULT 1,
+    position   INTEGER NOT NULL DEFAULT 0,
+    guid       TEXT,
+    slug       TEXT
+);
+CREATE TABLE IF NOT EXISTS preset_entry (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    library_id   INTEGER NOT NULL
+                 REFERENCES preset_library(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    repo         TEXT NOT NULL DEFAULT '',
+    url          TEXT NOT NULL DEFAULT '',
+    branch       TEXT NOT NULL DEFAULT '',
+    description  TEXT NOT NULL DEFAULT '',
+    license      TEXT NOT NULL DEFAULT '',
+    homepage     TEXT NOT NULL DEFAULT '',
+    tags         TEXT NOT NULL DEFAULT '',
+    position     INTEGER NOT NULL DEFAULT 0,
+    downloaded   INTEGER NOT NULL DEFAULT 0,
+    local_path   TEXT NOT NULL DEFAULT '',
+    preview_path TEXT NOT NULL DEFAULT '',
+    guid         TEXT,
+    slug         TEXT
+);
+CREATE TABLE IF NOT EXISTS project_task (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    title       TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    stage       TEXT NOT NULL DEFAULT 'triage',
+    position    REAL NOT NULL DEFAULT 0,
+    priority    TEXT NOT NULL DEFAULT '',
+    due_date    TEXT NOT NULL DEFAULT '',
+    status_note TEXT NOT NULL DEFAULT '',
+    created     TEXT NOT NULL DEFAULT (datetime('now')),
+    updated     TEXT NOT NULL DEFAULT (datetime('now')),
+    guid        TEXT,
+    slug        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_task_stage ON project_task(stage, position);
+
+-- tasks can carry their own asset references (deep integration with the
+-- library — same shape as project_asset, scoped per task)
+CREATE TABLE IF NOT EXISTS project_task_asset (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id    INTEGER NOT NULL REFERENCES project_task(id) ON DELETE CASCADE,
+    asset_kind TEXT NOT NULL,        -- 'icon' | 'font' | 'snippet' | 'palette'
+    asset_id   INTEGER NOT NULL,     -- row id in asset / snippet / palette
+    label      TEXT NOT NULL DEFAULT '',
+    UNIQUE(task_id, asset_kind, asset_id)
+);
+
 CREATE TABLE IF NOT EXISTS project_asset (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -137,7 +222,9 @@ CREATE TABLE IF NOT EXISTS library_view (
     tags      TEXT NOT NULL DEFAULT '',   -- comma-separated tag names
     match_all INTEGER NOT NULL DEFAULT 0, -- 1 = asset must carry every tag
     created   REAL NOT NULL,
-    updated   REAL NOT NULL
+    updated   REAL NOT NULL,
+    guid      TEXT,
+    slug      TEXT
 );
 
 -- Smart collections: stored criteria, evaluated live (no membership rows)
@@ -155,6 +242,7 @@ CREATE TABLE IF NOT EXISTS asset_field (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
     name    TEXT NOT NULL UNIQUE,
     type    TEXT NOT NULL,                  -- text|number|bool|date|select|id
+    kind    TEXT,                           -- NULL = every asset class (#105)
     options TEXT NOT NULL DEFAULT '',       -- JSON: select choices / id prefix+pad
     created REAL NOT NULL
 );
@@ -207,6 +295,17 @@ CREATE TABLE IF NOT EXISTS watch_state (
     last_sig  TEXT NOT NULL DEFAULT '',
     last_hits INTEGER NOT NULL DEFAULT 0
 );
+
+-- Live content for structured-data assets (data / timeseries kinds):
+-- the REST API and sensors read/write the payload here. Revision bumps
+-- on every write so clients can detect changes; timeseries points ride
+-- inside the payload ({points: [...]}).
+CREATE TABLE IF NOT EXISTS asset_data (
+    asset_id INTEGER PRIMARY KEY REFERENCES asset(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL DEFAULT 1,
+    payload  TEXT NOT NULL DEFAULT '{}',   -- JSON document
+    updated  REAL NOT NULL DEFAULT 0
+);
 """
 
 # External-content FTS5 kept in sync by triggers (the indexer UPDATEs an
@@ -224,7 +323,10 @@ CREATE TRIGGER IF NOT EXISTS asset_fts_ad AFTER DELETE ON asset BEGIN
     INSERT INTO asset_fts(asset_fts, rowid, name, path, theme, context)
     VALUES ('delete', old.id, old.name, old.path, old.theme, old.context);
 END;
-CREATE TRIGGER IF NOT EXISTS asset_fts_au AFTER UPDATE ON asset BEGIN
+CREATE TRIGGER IF NOT EXISTS asset_fts_au AFTER UPDATE ON asset
+    WHEN old.name IS NOT new.name OR old.path IS NOT new.path
+      OR old.theme IS NOT new.theme OR old.context IS NOT new.context
+BEGIN
     INSERT INTO asset_fts(asset_fts, rowid, name, path, theme, context)
     VALUES ('delete', old.id, old.name, old.path, old.theme, old.context);
     INSERT INTO asset_fts(rowid, name, path, theme, context)
@@ -244,7 +346,10 @@ _FONT_COLUMNS = (
     "ALTER TABLE asset ADD COLUMN weight INTEGER",
     "ALTER TABLE asset ADD COLUMN italic INTEGER",
 )
-
+_PRESET_ENTRY_COLUMNS = (
+    "ALTER TABLE preset_entry ADD COLUMN colors TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE preset_entry ADD COLUMN palette_id INTEGER",
+)
 
 def _migrate(con: sqlite3.Connection) -> None:
     for stmt in _FONT_COLUMNS:
@@ -254,8 +359,249 @@ def _migrate(con: sqlite3.Connection) -> None:
             if "duplicate column" not in str(e).lower():
                 raise
     con.execute("CREATE INDEX IF NOT EXISTS idx_asset_family ON asset(family)")
+    for stmt in _PRESET_ENTRY_COLUMNS:
+        try:
+            con.execute(stmt)
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+    _migrate_guid_slug(con)
     _migrate_collections(con)
+    _migrate_collection_kinds(con)
     _migrate_taxonomy_items(con)
+    _migrate_grid_indexes(con)
+    _migrate_source_index(con)
+    _migrate_prune_sandbox_sources(con)
+    _migrate_field_kind(con)
+    _migrate_fts_trigger_v2(con)
+
+    # #105: custom fields must be definable per asset class — the column
+    # is missing on pre-#105 databases; NULL means "every class".
+def _migrate_field_kind(con: sqlite3.Connection) -> None:
+    try:
+        con.execute("ALTER TABLE asset_field ADD COLUMN kind TEXT")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e).lower():
+            raise
+
+
+def _migrate_prune_sandbox_sources(con: sqlite3.Connection) -> None:
+    """#61: drop disabled per-app sandbox icon roots left in the source
+    table by earlier builds.
+
+    platform_candidates() no longer returns the per-app flatpak/snap
+    trees (see scanner.py), but a DB created by the old code keeps the
+    rows — on one machine 118 of 121 sources — and the first-run
+    screen's per-row `pathEnabled()` → `library.sources` reads are
+    O(N²) in the source count (measured 20.7s engine.load, 26–31s per
+    setup toggle). Only DISABLED rows are removed: an enabled row is a
+    user choice and purge + re-add happens on disable anyway. The one
+    enabled sandbox row from the diag DB is left untouched.
+    """
+    con.execute(
+        "DELETE FROM source WHERE kind = 'system' AND enabled = 0 AND ("
+        "  path LIKE '%/flatpak/app/%/files/share/icons'"
+        "  OR path LIKE '/snap/%/usr/share/icons'"
+        ")")
+
+
+def _migrate_grid_indexes(con: sqlite3.Connection) -> None:
+    """Scale indexes for six-figure+ asset counts (all columns exist in
+    the base SCHEMA / the ALTERs above — safe to CREATE IF NOT EXISTS).
+
+    - idx_asset_grid: the icons grid always filters kind and orders
+      (theme, name); the trailing id makes the order deterministic so
+      keyset pagination (bridges.library load_more) can walk the index
+      in one ordered range scan instead of sorting ~1M rows per
+      filter change.
+    - kind-prefixed pairs for the rail COUNT(*) GROUP BY aggregates
+      (theme/context/ext/family): index-only scans at any table size.
+    - idx_item_tag_tagid: _refresh_lists counts tags by tag_id, which
+      is the LAST column of item_tag's PK — unindexed before this.
+    """
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_grid"
+        " ON asset(kind, theme, name, id)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_kind_context"
+        " ON asset(kind, context)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_kind_ext ON asset(kind, ext)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_kind_family"
+        " ON asset(kind, family)")
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_item_tag_tagid"
+        " ON item_tag(item_kind, tag_id)")
+
+
+def _migrate_source_index(con: sqlite3.Connection) -> None:
+    """idx_asset_source: every per-source asset lookup was a full-table
+    scan — not only sources_summary()'s LEFT JOIN … GROUP BY, which ran
+    that scan PER SOURCE on the MAIN thread during first-run setup and
+    froze the UI for minutes while the initial icon+font scans wrote
+    (#61 freeze dumps: main thread 78s inside the aggregate), but also
+    the purge/sweep/disable lookups (indexer WHERE source_id = ?),
+    including the one inside scan_fonts itself.
+    """
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_asset_source"
+        " ON asset(source_id)")
+
+
+def _migrate_fts_trigger_v2(con: sqlite3.Connection) -> None:
+    """Recreate the FTS sync trigger with a WHEN clause so fingerprint
+    rescans that only touch mtime/size columns don't pay a full FTS
+    delete+insert per row (that churn dominated 1M-row rescan cost).
+    Gated by a setting flag so the DROP+CREATE runs once per database."""
+    try:
+        if get_setting(con, "fts_trigger_v2") == "1":
+            return
+        con.execute("DROP TRIGGER IF EXISTS asset_fts_au")
+        con.executescript("""
+CREATE TRIGGER IF NOT EXISTS asset_fts_au AFTER UPDATE ON asset
+    WHEN old.name IS NOT new.name OR old.path IS NOT new.path
+      OR old.theme IS NOT new.theme OR old.context IS NOT new.context
+BEGIN
+    INSERT INTO asset_fts(asset_fts, rowid, name, path, theme, context)
+    VALUES ('delete', old.id, old.name, old.path, old.theme, old.context);
+    INSERT INTO asset_fts(rowid, name, path, theme, context)
+    VALUES (new.id, new.name, new.path, new.theme, new.context);
+END;
+""")
+        set_setting(con, "fts_trigger_v2", "1")
+    except sqlite3.OperationalError:
+        # FTS5 unavailable in this build (no asset_fts table) — the LIKE
+        # fallback path never touches these triggers; leave as-is
+        pass
+
+
+# Every tracked object carries a generated GUID (assigned at first
+# ingest/creation, backfilled here for pre-existing rows) and a user
+# slug (empty by default, unique when set). Slug uniqueness is GLOBAL
+# across all tracked tables — [[ slug ]] references must resolve to
+# exactly one object — so it is enforced in set_slug() rather than by
+# per-table indexes.
+_SLUG_TABLES = (
+    "asset", "snippet", "palette", "collection", "library_view", "projects",
+    "preset_library", "preset_entry",
+)
+
+
+def _migrate_guid_slug(con: sqlite3.Connection) -> None:
+    for table in _SLUG_TABLES:
+        cols = {r["name"] for r in con.execute(f"PRAGMA table_info({table})")}
+        if "guid" not in cols:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN guid TEXT")
+        if "slug" not in cols:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN slug TEXT")
+    # backfill GUIDs — one uuid4 per row missing one (id-preserving:
+    # existing taxonomy/link rows keep pointing at the same ids)
+    for table in _SLUG_TABLES:
+        rows = con.execute(
+            f"SELECT id FROM {table} WHERE guid IS NULL OR guid = ''"
+        ).fetchall()
+        for r in rows:
+            con.execute(f"UPDATE {table} SET guid = ? WHERE id = ?",
+                        (new_guid(), r["id"]))
+    # the guid index lives HERE (not in SCHEMA): on legacy databases the
+    # column only exists once the ALTERs above have run
+    con.execute("CREATE INDEX IF NOT EXISTS idx_asset_guid ON asset(guid)")
+    con.commit()
+
+
+def set_slug(con: sqlite3.Connection, kind: str, item_id: int,
+             slug: str) -> str:
+    """Set an object's user-facing slug (the [[ slug ]] link name).
+
+    Slugs are normalized to lowercase-hyphen and must be globally unique
+    across every tracked table; '' clears the slug. Returns the stored
+    value; raises ValueError on an invalid or taken slug.
+    """
+    table = _SLUG_TABLE_FOR[kind]
+    slug = (slug or "").strip().lower()
+    slug = "-".join(slug.split())
+    if slug:
+        import re as _re
+        if not _re.fullmatch(r"[a-z0-9][a-z0-9._-]*", slug):
+            raise ValueError(
+                f"invalid slug {slug!r}: use letters, digits, . _ -")
+        for other in _SLUG_TABLES:
+            row = con.execute(
+                f"SELECT 1 FROM {other} WHERE slug = ? AND id != ?",
+                (slug, item_id if other == table else -1)).fetchone()
+            if row is not None:
+                raise ValueError(f"slug {slug!r} is already taken")
+    con.execute(f"UPDATE {table} SET slug = ? WHERE id = ?",
+                (slug, item_id))
+    con.commit()
+    return slug
+
+
+_SLUG_TABLE_FOR = {
+    "icon": "asset", "font": "asset", "image": "asset", "video": "asset",
+    "audio": "asset", "doc": "asset", "data": "asset",
+    "spatial": "asset", "timeseries": "asset", "markdown": "asset",
+    "snippet": "snippet", "palette": "palette", "collection": "collection",
+    "library": "library_view", "project": "projects",
+    "preset": "preset_library", "preset_entry": "preset_entry",
+}
+
+
+def lookup_by_slug(con: sqlite3.Connection, slug: str) -> dict | None:
+    """[[ slug ]] resolution: first match across the tracked tables.
+
+    Asset-table hits report the row's real kind (icon/image/data/…), not
+    the alias that happened to match first."""
+    slug = (slug or "").strip().lower()
+    if not slug:
+        return None
+    row = con.execute(
+        "SELECT id, kind, guid FROM asset WHERE slug = ?", (slug,)
+    ).fetchone()
+    if row is not None:
+        return {"kind": row["kind"], "id": row["id"], "guid": row["guid"],
+                "table": "asset"}
+    for kind, table in (("snippet", "snippet"), ("palette", "palette"),
+                        ("collection", "collection"),
+                        ("library", "library_view"),
+                        ("project", "projects"),
+                        ("preset", "preset_library"),
+                        ("preset_entry", "preset_entry")):
+        row = con.execute(
+            f"SELECT id, guid FROM {table} WHERE slug = ?", (slug,)
+        ).fetchone()
+        if row is not None:
+            return {"kind": kind, "id": row["id"], "guid": row["guid"],
+                    "table": table}
+    return None
+
+
+def lookup_by_guid(con: sqlite3.Connection, guid: str) -> dict | None:
+    """[[ GUID ]] resolution across the tracked tables (the row's real
+    kind is reported for asset-table hits)."""
+    guid = (guid or "").strip()
+    if not guid:
+        return None
+    row = con.execute(
+        "SELECT id, kind, slug FROM asset WHERE guid = ?", (guid,)
+    ).fetchone()
+    if row is not None:
+        return {"kind": row["kind"], "id": row["id"],
+                "slug": row["slug"] or "", "table": "asset"}
+    for kind, table in (("snippet", "snippet"), ("palette", "palette"),
+                        ("collection", "collection"),
+                        ("library", "library_view"),
+                        ("project", "projects"),
+                        ("preset", "preset_library"),
+                        ("preset_entry", "preset_entry")):
+        row = con.execute(
+            f"SELECT id, slug FROM {table} WHERE guid = ?", (guid,)
+        ).fetchone()
+        if row is not None:
+            return {"kind": kind, "id": row["id"], "slug": row["slug"] or "",
+                    "table": table}
+    return None
 
 
 def _migrate_taxonomy_items(con: sqlite3.Connection) -> None:
@@ -338,16 +684,98 @@ def _migrate_collections(con: sqlite3.Connection) -> None:
     con.commit()
 
 
+def _migrate_collection_kinds(con: sqlite3.Connection) -> None:
+    """#141: collections become asset-TYPE specific. Adds the kind
+    column, backfills it from existing membership (a collection whose
+    refs are all one kind adopts that kind; mixed/empty stay NULL =
+    untyped legacy), and relaxes name uniqueness to per-kind so the
+    default 'Downloaded' collection can exist once per asset type.
+    sqlite cannot drop the implicit UNIQUE(name) index, so the table is
+    rebuilt in place when an old-schema DB is opened."""
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(collection)")}
+    if "kind" not in cols:
+        con.execute("ALTER TABLE collection ADD COLUMN kind TEXT")
+    uniques = [
+        [c["name"] for c in con.execute(f"PRAGMA index_info({r['name']})")]
+        for r in con.execute("PRAGMA index_list(collection)")
+        if r["unique"] and r["origin"] == "u"
+    ]
+    if not any(cols_set == ["name", "kind"] for cols_set in uniques):
+        # old schema: UNIQUE(name) — rebuild with UNIQUE(name, kind).
+        # FK references to collection(id) keep working: the new table is
+        # created under a temp name, populated, the old one dropped
+        # (foreign_keys off), and the temp renamed onto the original
+        # name — ids are copied verbatim, so collection_ref rows and
+        # the self-referencing parent_id all stay valid.
+        con.execute("PRAGMA foreign_keys=OFF")
+        con.execute("BEGIN")
+        con.execute("""
+            CREATE TABLE collection_new (
+                id   INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT,
+                query TEXT,
+                guid TEXT,
+                slug TEXT,
+                parent_id INTEGER REFERENCES collection_new(id)
+                          ON DELETE CASCADE,
+                tags TEXT,
+                UNIQUE(name, kind)
+            )""")
+        con.execute(
+            "INSERT INTO collection_new(id, name, kind, query, guid,"
+            " slug, parent_id, tags)"
+            " SELECT id, name, kind, query, guid, slug, parent_id, tags"
+            " FROM collection")
+        con.execute("DROP TABLE collection")
+        con.execute("ALTER TABLE collection_new RENAME TO collection")
+        con.commit()
+        con.execute("PRAGMA foreign_keys=ON")
+    # backfill: single-kind collections adopt their type
+    for row in con.execute("SELECT id FROM collection").fetchall():
+        kinds = [r[0] for r in con.execute(
+            "SELECT DISTINCT item_kind FROM collection_ref"
+            " WHERE collection_id = ?", (row["id"],))]
+        if len(kinds) == 1:
+            con.execute("UPDATE collection SET kind = ? WHERE id = ?"
+                        " AND kind IS NULL", (kinds[0], row["id"]))
+    # heal duplicate NULL-kind rows (NULLs are distinct under
+    # UNIQUE(name, kind): a pre-fix ensure_defaults stacked one
+    # 'Starred Assets' per launch). Keep the oldest of each group.
+    con.execute(
+        "DELETE FROM collection_ref WHERE collection_id IN ("
+        "  SELECT id FROM ("
+        "    SELECT c.id FROM collection c JOIN collection m"
+        "      ON m.name = c.name AND m.kind IS c.kind"
+        "     WHERE c.id > m.id))")
+    con.execute(
+        "DELETE FROM collection WHERE id IN ("
+        "  SELECT id FROM ("
+        "    SELECT c.id FROM collection c JOIN collection m"
+        "      ON m.name = c.name AND m.kind IS c.kind"
+        "     WHERE c.id > m.id))")
+    con.commit()
+
+
 STARRED_TAG = "starred"
 STARRED_COLLECTION = "Starred Assets"
 
 
 def ensure_defaults(con: sqlite3.Connection) -> None:
     """The 'starred' tag and 'Starred Assets' collection exist from the
-    first launch (idempotent — INSERT OR IGNORE on the unique names)."""
+    first launch. Idempotent — but note kind-aware matching: under
+    UNIQUE(name, kind) a NULL kind is DISTINCT from itself in sqlite's
+    unique index, so INSERT OR IGNORE alone would stack a new copy on
+    every launch (#141)."""
     con.execute("INSERT OR IGNORE INTO tag(name) VALUES (?)", (STARRED_TAG,))
-    con.execute("INSERT OR IGNORE INTO collection(name) VALUES (?)",
-                (STARRED_COLLECTION,))
+    row = con.execute(
+        "SELECT id FROM collection WHERE name = ? AND kind IS NULL",
+        (STARRED_COLLECTION,)).fetchone()
+    if row is None:
+        con.execute(
+            "INSERT INTO collection(name, kind, guid) VALUES (?, NULL, ?)",
+            (STARRED_COLLECTION, new_guid()))
+    con.commit()
 
 
 def _starred_ids(con: sqlite3.Connection) -> tuple[int, int]:
@@ -355,12 +783,13 @@ def _starred_ids(con: sqlite3.Connection) -> tuple[int, int]:
     starring must always work."""
     tag = con.execute("SELECT id FROM tag WHERE name = ?",
                       (STARRED_TAG,)).fetchone()
-    coll = con.execute("SELECT id FROM collection WHERE name = ?",
-                       (STARRED_COLLECTION,)).fetchone()
+    coll = con.execute(
+        "SELECT id FROM collection WHERE name = ? AND kind IS NULL",
+        (STARRED_COLLECTION,)).fetchone()
     tid = tag["id"] if tag else con.execute(
         "INSERT INTO tag(name) VALUES (?)", (STARRED_TAG,)).lastrowid
     cid = coll["id"] if coll else con.execute(
-        "INSERT INTO collection(name) VALUES (?)",
+        "INSERT INTO collection(name, kind) VALUES (?, NULL)",
         (STARRED_COLLECTION,)).lastrowid
     return tid, cid
 
@@ -412,14 +841,16 @@ def delete_tag(con: sqlite3.Connection, name: str) -> bool:
     return True
 
 
-COLLECTION_KINDS = ("icon", "font", "snippet", "palette")
+COLLECTION_KINDS = ("icon", "font", "image", "video", "audio", "doc",
+                    "data", "spatial", "timeseries", "markdown",
+                    "snippet", "palette")
 
 
 def collection_tree(con: sqlite3.Connection) -> list[dict]:
-    """Every collection with parent, tags, and per-kind member counts —
-    parents before children, ready for a one-level tree render."""
+    """Every collection with parent, kind, tags, and per-kind member
+    counts — parents before children, ready for a one-level tree render."""
     rows = [dict(r) for r in con.execute(
-        "SELECT id, name, parent_id, tags FROM collection"
+        "SELECT id, name, parent_id, tags, kind FROM collection"
         " ORDER BY name COLLATE NOCASE")]
     counts: dict[int, dict] = {}
     for r in con.execute(
@@ -435,11 +866,19 @@ def collection_tree(con: sqlite3.Connection) -> list[dict]:
 
 
 def create_sub_collection(con: sqlite3.Connection, name: str,
-                          parent_id: int = 0, tags: str = "") -> int:
+                          parent_id: int = 0, tags: str = "",
+                          kind: str = "") -> int:
     name = (name or "").strip() or "Untitled collection"
+    parent_id = int(parent_id) if parent_id else 0
+    if not kind and parent_id:
+        # a sub-collection of a typed parent belongs to the same type
+        prow = con.execute("SELECT kind FROM collection WHERE id = ?",
+                           (parent_id,)).fetchone()
+        kind = (prow["kind"] if prow else None) or ""
     cur = con.execute(
-        "INSERT INTO collection(name, parent_id, tags) VALUES (?, ?, ?)",
-        (name, int(parent_id) if parent_id else None, tags))
+        "INSERT INTO collection(name, parent_id, tags, kind, guid)"
+        " VALUES (?, ?, ?, ?, ?)",
+        (name, parent_id or None, tags, kind or None, new_guid()))
     con.commit()
     return int(cur.lastrowid or 0)
 
@@ -464,19 +903,31 @@ def delete_collection(con: sqlite3.Connection, coll_id: int) -> None:
 def add_collection_ref(con: sqlite3.Connection, coll_id: int, kind: str,
                        item_id: int, label: str = "") -> bool:
     """Attach any asset-kind row to a collection. Returns False for an
-    unknown kind or a row that does not exist."""
+    unknown kind, a row that does not exist, or a kind mismatch —
+    collections are single-type (#141). An untyped collection locks to
+    the kind of its first ref."""
     if kind not in COLLECTION_KINDS:
         return False
-    if kind in ("icon", "font"):
-        ok = con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
-                         (item_id, kind)).fetchone()
-    elif kind == "snippet":
+    if kind == "snippet":
         ok = con.execute("SELECT 1 FROM snippet WHERE id = ?",
                          (item_id,)).fetchone()
-    else:
+    elif kind == "palette":
         ok = con.execute("SELECT 1 FROM palette WHERE id = ?",
                          (item_id,)).fetchone()
+    else:
+        ok = con.execute("SELECT 1 FROM asset WHERE id = ? AND kind = ?",
+                         (item_id, kind)).fetchone()
     if not ok:
+        return False
+    crow = con.execute("SELECT kind FROM collection WHERE id = ?",
+                       (coll_id,)).fetchone()
+    if crow is None:
+        return False
+    if crow["kind"] is None:
+        # first ref into an untyped collection sets its type
+        con.execute("UPDATE collection SET kind = ? WHERE id = ?",
+                    (kind, coll_id))
+    elif crow["kind"] != kind:
         return False
     con.execute(
         "INSERT OR IGNORE INTO collection_ref(collection_id, item_kind,"
@@ -512,6 +963,37 @@ def is_starred(con: sqlite3.Connection, item_id: int,
     return row is not None
 
 
+def filesystem_type(path: str | os.PathLike,
+                    mounts_path: str = "/proc/mounts") -> str:
+    """Filesystem type hosting `path` (Linux /proc/mounts; '' elsewhere).
+
+    #61 diagnostics: a read stall on a non-WAL-capable filesystem
+    (network home mounts, some FUSE/overlay setups) looks exactly like
+    a logic freeze in the freeze-watchdog dumps — the dumps name the
+    statement, never the storage. Every crash-log launch line now
+    records this so the next report answers it outright.
+    """
+    if sys.platform != "linux":
+        return ""
+    real = os.path.realpath(str(path))
+    best_mnt, best_fs = "", ""
+    try:
+        with open(mounts_path, encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                mnt = (parts[1].replace("\\040", " ")
+                       .replace("\\011", "\t").replace("\\134", "\\"))
+                if mnt == "/" or real == mnt \
+                        or real.startswith(mnt.rstrip("/") + "/"):
+                    if len(mnt) >= len(best_mnt):
+                        best_mnt, best_fs = mnt, parts[2]
+    except OSError:
+        return ""
+    return best_fs
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     """Open (and initialise) the library database. WAL + foreign keys on."""
     # timeout=30: with two scan workers writing concurrently, polite
@@ -519,8 +1001,26 @@ def connect(path: str | Path) -> sqlite3.Connection:
     # tight once fonts+icons collided at startup)
     con = sqlite3.connect(str(path), timeout=30)
     con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
+    mode = con.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+    # NORMAL under WAL: commits don't fsync on every transaction — the
+    # chunked scan commits (400 rows apiece) otherwise pay a full disk
+    # flush each, and a 1M-file import pays it 2500 times. WAL +
+    # NORMAL is the SQLite-recommended durability pairing; power loss
+    # can only lose the last transactions, never corrupt the DB.
+    con.execute("PRAGMA synchronous=NORMAL")
     con.execute("PRAGMA foreign_keys=ON")
+    if str(mode).lower() != "wal":
+        # #61: WAL silently unavailable (network/overlay filesystems
+        # refuse it) means rollback-journal mode — every operation takes
+        # fcntl locks that can stall for whole lock-timeout periods and
+        # freeze the UI with NO writers anywhere in the dumps.
+        fs = filesystem_type(path)
+        print(
+            f"warning: {path} is on filesystem '{fs or 'unknown'}' —"
+            f" SQLite WAL unavailable (journal mode '{mode}'); database"
+            " operations will be slow and can stall for seconds under"
+            " load. Consider a data directory on a local disk (--db or"
+            " XDG_DATA_HOME).", file=sys.stderr)
     con.executescript(SCHEMA)
     _migrate(con)
     ensure_defaults(con)
@@ -657,3 +1157,77 @@ def variants_for(con: sqlite3.Connection, asset_id: int) -> list[dict]:
         (row["theme"], row["name"], asset_id),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── structured-data content (data / timeseries kinds) ────────────────
+# Sensors and services push updates through the REST API; the GUI reads
+# the same rows. Payload is one JSON document per asset; every write
+# bumps `revision` so pollers can detect change.
+
+def get_asset_data(con: sqlite3.Connection, asset_id: int) -> dict | None:
+    import json as _json
+    row = con.execute(
+        "SELECT revision, payload, updated FROM asset_data WHERE asset_id = ?",
+        (asset_id,)).fetchone()
+    if row is None:
+        return None
+    try:
+        doc = _json.loads(row["payload"])
+    except ValueError:
+        doc = {}
+    return {"asset_id": int(asset_id), "revision": row["revision"],
+            "payload": doc, "updated": row["updated"]}
+
+
+def put_asset_data(con: sqlite3.Connection, asset_id: int,
+                   payload: dict) -> dict:
+    """Create or fully replace an asset's data payload."""
+    import json as _json
+    row = con.execute("SELECT revision FROM asset_data WHERE asset_id = ?",
+                      (asset_id,)).fetchone()
+    rev = (row["revision"] + 1) if row else 1
+    con.execute(
+        "INSERT INTO asset_data(asset_id, revision, payload, updated)"
+        " VALUES (?, ?, ?, ?)"
+        " ON CONFLICT(asset_id) DO UPDATE SET revision = excluded.revision,"
+        " payload = excluded.payload, updated = excluded.updated",
+        (asset_id, rev, _json.dumps(payload or {}), time.time()))
+    con.commit()
+    return get_asset_data(con, asset_id) or {
+        "asset_id": int(asset_id), "revision": rev, "payload": payload or {},
+        "updated": 0.0}
+
+
+def patch_asset_data(con: sqlite3.Connection, asset_id: int,
+                     merge: dict) -> dict:
+    """Merge keys into an existing payload (shallow; nested paths via
+    dotted keys are NOT expanded — clients send full subtrees)."""
+    import json as _json
+    cur = get_asset_data(con, asset_id) or {"payload": {}, "revision": 0}
+    doc = dict(cur["payload"])
+    doc.update(merge or {})
+    return put_asset_data(con, asset_id, doc)
+
+
+def delete_asset_data(con: sqlite3.Connection, asset_id: int) -> bool:
+    cur = con.execute("DELETE FROM asset_data WHERE asset_id = ?",
+                      (asset_id,))
+    con.commit()
+    return cur.rowcount > 0
+
+
+def append_asset_points(con: sqlite3.Connection, asset_id: int,
+                        points: list) -> dict:
+    """Timeseries append: points [{t, v} or {t, k: v, ...}] land at the
+    end of payload.points; the document stays bounded by _MAX_TS_POINTS."""
+    import json as _json
+    if not isinstance(points, list):
+        raise ValueError("points must be a list")
+    cur = get_asset_data(con, asset_id) or {"payload": {}, "revision": 0}
+    doc = dict(cur["payload"])
+    existing = doc.get("points") or []
+    doc["points"] = (existing + list(points))[-_MAX_TS_POINTS:]
+    return put_asset_data(con, asset_id, doc)
+
+
+_MAX_TS_POINTS = 100000

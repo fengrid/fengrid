@@ -20,9 +20,14 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat as _stat
 import subprocess
 import time
 from pathlib import Path
+
+from . import sandbox as core_sandbox
+
+stat_S_ISREG = _stat.S_ISREG
 
 TRANSPORTS = [
     {"key": "local", "label": "Local filesystem", "kind": "builtin"},
@@ -108,24 +113,28 @@ def _run(argv: list) -> int:
 
 def signature(path: str | Path) -> str:
     """Cheap change fingerprint: file count + newest mtime + total size.
-    One directory walk, no content reads — safe for huge trees."""
-    root = Path(path)
-    if not root.exists():
-        return "missing"
+    One directory walk, no content reads — safe for huge trees.
+    SEC-5: os.walk with followlinks=False (rglob follows directory
+    symlinks and can walk the whole filesystem)."""
     n = 0
     newest = 0.0
     total = 0
+    if not os.path.exists(str(path)):
+        return "missing"
     try:
-        for child in root.rglob("*"):
-            try:
-                st = child.stat() if child.is_file() else None
-            except OSError:
-                continue
-            if st is None:
-                continue
-            n += 1
-            total += st.st_size
-            newest = max(newest, st.st_mtime)
+        for dirpath, dirnames, files in os.walk(str(path), followlinks=False):
+            core_sandbox.prune_sandbox_dirs(dirnames)
+            for fn in files:
+                try:
+                    st = os.stat(os.path.join(dirpath, fn),
+                                 follow_symlinks=False)
+                except OSError:
+                    continue
+                if not stat_S_ISREG(st.st_mode):
+                    continue
+                n += 1
+                total += st.st_size
+                newest = max(newest, st.st_mtime)
     except OSError as e:
         return f"error:{e.__class__.__name__}"
     return f"{n}:{total}:{int(newest)}"
@@ -156,3 +165,27 @@ def due(row: dict, now: float | None = None,
     interval = max(15, int(row.get("interval") or 60))
     now = time.time() if now is None else now
     return (now - last_run) >= interval
+
+
+def scaled_interval(base: int, file_count: int, cap: int = 600) -> int:
+    """Adaptive floor for a watch's poll interval.
+
+    One signature() walk costs roughly file_count/20000 seconds (an
+    os.walk plus a stat per file); polling a 1M-file tree every 5 s tick
+    turned the 'cheap unchanged path' into a permanent disk/CPU hog. The
+    returned interval targets a ~10% walk duty cycle and never shortens
+    the user's configured interval — it only lengthens it (capped at
+    `cap` seconds so even huge trees are still checked periodically).
+    """
+    walk = int(file_count / 20000)          # estimated seconds per walk
+    return min(cap, max(int(base), walk * 10))
+
+
+def sig_count(sig: str | None) -> int:
+    """File count from a signature() string ('n:total:newest'); 0 unknown."""
+    if not sig or ":" not in str(sig):
+        return 0
+    try:
+        return int(str(sig).split(":", 1)[0])
+    except (ValueError, IndexError):
+        return 0

@@ -1,0 +1,75 @@
+QRhiGles2: Failed to create temporary context
+QRhiGles2: Failed to create context
+This plugin does not support createPlatformVulkanInstance
+QVulkanInstance: Failed to initialize Vulkan
+Unable to detect GPU vendor.
+<Unknown File>: QML QQuickWebEngineProfile: Please use WebEngineProfilePrototype for profile creation from 6.9, as this function will be deprecated in the future releases
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/card0: Permission denied
+
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:898:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 12. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:892:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 11. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+file:///home/agents/agents/projects/fengrid/qt/qml/components/SourceControlPanel.qml:183:13: Unable to assign [undefined] to bool
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+screenshot: /tmp/fg_console_icons.png
+--- pane 1 run ---
+QRhiGles2: Failed to create temporary context
+QRhiGles2: Failed to create context
+This plugin does not support createPlatformVulkanInstance
+QVulkanInstance: Failed to initialize Vulkan
+Unable to detect GPU vendor.
+<Unknown File>: QML QQuickWebEngineProfile: Please use WebEngineProfilePrototype for profile creation from 6.9, as this function will be deprecated in the future releases
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/card0: Permission denied
+
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:898:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 12. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:892:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 11. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+file:///home/agents/agents/projects/fengrid/qt/qml/components/SourceControlPanel.qml:183:13: Unable to assign [undefined] to bool
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+screenshot: /tmp/fg_pane1.png
+--- pane 2 run ---
+QRhiGles2: Failed to create temporary context
+QRhiGles2: Failed to create context
+This plugin does not support createPlatformVulkanInstance
+QVulkanInstance: Failed to initialize Vulkan
+Unable to detect GPU vendor.
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/card0: Permission denied
+
+<Unknown File>: QML QQuickWebEngineProfile: Please use WebEngineProfilePrototype for profile creation from 6.9, as this function will be deprecated in the future releases
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:898:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 12. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:892:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 11. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+file:///home/agents/agents/projects/fengrid/qt/qml/components/SourceControlPanel.qml:183:13: Unable to assign [undefined] to bool
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+screenshot: /tmp/fg_pane2.png
+--- pane 3 run ---
+QRhiGles2: Failed to create temporary context
+QRhiGles2: Failed to create context
+This plugin does not support createPlatformVulkanInstance
+QVulkanInstance: Failed to initialize Vulkan
+Unable to detect GPU vendor.
+<Unknown File>: QML QQuickWebEngineProfile: Please use WebEngineProfilePrototype for profile creation from 6.9, as this function will be deprecated in the future releases
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/renderD128: Permission denied
+
+libEGL warning: failed to open /dev/dri/card0: Permission denied
+
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:898:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 12. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:892:5: QML Shortcut: Shortcut: Only binding to one of multiple key bindings associated with 11. Use 'sequences: [ <key> ]' to bind to all of them.
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+file:///home/agents/agents/projects/fengrid/qt/qml/components/SourceControlPanel.qml:183:13: Unable to assign [undefined] to bool
+file:///home/agents/agents/projects/fengrid/qt/qml/Main.qml:579: ReferenceError: hovered is not defined
+screenshot: /tmp/fg_pane3.png

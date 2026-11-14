@@ -22,7 +22,6 @@ MenuItem {
     background: Rectangle {
         implicitHeight: 28
         radius: 5
-        color: item.enabled && item.highlighted
-               ? theme.tokens.surface2 : "transparent"
+        color: item.enabled && item.highlighted ? theme.tokens.surface2 : "transparent"
     }
 }

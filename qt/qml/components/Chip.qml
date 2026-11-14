@@ -5,7 +5,7 @@ Rectangle {
     id: chip
     property string label
     property bool on: false
-    signal picked()
+    signal picked
 
     width: labelText.implicitWidth + 22
     height: 24

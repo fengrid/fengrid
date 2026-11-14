@@ -7,6 +7,7 @@ a JSON dict per project, and exports go through core.projects.export_project.
 
 from __future__ import annotations
 
+import html as _html_mod
 import json
 import os
 import shutil
@@ -15,6 +16,7 @@ import threading
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from ..core import assetrefs as core_assetrefs
 from ..core import projects as core_projects
 from ..core import settings as core_settings
 
@@ -60,7 +62,11 @@ class Projects(QObject):
         self._current_id = -1
         self._current: dict = {}
         self._ask_thread = None
+        self._sc_ref = None          # SourceControl bridge (optional)
         self._refresh()
+
+    def _sc_bridge(self):
+        return self._sc_ref
 
     # ------------------------------------------------------------ properties
 
@@ -88,7 +94,7 @@ class Projects(QObject):
     def assets(self):
         return self._current.get("assets", [])
 
-    @Property(int, constant=True)
+    @Property(int, notify=projectsChanged)
     def projectCount(self):
         return len(self._projects)
 
@@ -107,6 +113,10 @@ class Projects(QObject):
     def create(self, name: str, description: str = "", tags: str = ""):
         pid = core_projects.create_project(self._con, name, description, tags)
         self.open(pid)
+        # open() only swaps _current — the sidebar list and projectCount
+        # must refresh too, or the new project is invisible and the
+        # "No projects yet" empty state sticks (#57)
+        self._refresh()
         self.message.emit("Project created: " + (name.strip() or "Untitled project"))
 
     @Slot(int)
@@ -115,6 +125,12 @@ class Projects(QObject):
         self._current = core_projects.get_project(self._con, pid) or {}
         self.currentChanged.emit()
         self.assetsChanged.emit()
+        # point source control at this project (auto git init on first
+        # open — the initial snapshot commit lands with the first Save)
+        sc = self._sc_bridge() if callable(getattr(self, "_sc_bridge",
+                                                   None)) else None
+        if sc is not None and self._current:
+            sc.attach(self._current.get("name", ""), "project")
 
     @Slot()
     def new_project(self):
@@ -151,9 +167,39 @@ class Projects(QObject):
         except ValueError as exc:
             self.message.emit("Bad settings JSON: %s" % exc)
             return
+        old = dict(self._current.get("settings") or {})
         core_projects.update_project(self._con, self._current_id, settings=s)
         self._current = core_projects.get_project(self._con, self._current_id) or {}
         self.currentChanged.emit()
+        # git: every Save is a commit on fengrid-main (bridge optional —
+        # the panel is inert when the sc bridge isn't wired in QA rigs)
+        sc = self._sc_bridge() if callable(getattr(self, "_sc_bridge", None)) \
+            else None
+        if sc is not None:
+            sc.attach(self._current.get("name", ""), "project")
+            sc.commit("Save: settings updated")
+
+    def bind_source_control(self, sc) -> None:
+        """__main__ wires the shared SourceControl bridge in (QA rigs may
+        omit it — every sc call site tolerates its absence)."""
+        self._sc_ref = sc
+
+    # ------------------------------------------------------- batch support
+    @Slot(str, result=bool)
+    def batch_begin(self, label: str) -> bool:
+        """Auto-branch before a bulk change (git spec: batch operations
+        create a branch first, then the user reviews commit/discard).
+        False = no repo attached, the operation runs unprotected."""
+        sc = self._sc_ref
+        if sc is None:
+            return False
+        return sc.batch_begin(label) is not None
+
+    @Slot(str, bool)
+    def batch_finish(self, label: str, keep: bool) -> None:
+        sc = self._sc_ref
+        if sc is not None:
+            sc.batch_finish(label, keep)
 
     @Slot(str, str, str)
     def set_setting(self, path: str, value: str, vtype: str):
@@ -300,8 +346,17 @@ class Projects(QObject):
         html = core_projects.build_site_html(self._con, self._current, g,
                                              inline_css=True)
         for a, (arcname, abspath) in g["icons"] + g["fonts"]:
-            html = html.replace(arcname, "fengrid-asset://" + abspath)
-        return html
+            # SEC-2: the path lands inside HTML attribute values in the
+            # preview document — escape it so a crafted path cannot
+            # break out of the attribute (the DOM decodes entities
+            # before resolving the URL, so the scheme handler still
+            # receives the raw path)
+            html = html.replace(arcname, "fengrid-asset://"
+                                + _html_mod.escape(abspath, quote=True))
+        # [[ asset ]] references (slug / GUID / path forms) expand to
+        # fengrid-asset:// urls the sandboxed preview can serve
+        expanded, _unresolved = core_assetrefs.expand(self._con, html)
+        return expanded
 
     @Slot(str, str)
     def export(self, dest: str, fmt: str):

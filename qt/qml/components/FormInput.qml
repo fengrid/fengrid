@@ -14,8 +14,15 @@ ColumnLayout {
     property alias text: input.text
     property alias echoMode: input.echoMode
     property alias inputMethodHints: input.inputMethodHints
+    // re-emitted from the inner TextInput so callers can commit on
+    // focus loss / Enter without reaching into the private `input` id
+    signal editingFinished
+    // per-keystroke (live filtering in dialogs, #33)
+    signal textEdited(string text)
 
-    function forceActiveFocus() { input.forceActiveFocus() }
+    function forceActiveFocus() {
+        input.forceActiveFocus();
+    }
 
     spacing: 3
     Layout.fillWidth: true
@@ -35,8 +42,7 @@ ColumnLayout {
         implicitHeight: 30
         radius: 6
         color: theme.tokens.surface2
-        border.color: input.activeFocus ? theme.tokens.accent
-                                        : theme.tokens.border
+        border.color: input.activeFocus ? theme.tokens.accent : theme.tokens.border
         TextInput {
             id: input
             anchors.fill: parent
@@ -48,6 +54,8 @@ ColumnLayout {
             color: theme.tokens.text
             clip: true
             selectByMouse: true
+            onTextEdited: root.textEdited(text)
+            onEditingFinished: root.editingFinished()
         }
     }
 }

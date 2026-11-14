@@ -26,14 +26,17 @@ from .db import set_setting as _set
 # user preferences that must survive a database switch (app registry)
 GLOBAL_KEYS = frozenset({
     "theme",
+    "accent",
     "icon_size",
     "search_mode",
     "editor_keymap",
     "colors_rule",
+    "colors_explorer",
     "startup_pane",
     "update_check",
     "last_export_dir",
     "command_shortcut",
+    "web_previews",
 })
 
 _REGISTRY: sqlite3.Connection | None = None

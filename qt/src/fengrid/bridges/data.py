@@ -28,6 +28,7 @@ from ..core import backup as core_backup
 from ..core import db as core_db
 from ..core import exportplus as xp
 from ..core import indexer, ingest, settings as core_settings
+from ..core import paths as core_paths
 from ..core import watch as core_watch
 
 
@@ -103,6 +104,7 @@ class DataIO(QObject):
         self._registry = registry_path
         self._thread = None
         self._worker = None
+        self._admin_t0 = 0.0
         self._import_opts = self._load_json("import_opts",
                                             _default_import_opts())
         self._export_opts = self._load_json("export_opts",
@@ -305,6 +307,8 @@ class DataIO(QObject):
     def importFolder(self, path: str) -> None:
         """Folders become SOURCES (linked, not copied) — the scanner
         indexes them; identical to the first-run folder flow."""
+        path = core_paths.local_path(path)   # dialog callers may pass a URL
+
         def job():
             desc = ingest.import_folder(path)
             con = core_db.connect(self._db_path)
@@ -317,7 +321,15 @@ class DataIO(QObject):
                         " VALUES(?, ?, ?, 1)",
                         (desc["kind"], desc["path"],
                          Path(desc["path"]).name))
-                    con.commit()
+                else:
+                    # #82: first-run pre-registers detected system paths as
+                    # DISABLED rows (#61/#64). Re-adding one of those through
+                    # this dialog is an explicit user opt-in — the old code
+                    # only INSERTed missing rows, so the existing disabled row
+                    # stayed disabled and scan_fonts skipped it ("0 new files").
+                    con.execute("UPDATE source SET enabled = 1 WHERE id = ?",
+                                (row[0],))
+                con.commit()
                 sources = [(row[0] if row else
                             con.execute("SELECT id FROM source"
                                         " WHERE path = ?",
@@ -440,6 +452,8 @@ class DataIO(QObject):
     @Slot(str, str, bool)
     def exportBundle(self, scope: str, dest: str,
                      with_files: bool = True) -> None:
+        dest = core_paths.local_path(dest)   # dialog callers may pass a URL
+
         def job():
             with _job_con(self._db_path) as con:
                 rep = xp.export_bundle(con, dest, scope=scope,
@@ -523,10 +537,20 @@ class DataIO(QObject):
                 return
             if self._worker is not None:     # a job is mid-flight
                 return
+            dest = os.path.join(self._data_dir, "backups")
+            # skip-when-clean: snapshot the file fingerprints FIRST, then
+            # only run the (page-by-page, seconds at six-figure asset
+            # counts) backup when a database changed since the last one
+            fp = core_backup.auto_backup_fingerprint(self._db_path,
+                                                     self._registry)
+            if fp and not core_backup.auto_backup_needed(
+                    self._db_path, dest, self._registry):
+                return
             core_backup.backup(
-                self._db_path,
-                os.path.join(self._data_dir, "backups"),
+                self._db_path, dest,
                 registry_path=self._registry, label="auto")
+            core_backup.record_auto_backup_state(self._db_path, dest,
+                                                 self._registry)
         except Exception:                    # never block quitting
             pass
 
@@ -588,6 +612,14 @@ class DataIO(QObject):
         # bound-method receivers → queued to the main thread (same rule
         # as _start; a plain-closure connect would run in the worker)
         self._pending_admin = (op, th, on_done)
+        self._admin_t0 = time.monotonic()
+        # #140 measurement: 'admin start' + a later 'admin done/fail'
+        # line bracket every admin job in crash.log. A crash BETWEEN the
+        # lines implicates the worker job itself; a crash AFTER 'done'
+        # implicates the completion path (signal emissions / QML
+        # bindings reacting to the result) — the discriminator the
+        # reporter-only crash needs.
+        self._note_admin(f"admin start {op}")
         wk.moveToThread(th)
         th.started.connect(wk.run)
         wk.done.connect(self._admin_done)
@@ -598,10 +630,26 @@ class DataIO(QObject):
         self.busyChanged.emit()
         th.start()
 
+    def _note_admin(self, line: str) -> None:
+        """Append one telemetry line to crash.log (same sink the dialog
+        telemetry uses — next to the database). Never raises."""
+        try:
+            with open(os.path.join(os.path.dirname(self._db_path)
+                                   if self._db_path else ".",
+                                   "crash.log"), "a",
+                      encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} — "
+                        f"{line}\n")
+        except OSError:
+            pass
+
     @Slot(object)
     def _admin_done(self, payload) -> None:
         op, th, on_done = self._pending_admin
         self._clear(th)
+        self._note_admin(
+            f"admin done {op} "
+            f"{int((time.monotonic() - self._admin_t0) * 1000)}ms")
         if on_done is not None:
             on_done(payload)
 
@@ -609,6 +657,9 @@ class DataIO(QObject):
     def _admin_failed(self, err: str) -> None:
         op, th, _ = self._pending_admin
         self._clear(th)
+        self._note_admin(
+            f"admin fail {op} "
+            f"{int((time.monotonic() - self._admin_t0) * 1000)}ms: {err}")
         self.adminDone.emit(op, err)
         self.message.emit(f"{op}: {err}")
 
@@ -675,13 +726,18 @@ class DataIO(QObject):
             return                          # serialized: one job at a time
         try:
             rows = [dict(r) for r in self._con.execute(
-                "SELECT w.id, w.interval, w.enabled, s.last_run"
+                "SELECT w.id, w.interval, w.enabled, s.last_run, s.last_sig"
                 " FROM watch_source w LEFT JOIN watch_state s"
                 " ON s.watch_id = w.id WHERE w.enabled = 1")]
         except Exception:                    # db closed during quit
             return
         for r in rows:
-            if core_watch.due({"interval": r["interval"]},
+            # adaptive floor: huge trees get a longer interval so the
+            # signature walk's duty cycle stays sane (never shortens the
+            # user's configured interval — see core_watch.scaled_interval)
+            interval = core_watch.scaled_interval(
+                r["interval"], core_watch.sig_count(r["last_sig"]))
+            if core_watch.due({"interval": interval},
                               last_run=r["last_run"] or 0):
                 self._run_watch(int(r["id"]), force=False)
                 break
@@ -895,37 +951,8 @@ def _admin_summary(op: str, data) -> str:
 
 def _index_materialised(db_path: str, rep: dict, opts: dict) -> dict:
     """Scan every directory we just wrote into (icons + fonts)."""
-    dest = rep.get("dest")
-    if not dest or not rep.get("placed"):
-        return {"indexed": 0}
-    con = core_db.connect(db_path)
-    total = 0
-    try:
-        row = con.execute("SELECT id FROM source WHERE path = ?",
-                          (dest,)).fetchone()
-        if row is None:
-            # sniff: any font files in there?
-            has_font = any(Path(dest).rglob("*.ttf")) or \
-                any(Path(dest).rglob("*.otf"))
-            con.execute(
-                "INSERT INTO source(kind, path, label, enabled)"
-                " VALUES(?, ?, ?, 1)",
-                ("fontroot" if has_font and opts.get("mode") != "copy"
-                 else ("fontroot" if has_font else "folder"),
-                 dest, Path(dest).parent.name + "/" + Path(dest).name))
-            con.commit()
-            row = con.execute("SELECT id FROM source WHERE path = ?",
-                              (dest,)).fetchone()
-        has_font = any(Path(dest).rglob(ext)
-                       for ext in ("*.ttf", "*.otf", "*.ttc"))
-        if has_font:
-            fr = ingest.scan_fonts_into(con, [(row[0], dest)])
-            total += int(fr.get("total", 0))
-        ir = ingest.scan_into(con, [(row[0], dest)])
-        total += int(ir.get("total", 0))
-    finally:
-        con.close()
-    return {"indexed": total, "rescan": True}
+    return ingest.index_materialised(db_path, rep,
+                                     mode=str(opts.get("mode", "copy")))
 
 
 def _watch_state(db_path: str, watch_id: int) -> dict:

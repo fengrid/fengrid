@@ -6,6 +6,135 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security (pre-release review, issues #3–#11)
+
+- **SEC-1 (high, #3)** — fiddle preview: expanded asset paths are
+  context-escaped so `</script`/`</style` cannot break out of the
+  script/style elements and inject markup.
+- **SEC-2 (high, #4)** — markdown URLs and display text are
+  HTML-escaped before `src`/`href` embedding; project preview escapes
+  substituted `fengrid-asset://` paths in attribute values.
+- **SEC-3 (high, #5)** — raster identification caps declared
+  dimensions at 256 Mpix *before* decoding; a small file with a huge
+  header can no longer force a ~30 GB allocation.
+- **SEC-4 (high, #6)** — SVG parsing is fail-secure: without
+  `defusedxml`, SVGs carrying DOCTYPE/entity declarations are not
+  parsed (billion-laughs hardening).
+- **SEC-5 (medium, #7)** — import/watch directory walks no longer
+  follow symlinks (`rglob` → `os.walk(followlinks=False)`).
+- **SEC-6 (medium, #8)** — ZIP imports enforce 512 MB per-member and
+  2 GB total uncompressed budgets, aborting disk-fill bombs.
+- **SEC-8 (medium, #10)** — the `fengrid-asset://` scheme re-verifies
+  at serve time that the real path (symlink-resolved) lies under an
+  enabled source root — crafted DB rows and post-scan symlink swaps
+  cannot serve arbitrary local files.
+- **SEC-9 (medium, #11)** — exports cap the working raster at
+  128 Mpix before conversion ('orig' exports downscale, not OOM).
+
+### Performance (issues #12–#14)
+
+- Font rescan: single shared directory walk for pre-count + scan
+  (was: two walks per launch); fontTools identification of
+  changed/new files parallelised across 4 workers (#12, partial).
+- Rescan straggler sweep fetches only the current root's `scan_state`
+  rows (index-assisted LIKE) instead of the whole table (#13).
+- Markdown preview regeneration debounced to 150 ms (#14).
+
+### Accessibility (issues #15–#18)
+
+- Rail rows and section headers are keyboard-reachable (Tab, Return/
+  Space to activate, arrows to walk; visible focus rings).
+- Icon-only controls expose accessible names/descriptions.
+- Collapse state, repo clean/dirty and uncommitted-changes state are
+  announced to assistive technology.
+- LIGHT theme `text_muted` and code `ink_faint` darkened to meet
+  WCAG AA contrast on their surfaces.
+
+### Fixed
+
+- **WOFF2 webfont exports were broken in every environment** — the default
+  `font_fmts: ["woff2"]` export path (`exportplus.convert_font`) saves
+  through fontTools' WOFF2 encoder, which hard-requires brotli, but no
+  manifest ever declared it: dev venvs raised `ImportError: No module
+  named brotli` (6 tests) and every frozen bundle shipped without the
+  extension. brotli is now a declared runtime dependency, so uv installs
+  it everywhere and PyInstaller bundles it.
+
+### Changed
+
+- **Packaging moved to uv** (project mode, replacing pip + the two floating
+  requirements files). `qt/pyproject.toml` is now the single source of
+  truth: the runtime dependency list absorbs the app's actual imports
+  (`fonttools`, `platformdirs`), the never-imported `watchdog` entry is
+  dropped, and build/QA tooling moved to dependency-groups (`build` =
+  PyInstaller, `dev` = pytest/ruff). The committed `qt/uv.lock` freezes
+  every install — pipelines and local dev run `uv sync --frozen`, so two
+  builds of the same commit ship identical dependency versions. Source
+  installs become `uv sync` (+ `uv run`) instead of venv + `pip install
+  -e .`; `build/requirements-build.txt` / `build/requirements-dev.txt`
+  are deleted.
+
+### Removed
+
+- **The 0.x web interface is retired** — Qt 6 is now the only Fengrid.
+  Deleted: the five single-file HTML panes (`index.html`, `fonts.html`,
+  `code.html`, `colors.html`, `projects.html`), the old webshare server
+  (`server/` — serve.py, import_engine, connect page, vendored QR lib),
+  the web-app installers and updater (`install.sh`, `install.ps1`,
+  `update.sh`), and the 0.x shell tooling (`scan-icons.sh`,
+  `scan-fonts.sh`, `icon-meta.sh`, `refresh-icons.sh`) whose behaviour
+  lives on as in-process Python (`core/scanner.py`, `core/fonts.py`,
+  `core/indexer.py`). The GitHub Pages landing page and 0.x screenshots
+  are removed too; README/QUICKSTART/DEVELOPMENT are rewritten for the
+  Qt6 app. Migration note: 0.x installs are detected by the restore
+  script (running `serve.py` refuses a restore).
+
+### Added
+
+- **REST API v1** — `api/v1`: stdlib `ThreadingHTTPServer` with bearer-token
+  middleware, CORS, request logging; `TaskScheduler` thread pool; long
+  operations return `202` with a pollable job (`GET /jobs/{id}`). 29+
+  endpoints: health/version, inventory, assets (list/describe/PATCH
+  edit-update-save/star/tags/collect/copy), ingest (files/zip/folder —
+  imports are indexed automatically), export (icons/webfonts/palettes/
+  snippets/bundle), collections + refs, libraries, tags, custom fields,
+  projects, backups/restore, DB admin (check/vacuum/checkpoint/optimize/
+  rebuild_fts/sweep), watch folders. Ships with `openapi.yaml` (29 paths)
+  and a Postman collection covering every endpoint.
+- **Asset identity: GUID + slug** — every tracked object (asset, snippet,
+  palette, collection, library, project) carries a generated GUID
+  (assigned at first ingest, backfilled on migration) and a user-settable
+  `slug` (empty by default, globally unique). Slugs and GUIDs power
+  `[[ … ]]` asset references in snippets and projects.
+- **Multi-kind assets** — `core/kinds.py` registry: beyond icons and
+  fonts, Fengrid now tracks images, video, audio, documents, structured
+  data (json/xml/yml/csv/sql…), spatial (GeoJSON/KML/GPX/SHP…),
+  timeseries (HDF5/Arrow/…) and markdown files. Folder scans and imports
+  classify all kinds; non-rasters skip pixel identification.
+- **`[[ asset ]]` references** — link to any tracked object from
+  snippets and project code: `[[ slug ]]`, `[[ GUID ]]`, or path form
+  `[[ icon/adwaita/devices/audio-headphones-symbolic ]]`; expansion to
+  `fengrid-asset://` URLs in markdown previews, the web fiddle Run ▸
+  preview and the Projects preview; unresolved refs stay visible.
+  API: `/links/resolve`, `/links/expand`, `/lookup?slug=|guid=`.
+- **Structured-data content CRUD** — `asset_data` revisioned JSON payload
+  per data/timeseries asset; REST `GET/PUT/PATCH/DELETE
+  /assets/data/{id}/content` and `GET/POST /assets/data/{id}/points`
+  for sensor/service pushes (timeseries append, 100k-point cap).
+- **UI**: Fonts rail — Types above Families, all rail sections collapse
+  via chevron headers; Colors — 7-color schemes with an add-swatch tile
+  (5 default), contextual top bar in Terminal mode, single Save/Export
+  drop-down; inspector Identity section (GUID copy, slug edit with
+  uniqueness validation); Source tab in the Projects bottom dock.
+
+### Fixed
+
+- REST API ingest (files/zip) now indexes materialised imports — assets
+  are visible immediately after the import job completes, matching the
+  GUI bridge behaviour.
+- Smart collections resolve for every asset kind (legacy code used an
+  `asset_tag` join and grouped on the wrong column).
+
 ### Fixed
 
 - Terminal no longer floods with `qt.svg: Duplicate unique style id`

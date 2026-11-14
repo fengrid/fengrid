@@ -14,7 +14,12 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from ..core import colors as core_colors
 from ..core import db as core_db
+from ..core import paths as core_paths
+from ..core import presets as core_presets
 from ..core import settings
+
+
+_MAX_SWATCHES = 7
 
 
 class Colors(QObject):
@@ -26,6 +31,7 @@ class Colors(QObject):
     selectionChanged = Signal()
     nameChanged = Signal()
     ruleChanged = Signal()
+    presetCountChanged = Signal()
 
     def __init__(self, con, parent=None):
         super().__init__(parent)
@@ -44,11 +50,64 @@ class Colors(QObject):
         # optional collection filter for the side rail (palette kind)
         self._collection: int | None = None
         self._starred_only = False
+        # saved-library tag filter (rail Libraries row on this pane):
+        # comma tag list + match_all, filtered in Python over row["tags"]
+        self._lib_tags: list[str] = []
+        self._lib_match_all = True
+        # #141: palettes filed from applied Preset Libraries presets
+        self._preset_count = 0
         # active smart collection (sidebar) — criteria filtered in Python
         self._smart_id = 0
+        # optional undo bridge (projects.bind_source_control pattern):
+        # every editor-scale mutation snapshots the swatch list so
+        # Ctrl+Z can walk it back (spec: undo for fields/options)
+        self._undo_ref = None
+        # #162: the Library bridge (rail collections snapshot) — bound at
+        # startup so preset filing pokes its rail refresh
+        self._library = None
         self._refresh_palettes()
         # seed the pane with one roll so it never opens empty
         self._swatches = core_colors.generate(self._rule, [], mode="dark")
+
+    # ---------------------------------------------------------------- undo
+    def bind_undo(self, undo) -> None:
+        self._undo_ref = undo
+
+    def bind_library(self, library) -> None:
+        """#162: the rail's collections list is the Library bridge's
+        snapshot — filing an applied preset pokes its coalesced refresh
+        (same bind pattern as bind_undo), so the new Downloaded/pack
+        collection rows appear without a restart."""
+        self._library = library
+
+    def _snapshot(self) -> dict:
+        return {
+            "swatches": [dict(s) for s in self._swatches],
+            "name": self._name,
+            "pid": self._palette_id,
+        }
+
+    def restore_state(self, snap: dict) -> None:
+        self._swatches = [dict(s) for s in snap.get("swatches", [])]
+        self._name = snap.get("name", "") or ""
+        self._palette_id = snap.get("pid")
+        self._selected = -1
+        self.swatchesChanged.emit()
+        self.nameChanged.emit()
+        self.selectionChanged.emit()
+
+    def _begin(self):
+        return self._snapshot() if self._undo_ref is not None else None
+
+    def _end(self, pre, label: str, match: str | None = None) -> None:
+        if pre is None or self._undo_ref is None:
+            return
+        post = self._snapshot()
+        if match:
+            self._undo_ref.push_coalesce("colors.editor", label, post,
+                                         pre, match=match)
+        else:
+            self._undo_ref.push("colors.editor", label, post, pre)
 
     # ---------------------------------------------------------------- state
     @Property("QVariantList", notify=swatchesChanged)
@@ -59,6 +118,11 @@ class Colors(QObject):
             h, sat, li = core_colors.rgb2hsl(*rgb)
             cw = core_colors.contrast(rgb, (255, 255, 255))
             cb = core_colors.contrast(rgb, (16, 20, 24))
+            # #25: the lock glyph is tinted amber on locked swatches —
+            # amber on a pale swatch (Wheat ~1.1:1) is invisible, so the
+            # lock tint falls back to the swatch's best ink when amber
+            # cannot read
+            amber = core_colors.contrast(rgb, (245, 194, 92))
             out.append({
                 "hex": s["hex"], "locked": s["locked"],
                 "cw": round(cw, 1), "cb": round(cb, 1),
@@ -66,6 +130,8 @@ class Colors(QObject):
                 "wcagB": core_colors.wcag_label(cb),
                 "name": core_colors.color_name(s["hex"]),
                 "ink": core_colors.best_ink(rgb),
+                "lock_ink": "#F5C25C" if amber >= 3.0
+                else core_colors.best_ink(rgb),
                 # editor sliders read these; set_hsl converts back
                 "h": round(h), "s": round(sat), "l": round(li),
             })
@@ -139,6 +205,33 @@ class Colors(QObject):
     def starredOnly(self) -> bool:
         return self._starred_only
 
+    # ── saved-library tag filter (rail Libraries row, palette pane) ──
+    libTagsChanged = Signal()
+
+    @Property(str, notify=libTagsChanged)
+    def libraryTagFilter(self) -> str:
+        return ",".join(self._lib_tags)
+
+    # #141: palettes filed by applying a Preset Libraries palette
+    # preset (tagged 'preset') — the rail's Saved Presets row counts
+    # and browses them on the Colors pane
+    @Property(int, notify=presetCountChanged)
+    def presetPaletteCount(self) -> int:
+        return self._preset_count
+
+    @Slot(str, bool)
+    def set_library_tags(self, tags_csv: str, match_all: bool = True) -> None:
+        """Toggle the library-view tag filter on this pane (second call
+        with the same list clears it)."""
+        wanted = [t.strip() for t in str(tags_csv or "").split(",")
+                  if t.strip()]
+        if wanted and wanted == self._lib_tags:
+            wanted = []
+        self._lib_tags = wanted
+        self._lib_match_all = bool(match_all)
+        self.libTagsChanged.emit()
+        self._refresh_palettes()
+
     @Slot(bool)
     def set_starred_only(self, on: bool) -> None:
         on = bool(on)
@@ -152,9 +245,11 @@ class Colors(QObject):
 
     @Slot()
     def generate(self) -> None:
+        pre = self._begin()
         self._variation += 1
         self._swatches = core_colors.generate(
             self._rule, self._swatches, variation=self._variation)
+        self._end(pre, "Re-roll colors")
         self.swatchesChanged.emit()
 
     @Slot(int)
@@ -163,28 +258,58 @@ class Colors(QObject):
             self._swatches[i]["locked"] = not self._swatches[i]["locked"]
             self.swatchesChanged.emit()
 
+    @Slot()
+    def add_swatch(self) -> None:
+        """Append one unlocked swatch — hue rotates by the golden angle
+        off the last color so additions harmonize. Schemes default to 5
+        colors and accept up to 7."""
+        if len(self._swatches) >= _MAX_SWATCHES:
+            self.message.emit("A color scheme holds at most"
+                              f" {_MAX_SWATCHES} colors")
+            return
+        pre = self._begin()
+        base = (self._swatches[-1]["hex"] if self._swatches
+                else "#3388cc")
+        h, s, l = core_colors.rgb2hsl(*core_colors.hex2rgb(base))
+        nh = (h + 137.5 * (len(self._swatches) + 1)) % 360
+        self._swatches.append({
+            "hex": core_colors.rgb2hex(
+                *core_colors.hsl2rgb(nh, s or 62, l or 50)),
+            "locked": False})
+        self._selected = len(self._swatches) - 1
+        self._end(pre, "Add swatch")
+        self.selectionChanged.emit()
+        self.swatchesChanged.emit()
+
     @Slot(int)
     def remove_swatch(self, i: int) -> None:
         if 0 <= i < len(self._swatches) and len(self._swatches) > 2:
+            pre = self._begin()
             del self._swatches[i]
             if self._selected >= len(self._swatches):
                 self._selected = -1
                 self.selectionChanged.emit()
+            self._end(pre, "Remove swatch")
             self.swatchesChanged.emit()
 
     @Slot(int, int)
     def move_swatch(self, frm: int, to: int) -> None:
         if (0 <= frm < len(self._swatches) and 0 <= to < len(self._swatches)
                 and frm != to):
+            pre = self._begin()
             moved = self._swatches.pop(frm)
             self._swatches.insert(to, moved)
+            self._end(pre, "Reorder swatches")
             self.swatchesChanged.emit()
 
     @Slot(int, float, float, float)
     def set_hsl(self, i: int, h: float, s: float, l: float) -> None:
         if 0 <= i < len(self._swatches):
+            pre = self._begin()
             rgb = core_colors.hsl2rgb(h, s, l)
             self._swatches[i]["hex"] = core_colors.rgb2hex(*rgb)
+            # coalesced: a slider drag is ONE undo step, not 60
+            self._end(pre, f"Adjust swatch {i + 1}", match=f"hsl:{i}")
             self.swatchesChanged.emit()
 
     @Slot(int, str)
@@ -197,7 +322,9 @@ class Colors(QObject):
                 core_colors.hex2rgb(hex_str)
             except ValueError:
                 return  # half-typed hex — ignore until valid
+            pre = self._begin()
             self._swatches[i]["hex"] = hex_str
+            self._end(pre, f"Set swatch {i + 1}", match=f"hex:{i}")
             self.swatchesChanged.emit()
 
     @Slot(int)
@@ -228,6 +355,43 @@ class Colors(QObject):
                                     "palette", tags)
         self._refresh_palettes()
         self.message.emit(f"Saved: {name}")
+
+    def save_as_preset(self, name: str, entry_id: int | None = None) -> None:
+        """#141: file an applied palette preset — save (or update, when
+        a palette of that preset name already exists) the working
+        swatches as a palette tagged 'preset', so it lands in the
+        Colors pane's list and the rail's Saved Presets row can count
+        and browse it. Automatic: applying a preset from the Preset
+        Libraries dialog needs no further user action.
+
+        #162: with a preset entry id (the apply flow) the saved palette
+        is also FILED like a downloaded pack — into the per-type
+        'Downloaded' collection and a collection named after its preset
+        library — and the entry gains the palette backref. A manual
+        save (no entry) only tags."""
+        name = (name or "").strip() or "Preset palette"
+        hexes = [s["hex"] for s in self._swatches]
+        if not hexes:
+            return
+        existing = self._con.execute(
+            "SELECT id FROM palette WHERE name = ?", (name,)).fetchone()
+        pid = existing["id"] if existing else None
+        self._palette_id = core_colors.save_palette(
+            self._con, name, hexes, "preset", pid)
+        core_db._sync_item_tags(self._con, self._palette_id,
+                                "palette", "preset")
+        if entry_id is not None:
+            core_presets.file_applied_palette(
+                self._con, int(entry_id), self._palette_id)
+            if self._library is not None:
+                # the rail's collections snapshot must learn about the
+                # filed rows — mutations poke the coalesced refresh
+                self._library._mark_lists_dirty()
+        self._name = name
+        self.nameChanged.emit()
+        self._refresh_palettes()
+        self.message.emit(
+            f"Applied {name} — saved to the Colors pane")
 
     @Slot(int)
     def open_palette(self, palette_id: int) -> None:
@@ -261,8 +425,33 @@ class Colors(QObject):
         self.open_palette(palette_id)
         self._palette_id = None
 
+    @Slot("QVariantList")
+    def load_hexes(self, hexes: list) -> None:
+        """Load a list of hex strings into the working swatches (used by
+        the preset bridge when a palette-kind preset entry is applied)."""
+        clean = []
+        for h in hexes:
+            h = (h or "").strip()
+            if not h.startswith("#"):
+                h = "#" + h
+            try:
+                core_colors.hex2rgb(h)
+                clean.append({"hex": h, "locked": False})
+            except ValueError:
+                continue
+        if clean:
+            self._swatches = clean
+            self._palette_id = None
+            self.swatchesChanged.emit()
+            self.selectionChanged.emit()
+            self.nameChanged.emit()
+            self.palettesChanged.emit()
+
     @Slot(str, str)
     def export(self, kind: str, dest_dir: str) -> None:
+        # #54: normalize any stray file:// URL to a plain local path
+        # (same contract as the other folder-accepting bridges).
+        dest_dir = core_paths.local_path(dest_dir or "")
         if not dest_dir:
             self.exportFailed.emit("choose a folder first")
             return
@@ -271,7 +460,7 @@ class Colors(QObject):
             out = core_colors.write_exports(self._name or "Untitled palette",
                                             hexes, dest_dir, kind)
         except (ValueError, OSError) as e:
-            self.exportFailed.emit(str(e))
+            self.exportFailed.emit(f"{e} (destination: {dest_dir})")
             return
         self.exportDone.emit(str(out))
 
@@ -283,7 +472,30 @@ class Colors(QObject):
         if self._smart_id:
             self._palettes = [p for p in self._palettes
                               if _matches_smart(self._con, self._smart_id, p)]
+        if self._lib_tags:
+            self._palettes = [p for p in self._palettes
+                              if _tags_match(p.get("tags"), self._lib_tags,
+                                             self._lib_match_all)]
+        # #141: palettes filed by applying a palette preset (tagged
+        # 'preset') — feeds the rail's Saved Presets row
+        n = self._con.execute(
+            "SELECT COUNT(*) FROM palette p"
+            " JOIN item_tag it ON it.item_id = p.id"
+            " AND it.item_kind = 'palette'"
+            " JOIN tag t ON t.id = it.tag_id"
+            " WHERE t.name = 'preset'").fetchone()[0]
+        if n != self._preset_count:
+            self._preset_count = n
+            self.presetCountChanged.emit()
         self.palettesChanged.emit()
+
+
+def _tags_match(row_tags, wanted: list[str], match_all: bool) -> bool:
+    """Comma-tag-string row vs library-view tag list (all/any)."""
+    have = {t.strip().lower() for t in str(row_tags or "").split(",")
+            if t.strip()}
+    hits = [t.lower() in have for t in wanted]
+    return all(hits) if match_all else any(hits)
 
 
 def _matches_smart(con, smart_id: int, row: dict) -> bool:

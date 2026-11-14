@@ -11,7 +11,9 @@ key.
 
 from __future__ import annotations
 
+import os
 import sqlite3
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
@@ -26,6 +28,7 @@ class Prefs(QObject):
     updateCheckChanged = Signal()
     firstRunNeededChanged = Signal()
     commandShortcutChanged = Signal()
+    webPreviewsChanged = Signal()
     message = Signal(str)
 
     # Alt+/ — the slash menu. (Option+/ on macs — Qt maps Alt to Option
@@ -39,6 +42,11 @@ class Prefs(QObject):
         self._con = con
         self._db_path = db_path
         self._icon_size = int(settings.get(con, "icon_size", 32) or 32)
+        # #153: fonts keep their own grid size; first read seeds from
+        # icon_size so the split doesn't shift the fonts grid once
+        _fgs = str(settings.get(con, "font_grid_size", "") or "")
+        self._font_grid_size = (int(_fgs) if _fgs.strip().isdigit()
+                                else self._icon_size)
         self._startup_pane = int(settings.get(con, "startup_pane", 0) or 0)
         # ships enabled: a missing row means "check for releases at start"
         self._update_check = settings.get_bool(con, "update_check", True)
@@ -51,6 +59,16 @@ class Prefs(QObject):
             stored = ""
             settings.set(con, "command_shortcut", "")
         self._command_shortcut = stored or self.DEFAULT_COMMAND_SHORTCUT
+        # live web previews on GL-less displays (#32): auto = the
+        # crash-isolated startup probe decides, on = always try, off =
+        # never start Chromium
+        self._web_previews = settings.get(con, "web_previews", "auto")
+        if self._web_previews not in ("auto", "on", "off"):
+            self._web_previews = "auto"
+        # #51: dialogs open in the last folder the user visited, not in
+        # the executable's directory. Plain string path (not a URL) —
+        # QML encodes it into a file:// URL at the binding site.
+        self._last_dialog_dir = settings.get(con, "last_dialog_dir", "") or ""
         # detected at construction, resolved so they string-match the
         # source rows the scanner registers (which are stored resolved)
         self._system_icon_paths = [
@@ -72,6 +90,24 @@ class Prefs(QObject):
         settings.set(self._con, "icon_size", size)
         self.iconSizeChanged.emit()
 
+    # #153: the header grid slider drives the ACTIVE pane's grid — the
+    # Fonts pane gets its own persisted size (seeded from icon_size on
+    # first read so the split doesn't jump the fonts grid)
+    fontGridSizeChanged = Signal()
+
+    @Property(int, notify=fontGridSizeChanged)
+    def fontGridSize(self) -> int:
+        return self._font_grid_size
+
+    @Slot(int)
+    def set_font_grid_size(self, size: int) -> None:
+        size = max(16, min(256, int(size)))
+        if size == self._font_grid_size:
+            return
+        self._font_grid_size = size
+        settings.set(self._con, "font_grid_size", size)
+        self.fontGridSizeChanged.emit()
+
     # ---------------------------------------------------------- startup pane
     @Property(int, notify=startupPaneChanged)
     def startupPane(self) -> int:
@@ -79,7 +115,7 @@ class Prefs(QObject):
 
     @Slot(int)
     def set_startup_pane(self, pane: int) -> None:
-        pane = max(0, min(4, int(pane)))
+        pane = max(0, min(5, int(pane)))
         if pane == self._startup_pane:
             return
         self._startup_pane = pane
@@ -99,6 +135,22 @@ class Prefs(QObject):
         self._update_check = on
         settings.set_bool(self._con, "update_check", on)
         self.updateCheckChanged.emit()
+
+    # ------------------------------------------------------------ web previews
+    @Property(str, notify=webPreviewsChanged)
+    def webPreviews(self) -> str:
+        return self._web_previews or "auto"
+
+    @Slot(str)
+    def set_web_previews(self, value: str) -> None:
+        if value not in ("auto", "on", "off"):
+            return
+        if value == self._web_previews:
+            return
+        self._web_previews = value
+        settings.set(self._con, "web_previews", value)
+        self.message.emit(
+            "Web previews setting applies on the next app launch")
 
     # --------------------------------------------------------------- first run
     @Property(bool, notify=firstRunNeededChanged)
@@ -151,6 +203,40 @@ class Prefs(QObject):
         self.commandShortcutChanged.emit()
 
     # ------------------------------------------------------------ system paths
+    lastDialogDirChanged = Signal()
+
+    @Property(str, notify=lastDialogDirChanged)
+    def lastDialogDir(self) -> str:
+        """#51: last folder a file/folder dialog visited (local path)."""
+        return self._last_dialog_dir
+
+    @Slot(str)
+    def rememberDialogDir(self, path: str) -> None:
+        """Persist the dialog's current folder after accept/reject."""
+        p = (path or "").strip()
+        if p and p != self._last_dialog_dir and Path(p).is_dir():
+            self._last_dialog_dir = p
+            settings.set(self._con, "last_dialog_dir", p)
+            self.lastDialogDirChanged.emit()
+
+    @Slot(str, str, int)
+    def noteDialogEvent(self, name: str, event: str, ms: int = 0) -> None:
+        """#81 measurement: every browse-button click and every dialog
+        resolution lands in crash.log — 'dialog click zip' with no
+        matching 'dialog resolved zip …ms' line is a discriminated
+        silent native-dialog failure (portal/absent-backend class)
+        instead of an unfalsifiable 'nothing happens'."""
+        try:
+            with open(os.path.join(os.path.dirname(self._db_path)
+                                   if self._db_path else ".",
+                                   "crash.log"), "a",
+                      encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} — "
+                        f"dialog {event} {name}"
+                        + (f" {int(ms)}ms" if ms else "") + "\n")
+        except OSError:
+            pass
+
     @Property("QVariantList", constant=True)
     def systemIconPaths(self):
         """Detected platform icon roots, resolved — the setup screen

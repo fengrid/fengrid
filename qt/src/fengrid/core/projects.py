@@ -17,6 +17,8 @@ import io
 import json
 import re
 import sqlite3
+
+from . import db as core_db
 import tarfile
 import time
 import zipfile
@@ -66,10 +68,10 @@ def list_projects(con: sqlite3.Connection, q: str = "", tag: str = "") -> list[d
 def create_project(con: sqlite3.Connection, name: str,
                    description: str = "", tags: str = "") -> int:
     cur = con.execute(
-        "INSERT INTO projects (name, description, tags, settings)"
-        " VALUES (?,?,?,?)",
+        "INSERT INTO projects (name, description, tags, settings, guid)"
+        " VALUES (?,?,?,?,?)",
         (name.strip() or "Untitled project", description, tags,
-         json.dumps(DEFAULT_SETTINGS)))
+         json.dumps(DEFAULT_SETTINGS), core_db.new_guid()))
     con.commit()
     return int(cur.lastrowid or 0)
 

@@ -9,6 +9,7 @@ registered with QFontDatabase, so no WebEngine is involved in this pane.
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -29,6 +30,14 @@ class FamilyModel(QAbstractListModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._rows: list[dict] = []
+
+    @Slot(int, result=str)
+    def family_at(self, row: int) -> str:
+        """Grid row → family name — Shift-range multi-select needs to
+        map row indices to families from QML (#39/#52)."""
+        if 0 <= row < len(self._rows):
+            return str(self._rows[row].get("family", ""))
+        return ""
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._rows)
@@ -76,19 +85,24 @@ class _FontScanWorker(QObject):
                 roots = core_fonts.platform_font_dirs()
                 sources = indexer.ensure_sources(con, roots,
                                                  kinds=("fontroot",))
-                # pre-count for the launch splash's determinate bar
+                # pre-count for the launch splash's determinate bar —
+                # the walk result is SHARED with scan_fonts (PERF-1:
+                # the old code walked every root twice per launch)
                 rows = con.execute(
                     "SELECT path FROM source WHERE enabled = 1"
                     " AND kind = 'fontroot'").fetchall()
+                walk: dict[str, list] = {}
                 total = 0
                 for r in rows:
-                    for _f in core_fonts.iter_font_files(r["path"]):
-                        total += 1
+                    files = list(core_fonts.iter_font_files(r["path"]))
+                    walk[r["path"]] = files
+                    total += len(files)
                 self.total.emit(total)
                 report = indexer.scan_fonts(
                     con, sources,
                     progress=self._progress,
-                    should_stop=lambda: self.cancelled)
+                    should_stop=lambda: self.cancelled,
+                    files_by_root=walk)
             finally:
                 con.close()
             self.done.emit(report)
@@ -124,12 +138,28 @@ class Fonts(QObject):
         self._family_filter = ""     # rail: exact family
         self._type_filter = ""       # rail: file extension (ttf/otf/…)
         self._families: list = []
+        # rail Collections row (fonts pane): None = no filter, else id
+        self._collection: int | None = None
+        self._smart_id = 0
+        # rail Starred row (fonts pane, #40)
+        self._starred_only = False
+        # #141: saved-library tag filter (rail Libraries row on this
+        # pane) — a library view's tag set filters families to those
+        # owning at least one font asset carrying the tags (mirrors
+        # colors.set_library_tags)
+        self._lib_tags: list[str] = []
+        self._lib_match_all = True
         self._types: list = []
         self._selected = ""
+        self._specimens: dict | None = None
         self._scanning = False
         self._rescan_pending = False
         self._scan_count = 0
         self._scan_total = 0
+        # #119: pane-wide custom preview text for the grid cards
+        # (persisted; empty = curated passages)
+        self._grid_sample = str(
+            settings.get(con, "grid_sample_text", "") or "")
         self._scan_path = ""
         self._thread = None
         self._worker = None
@@ -224,6 +254,338 @@ class Fonts(QObject):
         self._selected = "" if family == self._selected else (family or "")
         self.selectionChanged.emit()
 
+    @Slot(result="QVariantList")
+    def family_names(self) -> list:
+        """Plain family-name strings (CSS export dialog checkboxes)."""
+        return [f["family"] for f in core_fonts.families(self._con)]
+
+    # ── rail Collections row: filter families by collection membership ──
+    collectionChanged = Signal()
+
+    @Property(str, notify=collectionChanged)
+    def collectionFilter(self) -> str:
+        return "" if self._collection is None else str(self._collection)
+
+    @Slot(str)
+    def set_collection(self, coll: str) -> None:
+        """Toggle the collection filter (fonts pane). Same id twice
+        clears it. Leaving the collection view also drops the starred
+        filter (mirrors colors.set_collection)."""
+        s = (coll or "").strip()
+        cid = int(s) if s.isdigit() else None
+        if cid is None or cid == self._collection:
+            self._collection = None
+        else:
+            self._collection = cid
+        if self._starred_only:
+            self._starred_only = False
+            self.starredChanged.emit()
+        self.collectionChanged.emit()
+        self._refresh()
+
+    @Slot(str)
+    def set_smart(self, sc_id: str) -> None:
+        """Toggle the smart-collection filter (fonts pane): families
+        whose assets satisfy the criteria (name/tag match)."""
+        sid = int(sc_id) if str(sc_id).strip().isdigit() else 0
+        if sid and sid == self._smart_id:
+            sid = 0
+        self._smart_id = sid
+        self._refresh()
+
+    @Property(str, notify=collectionChanged)
+    def smartFilter(self) -> str:
+        return "" if not self._smart_id else str(self._smart_id)
+
+    # ── starred rail row: filter the pane to starred families (#40) ──
+    starredChanged = Signal()
+
+    @Property(bool, notify=starredChanged)
+    def starredOnly(self) -> bool:
+        return self._starred_only
+
+    @Slot(bool)
+    def set_starred_only(self, on: bool) -> None:
+        """Toggle the starred-families filter (rail Starred row)."""
+        on = bool(on)
+        if on == self._starred_only:
+            return
+        self._starred_only = on
+        self.starredChanged.emit()
+        self._refresh()
+
+    # ── #141: rail Libraries row on the fonts pane — a library view's
+    # tag set filters families through their font assets' tags ──
+    libTagsChanged = Signal()
+
+    @Property(str, notify=libTagsChanged)
+    def libraryTagFilter(self) -> str:
+        return ",".join(self._lib_tags)
+
+    @Slot(str, bool)
+    def set_library_tags(self, tags_csv: str, match_all: bool = True) -> None:
+        """Toggle the library-view tag filter on the fonts pane (second
+        call with the same list clears it — mirrors colors)."""
+        wanted = [t.strip() for t in str(tags_csv or "").split(",")
+                  if t.strip()]
+        if wanted and wanted == self._lib_tags:
+            wanted = []
+        self._lib_tags = wanted
+        self._lib_match_all = bool(match_all)
+        self.libTagsChanged.emit()
+        self._refresh()
+
+    @Property(int, notify=starredChanged)
+    def starredCount(self) -> int:
+        """Families with at least one starred file — the rail's Starred
+        count on the fonts pane (reactive, unlike a raw slot call)."""
+        return len(self._starred_families())
+
+    def _starred_families(self) -> set[str]:
+        rows = self._con.execute(
+            "SELECT DISTINCT a.family FROM item_tag it"
+            " JOIN tag t ON t.id = it.tag_id"
+            " JOIN asset a ON a.id = it.item_id"
+            " WHERE t.name = 'starred' AND it.item_kind = 'font'"
+            " AND a.kind = 'font' AND a.family IS NOT NULL").fetchall()
+        return {r[0] for r in rows}
+
+    def _families_with_tags(self, tags: list[str],
+                            match_all: bool) -> set[str]:
+        """#141: family names owning at least one font asset whose tags
+        satisfy the library view (per-asset all/any — the same
+        semantics taxonomy.library_view_assets applies to icon assets)."""
+        marks = ",".join("?" * len(tags))
+        if match_all:
+            sql = ("SELECT DISTINCT family FROM asset WHERE kind = 'font'"
+                   " AND id IN (SELECT a.id FROM asset a"
+                   " JOIN item_tag it ON it.item_id = a.id"
+                   " AND it.item_kind = a.kind"
+                   " JOIN tag t ON t.id = it.tag_id"
+                   " WHERE a.kind = 'font' AND t.name IN (%s)"
+                   " GROUP BY a.id HAVING COUNT(DISTINCT t.name) = ?)" % marks)
+            params = [*tags, len(tags)]
+        else:
+            sql = ("SELECT DISTINCT family FROM asset WHERE kind = 'font'"
+                   " AND id IN (SELECT it.item_id FROM item_tag it"
+                   " JOIN tag t ON t.id = it.tag_id"
+                   " WHERE it.item_kind = 'font' AND t.name IN (%s))" % marks)
+            params = list(tags)
+        return {r[0] for r in self._con.execute(sql, params)}
+
+    # -------------------------------------------------- specimen text
+    sampleCustomChanged = Signal()
+
+    # #151: per-family custom preview text. The inspector's specimen
+    # field edits the SELECTED family's sample; the grid reads the whole
+    # map as ONE property (a QVariantMap lookup per card — plain C++
+    # reads, the #137 discipline: no per-card slot calls). Persisted in
+    # settings as a JSON map keyed by family name.
+    familySamplesChanged = Signal()
+
+    def _load_family_samples(self) -> dict:
+        cached = getattr(self, "_family_samples", None)
+        if cached is None:
+            try:
+                raw = settings.get(self._con, "family_samples", "")
+                cached = json.loads(raw) if raw else {}
+            except ValueError:
+                cached = {}
+            if not isinstance(cached, dict):
+                cached = {}
+            self._family_samples = cached
+        return cached
+
+    @Property("QVariantMap", notify=familySamplesChanged)
+    def familySamples(self) -> dict:
+        return self._load_family_samples()
+
+    @Slot(str, str)
+    def set_family_sample(self, family: str, text: str) -> None:
+        """Set (or, with empty text, clear) one family's custom preview
+        text. Other families keep the master text or the curated
+        passages — never the literal fallback."""
+        family = str(family or "").strip()
+        if not family:
+            return
+        samples = dict(self._load_family_samples())
+        text = str(text or "")
+        if text.strip():
+            samples[family] = text
+        else:
+            samples.pop(family, None)
+        settings.set(self._con, "family_samples", json.dumps(samples))
+        self._family_samples = samples
+        self.familySamplesChanged.emit()
+
+    # #119: pane-wide custom preview text — applies to every card in the
+    # grid (the inspector's per-font specimen field is separate and stays)
+    gridSampleChanged = Signal()
+
+    @Property(str, notify=gridSampleChanged)
+    def gridSample(self) -> str:
+        return getattr(self, "_grid_sample", "")
+
+    @Slot(str)
+    def set_grid_sample(self, text: str) -> None:
+        text = str(text or "").strip()
+        if text == getattr(self, "_grid_sample", ""):
+            return
+        self._grid_sample = text
+        settings.set(self._con, "grid_sample_text", text)
+        self.gridSampleChanged.emit()
+
+    @Slot()
+    def clear_grid_sample(self) -> None:
+        """Back to the curated per-bucket passages."""
+        self.set_grid_sample("")
+
+    @Property(bool, notify=sampleCustomChanged)
+    def sampleCustom(self) -> bool:
+        return bool(getattr(self, "_sample_custom", False))
+
+    @Slot(bool)
+    def set_sample_custom(self, on: bool) -> None:
+        """User typed custom specimen text → curated passages disabled."""
+        on = bool(on)
+        if on != getattr(self, "_sample_custom", False):
+            self._sample_custom = on
+            self.sampleCustomChanged.emit()
+
+    @Slot()
+    def reshuffle_preview_text(self) -> None:
+        """Pick one random passage PER size bucket — called when the
+        Fonts pane opens so the specimen text rotates each session."""
+        from ..core import preview_text as core_preview
+        self._samples = core_preview.reshuffle()
+        # #137: rebuild the property-side cache from the same draw so
+        # the grid's property reads follow the rotation
+        self._specimens = None
+        self._resolve_specimens()
+        self.specimensChanged.emit()
+
+    # #137: the per-bucket specimens as PROPERTIES. The grid card's
+    # bindings pick among them with plain property reads (cached C++
+    # lookups) — invoking the preview_text() slot from every card
+    # binding re-crossed the Python bridge once per visible card on
+    # EVERY grid resize (measured on a 514-family library: ~280 calls
+    # and a ≥3 s binding storm per slider notch — the reported
+    # "resource intensive and slow", and on larger libraries the
+    # mid-drag backlog froze the app, reading as a crash). The slot
+    # stays for single-shot callers (the inspector's specimen field).
+    specimensChanged = Signal()
+
+    def _resolve_specimens(self) -> dict:
+        """Build the per-bucket specimens lazily (same draw discipline
+        as preview_text: one random passage per bucket per session)."""
+        cached = getattr(self, "_specimens", None)
+        if cached is not None:
+            return cached
+        from ..core import preview_text as core_preview
+        self._samples = core_preview.reshuffle()
+        bps = core_preview.boundaries()
+        if len(bps) >= 3:
+            small_max, small_name = bps[0]
+            medium_max, medium_name = bps[1]
+            large_name = bps[-1][1]
+        else:                     # degenerate resources file — documented
+            small_max, small_name = 19, "small"   # defaults
+            medium_max, medium_name = 47, "medium"
+            large_name = "large"
+        specs = {
+            "small_max": int(small_max),
+            "medium_max": int(medium_max),
+            "small": self._samples.get(small_name, ""),
+            "medium": self._samples.get(medium_name, ""),
+            "large": self._samples.get(large_name, ""),
+        }
+        self._specimens = specs
+        return specs
+
+    @Property(int, notify=specimensChanged)
+    def smallMaxPx(self) -> int:
+        """Top edge of the small specimen bucket (the QML picker's
+        first comparison point)."""
+        return self._resolve_specimens()["small_max"]
+
+    @Property(int, notify=specimensChanged)
+    def mediumMaxPx(self) -> int:
+        """Top edge of the medium specimen bucket."""
+        return self._resolve_specimens()["medium_max"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenSmall(self) -> str:
+        """Curated passage for the small size class (px < smallMaxPx)."""
+        return self._resolve_specimens()["small"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenMedium(self) -> str:
+        """Curated passage for the medium size class."""
+        return self._resolve_specimens()["medium"]
+
+    @Property(str, notify=specimensChanged)
+    def specimenLarge(self) -> str:
+        """Curated passage for the large size class (px > mediumMaxPx)."""
+        return self._resolve_specimens()["large"]
+
+    @Slot(int, result=str)
+    def preview_text(self, px: int) -> str:
+        """Default specimen text for the preview size bucket; disabled
+        whenever the user has typed custom text (QML decides)."""
+        if not getattr(self, "_samples", None):
+            self.reshuffle_preview_text()
+        from ..core import preview_text as core_preview
+        return self._samples.get(core_preview.bucket_for(int(px)), "")
+
+    @Slot(str, result="QVariantList")
+    def family_row_ids(self, family: str) -> list:
+        """Every asset row id of the family (starring hits them all)."""
+        if not family:
+            return []
+        return [r[0] for r in self._con.execute(
+            "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
+            " ORDER BY id", (family,)).fetchall()]
+
+    @Slot(str, bool)
+    def star_family(self, family: str, starred: bool) -> None:
+        """Star/unstar the WHOLE family (every indexed file of it)."""
+        ids = self.family_row_ids(family)
+        for aid in ids:
+            core_db.set_starred(self._con, int(aid), bool(starred),
+                                kind="font")
+        # the rail Starred count + a live starredOnly view follow (#40)
+        self.starredChanged.emit()
+        self._refresh()
+        self.message.emit(
+            f"{('Starred' if starred else 'Unstarred')} “{family}”"
+            f" ({len(ids)} file{'s' if len(ids) != 1 else ''})")
+
+    @Slot(str, result=bool)
+    def family_starred(self, family: str) -> bool:
+        ids = self.family_row_ids(family)
+        return any(core_db.is_starred(self._con, int(a), kind="font")
+                   for a in ids)
+
+    def _family_matches_smart(self, family: str) -> bool:
+        """Smart-criteria check for a font family: ANY asset of the
+        family satisfying the criteria (name/tag match) keeps it."""
+        ids = self.family_row_ids(family)
+        if not ids:
+            return False
+        from .colors import _matches_smart
+        for aid in ids:
+            tags = [t["name"] for t in self._con.execute(
+                "SELECT t.name FROM item_tag it JOIN tag t"
+                " ON t.id = it.tag_id WHERE it.item_kind = 'font'"
+                " AND it.item_id = ?", (aid,))]
+            row = self._con.execute(
+                "SELECT name FROM asset WHERE id = ?", (aid,)).fetchone()
+            if _matches_smart(self._con, self._smart_id,
+                              {"name": row["name"] if row else family,
+                               "tags": ",".join(tags)}):
+                return True
+        return False
+
     @Slot(str, result="QVariantList")
     def family_files(self, family: str) -> list:
         return core_fonts.family_files(self._con, family) \
@@ -240,13 +602,83 @@ class Fonts(QObject):
             " ORDER BY id LIMIT 1", (family,)).fetchone()
         return row[0] if row else -1
 
+    @Slot("QVariantList", result="QVariantList")
+    def checked_family_ids(self, families) -> list:
+        """Primary asset IDs for a list of family names (#115) — the
+        Properties panel's multi-select target. One id per family (the
+        family's first indexed row); unknown families silently drop."""
+        out = []
+        for fam in (families or []):
+            fam = str(fam)
+            if not fam:
+                continue
+            row = self._con.execute(
+                "SELECT id FROM asset WHERE kind = 'font' AND family = ?"
+                " ORDER BY id LIMIT 1", (fam,)).fetchone()
+            if row:
+                out.append(row[0])
+        return out
+
     @Slot(str, str)
     def export_css(self, family: str, dest_dir: str) -> None:
         self._export(core_fonts.export_family_css, family, dest_dir, "css")
 
-    @Slot(str, str)
-    def export_zip(self, family: str, dest_dir: str) -> None:
-        self._export(core_fonts.export_family_zip, family, dest_dir, "zip")
+    @Slot("QVariantList", str, "QVariantList", bool)
+    def export_zip_pkg(self, families, dest_dir: str, fmts,
+                       include_original: bool = False) -> None:
+        """ZIP the webfont package (fonts.css with RELATIVE URLs at the
+        root + fonts/<Name>.<flavor>) — the unified export's ZIP path."""
+        from ..core import exportplus as core_exportplus
+        dest = str(Path(dest_dir).expanduser()) if dest_dir else ""
+        if not dest:
+            self.exportFailed.emit("choose a folder first")
+            return
+        try:
+            out = core_exportplus.export_fonts_zip(
+                self._con, [str(f) for f in families], dest,
+                fmts=[str(f) for f in (fmts or [])] or None,
+                include_original=bool(include_original))
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return
+        settings.set(self._con, "last_export_dir", dest)
+        self.exportDone.emit(str(out))
+
+    # ------------------------------------------------- fonts.css package
+    @Slot("QVariantList", "QVariantList", result=str)
+    def css_preview(self, families, fmts=None) -> str:
+        """The fonts.css text for the given families — relative package
+        paths, nothing written (the CSS dialog shows this editable)."""
+        from ..core import exportplus as core_exportplus
+        try:
+            return core_exportplus.css_preview(
+                self._con, [str(f) for f in families],
+                [str(f) for f in (fmts or [])] or None)["css"]
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return ""
+
+    @Slot(str, str, "QVariantList", "QVariantList")
+    def export_css_package(self, dest_dir: str, css_text: str,
+                           families, fmts) -> None:
+        """Save fonts.css exactly as shown/edited in the dialog plus
+        every referenced font file converted to the chosen flavors,
+        laid out as the CSS URLs expect (fonts/<Family>/<file>)."""
+        from ..core import exportplus as core_exportplus
+        dest = str(Path(dest_dir).expanduser()) if dest_dir else ""
+        if not dest:
+            self.exportFailed.emit("choose a folder first")
+            return
+        try:
+            out = core_exportplus.export_css_package(
+                self._con, dest, css_text or "",
+                [str(f) for f in families],
+                [str(f) for f in (fmts or [])] or None)
+        except Exception as e:                    # noqa: BLE001
+            self.exportFailed.emit(str(e))
+            return
+        settings.set(self._con, "last_export_dir", dest)
+        self.exportDone.emit(str(out))
 
     def _export(self, fn, family: str, dest_dir: str, what: str) -> None:
         if not family:
@@ -343,8 +775,38 @@ class Fonts(QObject):
 
     def _refresh(self) -> None:
         all_fams = core_fonts.families(self._con)
+        # collection filter (rail Collections row, fonts pane): families
+        # survive when ANY of their assets is a collection member
+        coll_fams: set[str] | None = None
+        if self._collection:
+            coll_fams = {r["family"] for r in self._con.execute(
+                "SELECT DISTINCT a.family FROM collection_ref cr"
+                " JOIN asset a ON a.id = cr.item_id"
+                " WHERE cr.collection_id = ? AND cr.item_kind = 'font'"
+                " AND a.kind = 'font'", (self._collection,))}
+        # starred filter (rail Starred row, #40): families with at least
+        # one starred file survive
+        star_fams: set[str] | None = None
+        if self._starred_only:
+            star_fams = self._starred_families()
+        # #141: library-view tag filter (rail Libraries row) — families
+        # owning at least one font asset whose tags satisfy the view
+        lib_fams: set[str] | None = None
+        if self._lib_tags:
+            lib_fams = self._families_with_tags(self._lib_tags,
+                                                self._lib_match_all)
+        fams = all_fams
+        if coll_fams is not None:
+            fams = [f for f in all_fams if f["family"] in coll_fams]
+        if star_fams is not None:
+            fams = [f for f in fams if f["family"] in star_fams]
+        if lib_fams is not None:
+            fams = [f for f in fams if f["family"] in lib_fams]
+        if self._smart_id:
+            fams = [f for f in fams if self._family_matches_smart(
+                f["family"])]
         self._families = [{"name": f["family"], "n": f["n"]}
-                          for f in all_fams]
+                          for f in fams]
         self._types = [{"name": r[0], "n": r[1]} for r in self._con.execute(
             "SELECT ext, COUNT(*) FROM asset"
             " WHERE kind = 'font' AND ext IS NOT NULL"
@@ -363,6 +825,15 @@ class Fonts(QObject):
             if self._family_filter and fam["family"] != self._family_filter:
                 continue
             if self._type_filter and fam["family"] not in type_fams:
+                continue
+            if coll_fams is not None and fam["family"] not in coll_fams:
+                continue
+            if star_fams is not None and fam["family"] not in star_fams:
+                continue
+            if lib_fams is not None and fam["family"] not in lib_fams:
+                continue
+            if self._smart_id and not self._family_matches_smart(
+                    fam["family"]):
                 continue
             files = core_fonts.family_files(self._con, fam["family"])
             weights = sorted({f["weight"] for f in files

@@ -44,16 +44,43 @@ def test_prefs_persist_and_clamp(tmp_path):
     assert p.iconSize == 64
     assert str(settings.get(con, "icon_size")) in ("64", "64.0")
 
+    # #153: the Fonts pane keeps its OWN grid size — independent of
+    # icon_size, persisted, clamped to the same 16..256 range, and
+    # seeded from icon_size on first read so the split doesn't jump
+    p2 = Prefs(con, str(tmp_path / "t.db"))
+    assert p2.fontGridSize == 64          # seeded from icon_size
+    p2.set_font_grid_size(128)
+    assert p2.fontGridSize == 128
+    p.set_icon_size(48)
+    assert p2.fontGridSize == 128         # independent
+    assert str(settings.get(con, "font_grid_size")) in ("128", "128.0")
+    p2.set_font_grid_size(999)
+    assert p2.fontGridSize == 256
+    p2.set_font_grid_size(8)
+    assert p2.fontGridSize == 16
+
     p.set_startup_pane(3)
     assert p.startupPane == 3
-    p.set_startup_pane(99)               # clamped to pane range
-    assert p.startupPane == 4
+    p.set_startup_pane(99)               # clamped to pane range — 6 panes
+    assert p.startupPane == 5            # since the Planning pane (#132)
 
     p.set_update_check(False)
     assert p.updateCheck is False
     assert settings.get_bool(con, "update_check") is False
     p.set_update_check(True)
     assert settings.get_bool(con, "update_check") is True
+
+    # web previews (#32): tri-state pref, invalid values ignored
+    assert p.webPreviews == "auto"       # default
+    p.set_web_previews("bogus")
+    assert p.webPreviews == "auto"
+    p.set_web_previews("on")
+    assert p.webPreviews == "on"
+    assert settings.get(con, "web_previews") == "on"
+    p.set_web_previews("off")
+    assert p.webPreviews == "off"
+    p.set_web_previews("auto")
+    assert p.webPreviews == "auto"
     con.close()
 
 
@@ -79,9 +106,11 @@ def test_first_run_flag_flips_and_emits(tmp_path):
 
 
 def test_set_path_enabled_upserts_before_first_scan(tmp_path):
-    """First-run toggles a detected root before any scan registered it:
-    unchecking must persist (so ensure_sources skips it later), while
-    checking a never-seen path is a no-op (registration defaults on)."""
+    """First-run toggles a detected root. Since #61 every detected path
+    is pre-registered DISABLED, so both toggles are live: unchecking
+    persists a disabled row (ensure_sources skips it), and CHECKING a
+    never-seen path REGISTERS it enabled (checkbox scans exactly the
+    selected path)."""
     con = db.connect(tmp_path / "t.db")
 
     missing = tmp_path / "not-registered"
@@ -100,12 +129,41 @@ def test_set_path_enabled_upserts_before_first_scan(tmp_path):
     fresh = tmp_path / "fresh-root"
     fresh.mkdir()
     indexer.set_path_enabled(con, str(fresh), "system", True)
-    n = con.execute("SELECT COUNT(*) c FROM source WHERE path = ?",
-                    (str(fresh.resolve()),)).fetchone()["c"]
-    assert n == 0, "enable-with-no-row must stay a no-op (default on)"
-
-    # known rows keep their flag through ensure_sources
+    row = con.execute("SELECT enabled FROM source WHERE path = ?",
+                      (str(fresh.resolve()),)).fetchone()
+    assert row is not None and row["enabled"] == 1, \
+        "checking an unregistered path must register it enabled (#61)"
     enabled = indexer.ensure_sources(con, [Path(str(fresh))],
                                      kinds=("system", "folder"))
-    assert any(p == str(fresh.resolve()) for _, p in enabled)
+    assert str(fresh.resolve()) in [p for _, p in enabled]
+
+
+def test_register_detected_paths_preregisters_disabled(tmp_path):
+    """#61 first-run contract: every detected path is pre-registered
+    DISABLED (checkboxes start unchecked), existing rows are untouched,
+    and a rescan NEVER resurrects the unselected ones."""
+    con = db.connect(tmp_path / "t.db")
+    picked = tmp_path / "picked"; picked.mkdir()
+    indexer.register_detected_paths(con, [
+        (tmp_path / "icons1", "system"),
+        (tmp_path / "icons2", "system"),
+        (picked, "system"),
+    ])
+    rows = {r["path"]: r["enabled"] for r in con.execute(
+        "SELECT path, enabled FROM source")}
+    assert rows[str((tmp_path / "icons1").resolve())] == 0
+    assert rows[str((tmp_path / "icons2").resolve())] == 0
+    assert rows[str(picked.resolve())] == 0          # pre-registered off
+
+    # the user checks one path -> enabled; a later scan must scan ONLY it
+    indexer.set_path_enabled(con, str(picked), "system", True)
+    enabled = indexer.ensure_sources(
+        con, [tmp_path / "icons1", tmp_path / "icons2", picked],
+        kinds=("system", "folder"))
+    assert [p for _, p in enabled] == [str(picked.resolve())], \
+        "unselected paths leaked into the scan set"
+
+    # registration is idempotent: existing rows keep their flags
+    indexer.register_detected_paths(con, [(picked, "system")])
+    assert con.execute("SELECT COUNT(*) c FROM source").fetchone()["c"] == 3
     con.close()

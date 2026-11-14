@@ -95,10 +95,11 @@ def test_import_files_copy_with_rename(tmp_path):
     rep = ingest.import_files(
         [str(src / "one.png"), str(src / "two.png"), str(src / "notes.txt")],
         str(data), mode="copy", prefix="ic_", style="enum", enum_pad=2)
-    assert rep["placed"] == 2 and rep["skipped"] == 1   # .txt skipped
+    # .txt is a doc-kind asset now — every tracked ext places
+    assert rep["placed"] == 3 and rep["skipped"] == 0
     dest = data / "imported" / "import"
     names = sorted(os.listdir(dest))
-    assert names == ["ic_one01.png", "ic_two02.png"]
+    assert names == ["ic_notes03.txt", "ic_one01.png", "ic_two02.png"]
     assert (dest / names[0]).is_file() and not (dest / names[0]).is_symlink()
 
 
@@ -128,12 +129,13 @@ def test_import_zip_streams_and_is_constant_memory(tmp_path):
         zf.writestr("../evil.png", b"zip-slip attempt")   # flattened
     data = tmp_path / "data"
     rep = ingest.import_zip(str(z), str(data), style="guid")
-    assert rep["placed"] == 6          # 5 icons + zip-slip member (basename)
-    assert rep["skipped"] == 1         # readme.md
+    # 5 icons + zip-slip member (basename) + readme.md (markdown kind)
+    assert rep["placed"] == 7
+    assert rep["skipped"] == 0
     names = os.listdir(data / "imported" / "zip-import")
     assert all(not n.startswith("..") for n in names)
-    # every name got a guid-ish suffix or kept ext
-    assert all(n.endswith(".png") for n in names)
+    # every name got a guid-ish suffix or kept ext (icons + the markdown doc)
+    assert all(n.endswith(".png") or n.endswith(".md") for n in names)
 
 
 def test_folder_sniff(tmp_path):
@@ -732,6 +734,41 @@ def test_dataio_jobs_use_worker_owned_connections(tmp_path):
     assert "Integrity: OK" in check, check
     assert done and done[0][0] == "export", done
     assert (tmp_path / "snips").is_dir()
+    con.close()
+
+
+def test_admin_telemetry_brackets_jobs_in_crash_log(tmp_path):
+    """#140 measurement: every admin job leaves an 'admin start <op>'
+    line at dispatch and an 'admin done/fail <op> <ms>ms' line when the
+    completion slot runs. A reporter-only crash between the lines
+    implicates the worker job; after 'done', the completion path."""
+    import time as _time
+
+    from PySide6.QtCore import QCoreApplication
+
+    from fengrid.bridges.data import DataIO
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+    db_path = str(tmp_path / "t.db")
+    con = core_db.connect(db_path)
+
+    dio = DataIO(con, db_path, str(tmp_path))
+    done = []
+    dio.adminDone.connect(lambda op, s: done.append((op, s)))
+
+    dio.adminRun("checkpoint")
+    deadline = _time.time() + 20
+    while not done and _time.time() < deadline:
+        app.processEvents()
+        _time.sleep(0.01)
+
+    log = (tmp_path / "crash.log").read_text().splitlines()
+    starts = [ln for ln in log if "admin start checkpoint" in ln]
+    finishes = [ln for ln in log if "admin done checkpoint" in ln]
+    assert starts and finishes, log
+    # start precedes done, and the done line carries a duration
+    assert log.index(starts[0]) < log.index(finishes[0]), log
+    assert finishes[0].rstrip().endswith("ms"), finishes[0]
     con.close()
 
 

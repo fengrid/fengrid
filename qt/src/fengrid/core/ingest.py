@@ -21,7 +21,8 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from . import indexer, patterns
+from . import db, indexer, patterns
+from . import sandbox as core_sandbox
 
 _COPY_BUFSZ = 64 * 1024
 
@@ -36,12 +37,9 @@ class IngestError(Exception):
 
 
 def kind_for(name: str) -> str | None:
-    ext = Path(name).suffix.lstrip(".").lower()
-    if ext in ICON_EXTS:
-        return "icon"
-    if ext in FONT_EXTS:
-        return "font"
-    return None
+    """Extension → asset kind via the central kinds registry."""
+    from . import kinds as core_kinds
+    return core_kinds.kind_for_file(name)
 
 
 def _target_dir(data_dir: str, mode: str, slug: str) -> Path:
@@ -95,6 +93,16 @@ def import_files(paths: list, data_dir: str, *,
         try:
             if not src.is_file():
                 report["skipped"] += 1
+                continue
+            # sandbox payloads (flatpak/snap per-app trees) are excluded
+            # from import — redundant/erroneous assets, see core/sandbox.py
+            if core_sandbox.is_sandbox_path(src):
+                report["skipped"] += 1
+                if len(report["errors"]) < 20:
+                    report["errors"].append(
+                        f"{src}: skipped — sandbox tree "
+                        f"({core_sandbox.sandbox_reason(src)}); set "
+                        "FENGRID_ALLOW_SANDBOX=1 to override")
                 continue
             if kind_for(src.name) is None:
                 report["skipped"] += 1
@@ -153,6 +161,22 @@ def _convert_in_place(src: Path, dest_dir: Path, name: str,
             Path(tmp_png).unlink(missing_ok=True)
 
 
+def _has_font_under(dest: str) -> bool:
+    """True when a font file exists under dest — os.walk with
+    followlinks=False (SEC-5: rglob would follow symlinks)."""
+    for dirpath, _dirs, files in os.walk(dest, followlinks=False):
+        for f in files:
+            if f.lower().endswith((".ttf", ".otf", ".ttc")):
+                return True
+    return False
+
+
+# SEC-6: decompression/disk-fill bombs — 1 MB zip at 1:10000 ratio can
+# fill the disk. Per-member and total uncompressed byte budgets.
+_ZIP_MAX_MEMBER_BYTES = 512 * 1024 * 1024      # 512 MB per member
+_ZIP_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024  # 2 GB total per import
+
+
 def import_zip(zip_path: str, data_dir: str, *, mode: str = "copy",
                convert: str = "none", slug: str = "zip-import",
                template: str = "", prefix: str = "", suffix: str = "",
@@ -167,6 +191,8 @@ def import_zip(zip_path: str, data_dir: str, *, mode: str = "copy",
     dest = _target_dir(data_dir, mode, slug)
     report = {"placed": 0, "skipped": 0, "failed": 0, "errors": [],
               "dest": str(dest)}
+    # SEC-6 budget: uncompressed bytes streamed so far
+    total_uncompressed = 0
     with zipfile.ZipFile(zip_path) as zf:
         infos = [zi for zi in zf.infolist()
                  if not zi.is_dir()][:max_members]
@@ -183,11 +209,30 @@ def import_zip(zip_path: str, data_dir: str, *, mode: str = "copy",
                     continue
                 tmp = None
                 try:
+                    # SEC-6: a 1 MB zip can claim 10 GB of uncompressed
+                    # content (1:10000 ratio). Enforce per-member and
+                    # total uncompressed budgets BEFORE streaming; a
+                    # violation aborts the import with a clear error.
+                    if zi.file_size > _ZIP_MAX_MEMBER_BYTES:
+                        report["errors"].append(
+                            f"{name}: uncompressed size "
+                            f"{zi.file_size} exceeds the "
+                            f"{_ZIP_MAX_MEMBER_BYTES} byte member cap")
+                        report["failed"] += 1
+                        break
+                    if total_uncompressed + zi.file_size > \
+                            _ZIP_MAX_TOTAL_BYTES:
+                        report["errors"].append(
+                            "total uncompressed budget exceeded —"
+                            " import aborted")
+                        report["failed"] += 1
+                        break
                     # stream member → temp (constant memory), then treat
                     # exactly like a plain file
                     tmp = staged / f"m{i}{Path(name).suffix.lower()}"
                     with zf.open(zi) as fi, open(tmp, "wb") as fo:
                         shutil.copyfileobj(fi, fo, _COPY_BUFSZ)
+                    total_uncompressed += zi.file_size
                     new_name = patterns.build_name(
                         name, template=template, prefix=prefix,
                         suffix=suffix, find=find, repl=repl, style=style,
@@ -227,18 +272,28 @@ def import_folder(folder: str, mode: str = "link") -> dict:
     p = Path(folder)
     if not p.is_dir():
         raise IngestError(f"not a folder: {folder}")
+    if core_sandbox.is_sandbox_path(p):
+        raise IngestError(
+            f"refusing to index a sandbox tree ({core_sandbox.sandbox_reason(p)}): "
+            f"{folder} — per-app sandbox copies pollute the library with "
+            "redundant assets. Set FENGRID_ALLOW_SANDBOX=1 to override.")
     if not os.access(p, os.R_OK | os.X_OK):
         raise PermissionError(f"cannot read folder {folder}")
     kinds = {"icon": False, "font": False}
     checked = 0
-    for child in p.rglob("*"):
-        if child.is_file():
-            k = kind_for(child.name)
+    # SEC-5: rglob follows directory symlinks — a symlink inside the
+    # import root can walk the whole filesystem. os.walk with
+    # followlinks=False (the scanner's convention) cannot.
+    for dirpath, _dirs, files in os.walk(str(p), followlinks=False):
+        for fn in files:
+            k = kind_for(fn)
             if k:
                 kinds[k] = True
             checked += 1
-            if checked > 20000:      # sniff budget — don't walk terabytes
+            if checked > 20000:  # sniff budget — don't walk terabytes
                 break
+        if checked > 20000:
+            break
     kind = "fontroot" if kinds["font"] and not kinds["icon"] else "folder"
     return {"path": str(p), "kind": kind,
             "note": f"{kinds['icon'] and 'icons ' or ''}"
@@ -255,3 +310,42 @@ def scan_into(con, sources, progress=None) -> dict:
 def scan_fonts_into(con, sources, progress=None, should_stop=None) -> dict:
     return indexer.scan_fonts(con, sources, progress=progress,
                               should_stop=should_stop)
+
+
+def index_materialised(db_path: str, rep: dict, *,
+                        mode: str = "copy") -> dict:
+    """Register + scan every directory an import just wrote into.
+
+    Shared by the Qt dataio bridge and the REST API so ingested assets
+    become visible no matter which front end issued the import.
+    Returns {"indexed": n, "rescan": True}; {"indexed": 0} when the
+    import report says nothing was placed or names no destination.
+    """
+    dest = rep.get("dest")
+    if not dest or not rep.get("placed"):
+        return {"indexed": 0}
+    con = db.connect(db_path)
+    total = 0
+    try:
+        row = con.execute("SELECT id FROM source WHERE path = ?",
+                          (dest,)).fetchone()
+        if row is None:
+            has_font = _has_font_under(dest)
+            con.execute(
+                "INSERT INTO source(kind, path, label, enabled)"
+                " VALUES(?, ?, ?, 1)",
+                ("fontroot" if has_font and mode != "copy"
+                 else ("fontroot" if has_font else "folder"),
+                 dest, Path(dest).parent.name + "/" + Path(dest).name))
+            con.commit()
+            row = con.execute("SELECT id FROM source WHERE path = ?",
+                              (dest,)).fetchone()
+        has_font = _has_font_under(dest)
+        if has_font:
+            fr = scan_fonts_into(con, [(row[0], dest)])
+            total += int(fr.get("total", 0))
+        ir = scan_into(con, [(row[0], dest)])
+        total += int(ir.get("total", 0))
+    finally:
+        con.close()
+    return {"indexed": total, "rescan": True}

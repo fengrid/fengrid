@@ -18,7 +18,7 @@ from .. import __version__
 from ..core import db as core_db
 from ..core import settings
 
-from ..app import DARK, LIGHT  # noqa: F401  (re-exported for convenience)
+from ..app import DARK, LIGHT, ACCENTS  # noqa: F401  (re-exported for convenience)
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit("module, not script")
@@ -27,6 +27,7 @@ if __name__ == "__main__":  # pragma: no cover
 class Theme(QObject):
     themeChanged = Signal()
     tokensChanged = Signal()
+    accentChanged = Signal()
 
     def __init__(self, con, fonts_dir: str, parent=None):
         super().__init__(parent)
@@ -34,6 +35,12 @@ class Theme(QObject):
         self._fonts_dir = fonts_dir
         self._dark = settings.get(con, "theme", "dark") != "light"
         self._families: set[str] = self._register_fonts(fonts_dir)
+        # the user-chosen accent preset id (ACCENTS in app.py). "teal" is
+        # the brand default; the stored value is validated on read so a
+        # hand-edited row can never break the theme.
+        self._accent = str(settings.get(con, "accent", "teal") or "teal")  # type: ignore[arg-type]
+        if self._accent not in ACCENTS:
+            self._accent = "teal"
 
     # -- fonts ---------------------------------------------------------------
     @staticmethod
@@ -67,8 +74,26 @@ class Theme(QObject):
 
     @Property("QVariantMap", notify=tokensChanged)
     def tokens(self) -> dict:
-        return {self._camel(k): v
+        toks = {self._camel(k): v
                 for k, v in (DARK if self._dark else LIGHT).items()}
+        # the user-chosen accent overrides the brand token — both themes
+        # (the preset carries a light-surface variant that keeps ≥4.5:1
+        # on #F7F8F9; the dark value is the brand 0.x pane color)
+        pair = ACCENTS.get(self._accent)
+        if pair:
+            toks["accent"] = pair[1] if self._dark else pair[2]
+        return toks
+
+    @Property(str, notify=accentChanged)
+    def accent(self) -> str:
+        return self._accent
+
+    @Property("QVariantList", constant=True)
+    def accentOptions(self) -> list:
+        # [{id, name, dark, light}] — the Settings swatch row and the
+        # first-run picker render these; the id is what set_accent stores
+        return [{"id": k, "name": v[0], "dark": v[1], "light": v[2]}
+                for k, v in ACCENTS.items()]
 
     @Property(bool, notify=themeChanged)
     def isDark(self) -> bool:
@@ -103,6 +128,16 @@ class Theme(QObject):
         return __version__
 
     # -- slots -------------------------------------------------------------------
+    @Slot(str)
+    def set_accent(self, name: str) -> None:
+        name = str(name or "").strip()
+        if name not in ACCENTS or name == self._accent:
+            return
+        self._accent = name
+        settings.set(self._con, "accent", name)
+        self.accentChanged.emit()
+        self.tokensChanged.emit()
+
     @Slot()
     def toggle(self) -> None:
         self.set_theme("light" if self._dark else "dark")

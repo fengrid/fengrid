@@ -3,10 +3,11 @@
 # build-linux.sh — build Fengrid (Qt 6) for linux-x64 | linux-arm64.
 #
 # Usage:
-#   build-linux.sh <linux-x64|linux-arm64>
-#   FENGRID_VARIANT=prod|dev   (default: prod; dev adds pytest/ruff to the env)
-#   FENGRID_IN_CONTAINER=1     (set by docker/linux-*.Dockerfile: use the
-#                               container's system python, skip the venv)
+#   build-linux.sh [--clean] <linux-x64|linux-arm64>
+#   --clean  remove previous artifacts (qt/dist, this target's spec dir)
+#            before building, so the bundle cannot inherit stale state (#44)
+#   FENGRID_VARIANT=prod|dev   (default prod; dev also installs the dev
+#                               dependency-group — pytest/ruff — via uv)
 #   FENGRID_SMOKE=1            (after PyInstaller, launch the frozen binary
 #                               offscreen and capture a screenshot — fails the
 #                               build if it does not start)
@@ -17,7 +18,16 @@
 # paths in a checked-in spec are a landmine; see .dockerignore *.spec).
 set -euo pipefail
 
-TARGET="${1:?usage: build-linux.sh <linux-x64|linux-arm64>}"
+CLEAN=0
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --clean|-c) CLEAN=1 ;;
+        *)          ARGS+=("$arg") ;;
+    esac
+done
+TARGET="${ARGS[0]:-}"
+[ -n "$TARGET" ] || { echo "usage: build-linux.sh [--clean] <linux-x64|linux-arm64>" >&2; exit 1; }
 VARIANT="${FENGRID_VARIANT:-prod}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 QT_DIR="$ROOT/qt"
@@ -33,19 +43,27 @@ case "$VARIANT" in
     *) echo "unknown variant: $VARIANT (use prod or dev)" >&2; exit 1 ;;
 esac
 
-cd "$QT_DIR"
-
-if [ "${FENGRID_IN_CONTAINER:-0}" != "1" ]; then
-    # native run: isolated venv so CI/local builds don't pollute the host env
-    python3 -m venv .venv
-    # shellcheck disable=SC1091
-    . .venv/bin/activate
+if [ "$CLEAN" = "1" ]; then
+    echo "clean: removing previous artifacts ($OUT_DIR, $SPEC_DIR)"
+    rm -rf "$OUT_DIR" "$SPEC_DIR"
 fi
 
-python -m pip install --upgrade pip wheel
-REQS="$ROOT/build/requirements-build.txt"
-[ "$VARIANT" = "dev" ] && REQS="$ROOT/build/requirements-dev.txt"
-python -m pip install -r "$REQS"
+cd "$QT_DIR"
+
+# Frozen build environment: qt/pyproject.toml + the committed uv.lock are the
+# single source of truth. Prod installs the build group only; dev adds the dev
+# group (pytest/ruff). uv sync creates/reuses qt/.venv — the same venv layout
+# pip produced, so activation and every python/PyInstaller call below is
+# unchanged. The old FENGRID_IN_CONTAINER split (container used system python)
+# is gone: uv ships in the builder image, so in-container and native runs are
+# identical.
+if [ "$VARIANT" = "dev" ]; then
+    uv sync --frozen --group build      # dev group is included by default
+else
+    uv sync --frozen --no-dev --group build
+fi
+# shellcheck disable=SC1091
+. .venv/bin/activate
 
 # fail fast if the platform wheel story is broken (mirrors the probe in
 # build-windows.ps1 for windows-arm64)
@@ -68,6 +86,18 @@ add_data() {
         echo "warning: data tree missing, skipped: $src" >&2
     fi
 }
+
+# build provenance (#43): stamp the commit this bundle was built from —
+# the About screen reads it via fengrid.buildinfo. Docker runs have no
+# .git inside the image; build-docker-linux.sh forwards the host commit
+# as FENGRID_BUILD_COMMIT. The stamp file is gitignored.
+commit="${FENGRID_BUILD_COMMIT:-}"
+[ -z "$commit" ] && commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+[ -z "$commit" ] && commit="unknown"
+stamp="$QT_DIR/.build-commit"
+printf '%s\n' "$commit" > "$stamp"
+add_data "$stamp" "."
+
 add_data "$QT_DIR/qml" "qml"
 add_data "$ROOT/fonts" "fonts"
 add_data "$QT_DIR/resources" "resources"

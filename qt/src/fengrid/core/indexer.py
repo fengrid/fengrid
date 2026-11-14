@@ -20,17 +20,49 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any
 
+from . import db as core_db
+from . import kinds as core_kinds
+from . import lognoise, scanner
+
 try:
-    # hardened parser when available (entity-expansion hardening); the files
-    # parsed here are user-indexed local SVGs, so the stdlib fallback is
-    # acceptable but not preferred
+    # hardened parser when available (entity-expansion hardening)
     from defusedxml import ElementTree as SafeET
+    _HAVE_DEFUSEDXML = True
 except ImportError:
     import xml.etree.ElementTree as SafeET  # type: ignore[no-redef]
+    _HAVE_DEFUSEDXML = False
+
+# SEC-4: without defusedxml the stdlib parser is vulnerable to entity
+# expansion ("billion laughs") — a 4 MB SVG can expand to gigabytes of
+# RAM. Fail secure: when the hardened parser is missing, SVGs carrying
+# a DOCTYPE/entity declaration are not parsed at all (dimensions come
+# back null; the row still indexes).
+_SAFE_SVG_MAX_BYTES = 4 * 1024 * 1024
+
+
+def _svg_parse_safe(path: str):
+    """Parse an SVG only when the parser guarantees entity safety."""
+    if os.path.getsize(path) > _SAFE_SVG_MAX_BYTES:
+        return None
+    if not _HAVE_DEFUSEDXML:
+        try:
+            with open(path, "rb") as fh:
+                head = fh.read(4096).decode("utf-8", errors="ignore")
+        except OSError:
+            return None
+        low = head.lower()
+        if "<!doctype" in low or "<!entity" in low:
+            return None
+    try:
+        return SafeET.parse(path).getroot()
+    except Exception:                          # noqa: BLE001
+        return None
 
 try:
     from PIL import Image
@@ -57,37 +89,41 @@ def identify(path: str) -> dict[str, Any]:
     info: dict[str, Any] = dict(width=None, height=None,
                                 bytes=os.path.getsize(path),
                                 colorspace=None, color_count=None, mono=None)
-    ext = os.path.splitext(path)[1].lower()
+    ext = os.path.splitext(path)[1].lower().lstrip(".")
+    from . import kinds as core_kinds
 
-    if ext == ".svg":
+    if ext == "svg":
         # dims from the SVG root (width/height attrs, then viewBox)
         try:
             if info["bytes"] <= _MAX_SVG_PARSE_BYTES:
-                root = SafeET.parse(path).getroot()
-                viewbox = root.get("viewBox", "")
-                w = h = None
-                for attr in ("width", "height"):
-                    raw = (root.get(attr) or "").strip()
-                    try:
-                        val = float(raw.rstrip("px"))
-                        if attr == "width":
-                            w = val
-                        else:
-                            h = val
-                    except (ValueError, TypeError):
-                        pass
-                if (w is None or h is None) and len(viewbox.split()) == 4:
-                    vb = viewbox.split()
-                    w, h = float(vb[2]), float(vb[3])
-                if w is not None:
-                    info["width"] = int(w)
-                if h is not None:
-                    info["height"] = int(h)
+                root = _svg_parse_safe(path)
+                if root is not None:
+                    viewbox = root.get("viewBox", "")
+                    w = h = None
+                    for attr in ("width", "height"):
+                        raw = (root.get(attr) or "").strip()
+                        try:
+                            val = float(raw.rstrip("px"))
+                            if attr == "width":
+                                w = val
+                            else:
+                                h = val
+                        except (ValueError, TypeError):
+                            pass
+                    if (w is None or h is None) and len(viewbox.split()) == 4:
+                        vb = viewbox.split()
+                        w, h = float(vb[2]), float(vb[3])
+                    if w is not None:
+                        info["width"] = int(w)
+                    if h is not None:
+                        info["height"] = int(h)
         except Exception:
             pass
         return info
 
-    if Image is None or ext == ".xpm":
+    # non-raster kinds (video/audio/doc/data/spatial/timeseries/markdown)
+    # carry no pixel metadata — skip Pillow entirely
+    if Image is None or ext == "xpm" or not core_kinds.is_raster(ext):
         return info
 
     try:
@@ -96,8 +132,18 @@ def identify(path: str) -> dict[str, Any]:
             info["colorspace"] = im.mode
             if im.mode in ("1", "L", "LA"):
                 info["mono"] = 1
+            # SEC-3: a tiny file can claim a 100000x100000 header;
+            # convert("RGB") would allocate ~30 GB BEFORE any cap
+            # applied. Check the declared dimensions first and skip
+            # colour counting entirely for absurd rasters.
+            elif (im.width or 0) * (im.height or 0) > 256 * 1024 * 1024:
+                info["mono"] = 0          # cannot verify: assume colour
             else:
-                small = im.convert("RGB")
+                # #95: P-mode PNGs with palette-BYTE transparency warn on
+                # a direct convert("RGB") — resolve through RGBA first
+                # (PIL's own advice; shared with the export pipeline)
+                from .export import working_rgba
+                small = working_rgba(im).convert("RGB")
                 if small.width * small.height > 4096 * 4096:
                     small = small.resize((256, 256))
                 colors = small.getcolors(maxcolors=100000)
@@ -118,6 +164,32 @@ _CHUNK = 400
 # write lock; 400 of those held the DB for multiple seconds and starved
 # main-thread settings writes (first-run saves). 100 ≈ ≤1.5s holds.
 _CHUNK_FONTS = 100
+
+# scan() identification lookahead: files identified AHEAD of the write
+# cursor by the bounded window (see scan) — deep enough to keep the
+# write loop fed, shallow enough that per-file progress stays near-real
+_IDENTIFY_WINDOW = 32
+_IDENTIFY_WORKERS = 4
+
+
+def identify_workers() -> int:
+    """Parallel identify-pool size, user-tunable via FENGRID_SCAN_WORKERS.
+
+    #61 follow-up (user: "limit it so it behaves more reasonably"): on
+    CPU-starved machines a 4-worker pool competes with the UI for every
+    core while big scans run — FENGRID_SCAN_WORKERS=1 effectively
+    serializes identification (paint stays smooth, scan just slower).
+    Default stays 4.
+    """
+    try:
+        return max(1, int(os.environ.get("FENGRID_SCAN_WORKERS", "4")))
+    except ValueError:
+        return _IDENTIFY_WORKERS
+
+
+def _parallel_identify() -> bool:
+    """FENGRID_SCAN_PARALLEL=0 forces the serial path (tests, debugging)."""
+    return os.environ.get("FENGRID_SCAN_PARALLEL", "1") != "0"
 
 
 def purge_assets(con: sqlite3.Connection,
@@ -192,15 +264,16 @@ def _sweep_disabled(con: sqlite3.Connection, kinds: tuple[str, ...],
 
 
 def _upsert_asset(con: sqlite3.Connection, source_id: int, path: str,
-                  meta: dict, info: dict, now: float, fp: str) -> None:
-    """Index one icon file, preserving its asset id when the path is
-    already known.
+                  meta: dict, info: dict, now: float, fp: str,
+                  kind: str = "icon") -> None:
+    """Index one icon/media/data file, preserving its asset id when the
+    path is already known.
 
     UPDATE (not DELETE+INSERT) for existing paths: the id must survive a
     re-identification — a git checkout or touch bumps mtimes, and a new
     id would orphan every item_tag / collection_ref / asset_link row the
     user attached to that asset. The FTS AFTER UPDATE trigger reindexes
-    the search row.
+    the search row. New rows get a generated GUID at first tracking.
     """
     args = (source_id, meta["name"], meta["theme"], meta["context"],
             meta["ext"], meta["size_px"], info["width"], info["height"],
@@ -219,10 +292,10 @@ def _upsert_asset(con: sqlite3.Connection, source_id: int, path: str,
         con.execute(
             "INSERT INTO asset(source_id, kind, path, name, theme,"
             " context, ext, size_px, width, height, bytes,"
-            " colorspace, color_count, mono, mtime)"
-            " VALUES (?, 'icon', ?, ?, ?, ?, ?, ?, ?, ?, ?,"
-            " ?, ?, ?, ?)",
-            (source_id, path, *args[1:]))
+            " colorspace, color_count, mono, mtime, guid)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+            " ?, ?, ?, ?, ?)",
+            (source_id, kind, path, *args[1:], core_db.new_guid()))
     con.execute(
         "INSERT INTO scan_state(path, fingerprint, last_seen)"
         " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
@@ -234,6 +307,16 @@ def _upsert_asset(con: sqlite3.Connection, source_id: int, path: str,
 
 def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
          progress=None) -> dict:
+    """Incrementally index the given sources into the library.
+
+    Third-party identify noise (PIL per-file warnings) is gated at the
+    scan boundary — see core/lognoise.py (issue #63)."""
+    with lognoise.scan_noise_gate():
+        return _scan_impl(con, sources, progress=progress)
+
+
+def _scan_impl(con: sqlite3.Connection, sources: list[tuple[int, str]],
+               progress=None) -> dict:
     """Incrementally index the given sources into the library.
 
     sources: [(source_id, root_path)] for ENABLED sources only.
@@ -268,53 +351,110 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
         processed = 0
         for source_id, root in live:
             seen: set[str] = set()
-            for path in scanner.iter_icon_files(root):
-                seen.add(path)
-                counts["total"] += 1
-                fp = fingerprint(path)
-                prev = con.execute(
-                    "SELECT fingerprint FROM scan_state WHERE path = ?",
-                    (path,),
-                ).fetchone()
-                if prev is not None and prev[0] == fp:
-                    con.execute(
-                        "UPDATE scan_state SET last_seen = ? WHERE path = ?",
-                        (now, path),
-                    )
-                    counts["unchanged"] += 1
-                else:
-                    meta = scanner.derive_meta(path, root)
-                    info = identify(path)
+            file_iter = scanner.iter_asset_files(root)
+            # bounded-lookahead parallel identification: identification
+            # (PIL probe / SVG parse) is pure filesystem work with no DB
+            # access, so a small thread pool pipelines it ahead of the
+            # serialized writes. The scan thread alone touches the
+            # connection (sqlite objects are thread-affine).
+            pool = None
+            if _parallel_identify():
+                from concurrent.futures import ThreadPoolExecutor
+                pool = ThreadPoolExecutor(
+                    max_workers=identify_workers())
+            window: deque = deque()
+            try:
+                def _stage(seen_set: set, src_root: str,
+                           next_path: str, ident_pool) -> tuple:
+                    # fingerprint + derive on the scan thread (the DB
+                    # read rides this thread's own connection); the
+                    # future is None for unchanged files — the writer
+                    # must not pay identification for them. Loop
+                    # variables are explicit parameters, not free
+                    # bindings (ruff B023).
+                    seen_set.add(next_path)
+                    counts["total"] += 1
+                    fp_n = fingerprint(next_path)
+                    prev_n = con.execute(
+                        "SELECT fingerprint FROM scan_state"
+                        " WHERE path = ?", (next_path,),
+                    ).fetchone()
+                    if prev_n is not None and prev_n[0] == fp_n:
+                        return (next_path, fp_n, prev_n, None, None,
+                                None)
+                    meta_n = scanner.derive_meta(next_path, src_root)
+                    kind_n = (core_kinds.kind_for_ext(meta_n["ext"])
+                              or "icon")
+                    meta_n["kind"] = kind_n
+                    fut = (ident_pool.submit(identify, next_path)
+                           if ident_pool is not None else None)
+                    return (next_path, fp_n, prev_n, meta_n, kind_n,
+                            fut)
+
+                for _ in range(_IDENTIFY_WINDOW):
                     try:
-                        _upsert_asset(con, source_id, path, meta, info, now,
-                                      fp)
-                    except sqlite3.IntegrityError:
-                        # source removed mid-scan (FK on source_id) — skip
-                        # this file; the next scan reconciles
-                        counts["total"] -= 1
+                        window.append(_stage(seen, root,
+                                             next(file_iter), pool))
+                    except StopIteration:
+                        break
+                while window:
+                    path, fp, prev, meta, kind, fut = window.popleft()
+                    if meta is None:
+                        # staged unchanged — refresh last_seen only
+                        con.execute(
+                            "UPDATE scan_state SET last_seen = ?"
+                            " WHERE path = ?", (now, path),
+                        )
+                        counts["unchanged"] += 1
+                    else:
+                        info = (fut.result() if fut is not None
+                                else identify(path))
+                        try:
+                            _upsert_asset(con, source_id, path, meta,
+                                          info, now, fp, kind=kind)
+                        except sqlite3.IntegrityError:
+                            # source removed mid-scan (FK on
+                            # source_id) — skip this file; the next
+                            # scan reconciles
+                            counts["total"] -= 1
+                            continue
+                        counts["changed" if prev is not None
+                                else "new"] += 1
+                    processed += 1
+                    if progress:
+                        progress(counts["total"], path)
+                    if processed % _CHUNK == 0:
+                        con.commit()
+                        con.execute("BEGIN IMMEDIATE")
+                    try:
+                        nxt = next(file_iter)
+                    except StopIteration:
                         continue
-                    counts["changed" if prev is not None else "new"] += 1
-                processed += 1
-                if progress:
-                    progress(counts["total"], path)
-                if processed % _CHUNK == 0:
-                    con.commit()
-                    con.execute("BEGIN IMMEDIATE")
+                    window.append(_stage(seen, root, nxt, pool))
+            finally:
+                if pool is not None:
+                    pool.shutdown(wait=False)
 
             # prune assets + fingerprints that vanished from this source
-            # (kind-scoped: a source row is single-purpose, but belt-and-
-            # suspenders so an icon scan can never delete font rows)
+            # (kind-scoped: a source row is single-purpose, so font rows
+            # are never touched — the font scan owns them)
             rows = con.execute(
-                "SELECT id, path FROM asset WHERE source_id = ? AND kind = 'icon'",
+                "SELECT id, path, kind FROM asset"
+                " WHERE source_id = ? AND kind != 'font'",
                 (source_id,),
             ).fetchall()
-            vanished = [(r["id"], "icon", r["path"]) for r in rows
+            vanished = [(r["id"], r["kind"], r["path"]) for r in rows
                         if r["path"] not in seen]
             counts["pruned"] += purge_assets(con, vanished)
-            st_rows = con.execute("SELECT path FROM scan_state").fetchall()
+            # PERF-2: fetch only THIS root's scan_state rows (LIKE is
+            # index-assisted) instead of the whole table per source;
+            # the straggler filter (not in `seen`) stays in Python so
+            # freshly-scanned fingerprints are preserved.
             root_prefix = str(Path(root).resolve()) + os.sep
-            stragglers = [p for (p,) in st_rows
-                          if p.startswith(root_prefix) and p not in seen]
+            st_rows = con.execute(
+                "SELECT path FROM scan_state WHERE path LIKE ? ESCAPE '\\'",
+                (_like_escape(root_prefix) + "%",)).fetchall()
+            stragglers = [p for (p,) in st_rows if p not in seen]
             con.executemany("DELETE FROM scan_state WHERE path = ?",
                             [(p,) for p in stragglers])
             con.commit()
@@ -327,17 +467,39 @@ def scan(con: sqlite3.Connection, sources: list[tuple[int, str]],
 
 
 def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
-               progress=None, should_stop=None) -> dict:
+               progress=None, should_stop=None,
+               files_by_root: dict[str, list[str]] | None = None) -> dict:
+    """Incrementally index font sources (kind='font' rows).
+
+    fontTools log noise (per-file head-table warnings) is gated at the
+    scan boundary — see core/lognoise.py (issue #63). WOFF2 files are
+    skipped quietly when brotli is missing, counted once per scan."""
+    with lognoise.scan_noise_gate():
+        return _scan_fonts_impl(con, sources, progress=progress,
+                                should_stop=should_stop,
+                                files_by_root=files_by_root)
+
+
+def _scan_fonts_impl(con: sqlite3.Connection, sources: list[tuple[int, str]],
+                     progress=None, should_stop=None,
+                     files_by_root: dict[str, list[str]] | None = None) -> dict:
     """Incrementally index font sources (kind='font' rows).
 
     Same fingerprint/incremental scheme as scan(); one row per FILE with the
     first face's metadata (core/fonts.identify_font documents the .ttc
     scope note). should_stop() is checked per file so an app quit ends the
     scan cleanly instead of leaving a QThread running (qa-gate tripwire).
+
+    PERF-1: `files_by_root` lets the caller share ONE directory walk with
+    the pre-count (the old code walked every root twice per launch), and
+    fontTools identification of changed/new files runs in a small thread
+    pool (identification is pure CPU; the DB writes stay serialized on
+    the scanning thread).
     """
     counts = {"total": 0, "new": 0, "changed": 0, "unchanged": 0,
               "pruned": 0, "errors": 0}
     now = time.time()
+    skipped_woff2 = 0  # woff2 files not identified (no brotli) — noted once
 
     con.execute("BEGIN IMMEDIATE")
     try:
@@ -346,37 +508,70 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
         processed = 0
         for source_id, root in live:
             seen: set[str] = set()
-            for path in fonts_mod.iter_font_files(root):
+            file_list = ((files_by_root or {}).get(root)
+                         if files_by_root is not None else None)
+            paths = file_list if file_list is not None else \
+                fonts_mod.iter_font_files(root)
+            # pass 1 — fingerprint check; collect files that need
+            # fontTools identification
+            pending: list[tuple[str, str | None, str]] = []  # path, fp, prev
+            for path in paths:
                 if should_stop is not None and should_stop():
                     raise ScanAborted
                 seen.add(path)
                 counts["total"] += 1
                 fp = fingerprint(path)
-                prev = con.execute(
+                prev_row = con.execute(
                     "SELECT fingerprint FROM scan_state WHERE path = ?",
                     (path,),
                 ).fetchone()
-                if prev is not None and prev[0] == fp:
+                prev = prev_row[0] if prev_row is not None else None
+                if prev is not None and prev == fp:
                     con.execute(
                         "UPDATE scan_state SET last_seen = ? WHERE path = ?",
                         (now, path),
                     )
                     counts["unchanged"] += 1
                 else:
-                    meta = fonts_mod.identify_font(path)
-                    rel = os.path.relpath(path, root)
-                    parts = rel.split(os.sep)
-                    theme = (parts[0] if len(parts) > 1
-                             else os.path.basename(root))
-                    name = os.path.splitext(os.path.basename(path))[0]
-                    ext = os.path.splitext(path)[1].lower().lstrip(".")
-                    try:
-                        _upsert_font(con, source_id, path, name, theme, ext,
-                                     meta, now, fp)
-                    except sqlite3.IntegrityError:
-                        counts["total"] -= 1  # source removed mid-scan
-                        continue
-                    counts["changed" if prev is not None else "new"] += 1
+                    pending.append((path, fp, prev))
+            # pass 2 — identify in parallel (I/O + CPU bound fontTools
+            # parsing), then write serialized
+            metas: dict[str, dict | None] = {}
+            if len(pending) > 8:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=identify_workers()) as pool:
+                    for path, meta in zip(
+                            [p for p, _f, _pr in pending],
+                            pool.map(fonts_mod.identify_font,
+                                     [p for p, _f, _pr in pending])):
+                        metas[path] = meta
+            else:
+                for path, _fp, _prev in pending:
+                    metas[path] = fonts_mod.identify_font(path)
+            if not fonts_mod.brotli_available():
+                # every woff2 in pending was skipped by identify_font
+                # (core/fonts.py short-circuits before fontTools logs its
+                # per-file brotli ERROR) — issue #63
+                skipped_woff2 += sum(
+                    1 for p, _fp, _prev in pending
+                    if os.path.splitext(p)[1].lower() == ".woff2")
+            for path, fp, prev in pending:
+                if should_stop is not None and should_stop():
+                    raise ScanAborted
+                meta = metas[path]
+                rel = os.path.relpath(path, root)
+                parts = rel.split(os.sep)
+                theme = (parts[0] if len(parts) > 1
+                         else os.path.basename(root))
+                name = os.path.splitext(os.path.basename(path))[0]
+                ext = os.path.splitext(path)[1].lower().lstrip(".")
+                try:
+                    _upsert_font(con, source_id, path, name, theme, ext,
+                                 meta, now, fp)
+                except sqlite3.IntegrityError:
+                    counts["total"] -= 1  # source removed mid-scan
+                    continue
+                counts["changed" if prev is not None else "new"] += 1
                 processed += 1
                 if progress:
                     progress(counts["total"], path)
@@ -399,11 +594,22 @@ def scan_fonts(con: sqlite3.Connection, sources: list[tuple[int, str]],
     except ScanAborted:
         con.rollback()
         counts["aborted"] = True
+        _note_woff2_skips(skipped_woff2)
         return counts
     except Exception:
         con.rollback()
         raise
+    _note_woff2_skips(skipped_woff2)
     return counts
+
+
+def _note_woff2_skips(n: int) -> None:
+    """One summary line per scan for the woff2 files identify_font skipped
+    (issue #63) — never per file."""
+    if n:
+        print(f"fengrid: skipped WOFF2 identification for {n} font file(s) —"
+              " install brotli (uv pip install brotli) for full font metadata",
+              file=sys.stderr)
 
 
 def _upsert_font(con: sqlite3.Connection, source_id: int, path: str,
@@ -428,9 +634,9 @@ def _upsert_font(con: sqlite3.Connection, source_id: int, path: str,
     else:
         con.execute(
             "INSERT INTO asset(source_id, kind, path, name, theme,"
-            " ext, bytes, family, style, weight, italic, mtime)"
-            " VALUES (?, 'font', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (source_id, path, *args[1:]))
+            " ext, bytes, family, style, weight, italic, mtime, guid)"
+            " VALUES (?, 'font', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (source_id, path, *args[1:], core_db.new_guid()))
     con.execute(
         "INSERT INTO scan_state(path, fingerprint, last_seen)"
         " VALUES (?, ?, ?) ON CONFLICT(path) DO UPDATE SET"
@@ -518,16 +724,40 @@ def set_source_enabled(con: sqlite3.Connection, source_id: int,
     return cur.rowcount > 0
 
 
+def register_detected_paths(
+        con: sqlite3.Connection,
+        paths: list[tuple[Path | str, str]]) -> None:
+    """Pre-register detected system paths as DISABLED sources (#61).
+
+    First-run decision (user-directed): system folders are NOT scanned
+    until the user selects them. Setup pre-registers every detected
+    path with enabled=0 so its checkbox starts unchecked, and — because
+    ensure_sources() keeps existing rows' flags — a later scan never
+    resurrects the unselected paths. Checking a box flips the row via
+    set_path_enabled(path, kind, True) and triggers the scan.
+    """
+    known = {r["path"] for r in
+             con.execute("SELECT path FROM source")}
+    for raw, kind in paths:
+        path_str = str(Path(raw).resolve())
+        if path_str in known:
+            continue
+        con.execute(
+            "INSERT INTO source(kind, path, label, enabled)"
+            " VALUES (?, ?, ?, 0)",
+            (kind, path_str, Path(path_str).name or path_str))
+
+
 def set_path_enabled(con: sqlite3.Connection, path: str, kind: str,
                      enabled: bool) -> None:
     """Upsert the enabled flag for a DETECTED path.
 
-    The first-run screen toggles system roots before any scan has
-    registered them, so the row may not exist yet: enabled=True with no
-    row is a no-op (registration defaults to on), enabled=False inserts
-    a disabled row so the first scan's ensure_sources() skips it. A
-    known path keeps its existing kind; `kind` is only used on insert
-    ('system' icon roots, 'fontroot' font dirs, 'folder' user folders).
+    The first-run screen toggles system roots; since #61 every detected
+    path is pre-registered DISABLED (checkboxes start unchecked), so
+    both branches of this upsert are live: enabling inserts/flips the
+    row to enabled (and the caller triggers the scan), disabling
+    inserts/keeps a disabled row so ensure_sources() skips it and the
+    next scan purges its assets.
     """
     assert kind in ("system", "folder", "fontroot"), kind
     path = str(Path(path).resolve())
@@ -536,11 +766,11 @@ def set_path_enabled(con: sqlite3.Connection, path: str, kind: str,
     if row:
         con.execute("UPDATE source SET enabled = ? WHERE id = ?",
                     (1 if enabled else 0, row[0]))
-    elif not enabled:
+    else:
         con.execute(
             "INSERT INTO source(kind, path, label, enabled)"
-            " VALUES (?, ?, ?, 0)",
-            (kind, path, Path(path).name or path))
+            " VALUES (?, ?, ?, ?)",
+            (kind, path, Path(path).name or path, 1 if enabled else 0))
     con.commit()
 
 
@@ -576,10 +806,14 @@ def remove_source(con: sqlite3.Connection, source_id: int) -> bool:
 
 
 def sources_summary(con: sqlite3.Connection) -> list[dict]:
+    # #61: the LEFT JOIN … GROUP BY form made SQLite visit the whole
+    # asset table PER SOURCE (no source_id index until the migration);
+    # on the main thread mid-scan that froze first-run setup for minutes.
+    # One indexed aggregate + a merge is O(assets) once, index-only.
+    counts = {r[0]: r[1] for r in con.execute(
+        "SELECT source_id, COUNT(*) FROM asset GROUP BY source_id")}
     rows = con.execute(
-        "SELECT s.id, s.kind, s.path, s.label, s.enabled,"
-        " COUNT(a.id) AS n"
-        " FROM source s LEFT JOIN asset a ON a.source_id = s.id"
-        " GROUP BY s.id ORDER BY s.kind, s.label"
+        "SELECT id, kind, path, label, enabled"
+        " FROM source ORDER BY kind, label"
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [{**dict(r), "n": counts.get(r["id"], 0)} for r in rows]

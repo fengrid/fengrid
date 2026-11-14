@@ -35,6 +35,7 @@ carries the operation's report.
 | Tags      | `GET /tags`, `PATCH/DELETE /tags/{name}` |
 | Fields    | `GET/POST /fields`, `DELETE /fields/{id}` (custom field defs) |
 | Projects  | `GET /projects`, `GET /projects/{id}` |
+| Planning  | `GET /planning/board?q=`, `GET /planning/stages`, `POST /planning/tasks`, `GET/PATCH/DELETE /planning/tasks/{id}`, `POST /planning/tasks/{id}/move`, `POST /planning/tasks/{id}/assets`, `DELETE /planning/tasks/{id}/assets/{row}` |
 | Backup    | `GET/POST /backups`, `POST /backup/restore` |
 | DB admin  | `POST /db/{check,vacuum,checkpoint,optimize,rebuild_fts,sweep}` |
 | Watch     | `GET/POST /watch`, `DELETE /watch/{id}`, `POST /watch/{id}/run` (501 headless) |

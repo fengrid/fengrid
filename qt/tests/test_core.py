@@ -241,9 +241,11 @@ def test_font_columns_migrate_from_m1_schema(tmp_path):
     """An M1-era db (no font columns) must migrate on connect, not crash."""
     old = tmp_path / "old.db"
     con = db.connect(old)
-    # simulate the M1 schema: drop the family index first (SQLite refuses to
-    # drop a column an index depends on), then the columns _migrate added
+    # simulate the M1 schema: drop the indexes that depend on the columns
+    # first (SQLite refuses to drop a column an index depends on), then
+    # the columns _migrate added
     con.execute("DROP INDEX IF EXISTS idx_asset_family")
+    con.execute("DROP INDEX IF EXISTS idx_asset_kind_family")
     for col in ("family", "style", "weight", "italic"):
         con.execute(f"ALTER TABLE asset DROP COLUMN {col}")
     con.commit()
@@ -1096,7 +1098,37 @@ def test_content_search_snippets_and_files(lib, tmp_path):
                        "<div class='company-logo'>x</div>", "", "", "")
     hits = srch.search_assets(lib, "company-logo", "content")
     kinds = {h["kind"] for h in hits}
-    assert "snippet" in kinds and "asset" in kinds
+    # file hits carry the row's real kind (icon here) — #30 made content
+    # search kind-honest across all tracked kinds
+    assert "snippet" in kinds and "icon" in kinds
+
+
+def test_content_search_covers_all_kinds(tmp_path):
+    """#30: content search must cover doc/markdown/data assets too —
+    it used to restrict to kind='icon' and silently hid every other
+    kind's text files."""
+    con = db.connect(tmp_path / "lib.db")
+    try:
+        con.execute("INSERT INTO source(kind, path, label) VALUES"
+                    " ('system', '/x', 'x')")
+        md = tmp_path / "handbook.md"
+        md.write_text("# Handbook\nq4-retro notes live here",
+                      encoding="utf-8")
+        csvf = tmp_path / "budget.csv"
+        csvf.write_text("item,amount\nq4-retro,1200\n", encoding="utf-8")
+        for path, name, kind in ((md, "handbook", "markdown"),
+                                 (csvf, "budget", "data")):
+            con.execute(
+                "INSERT INTO asset(source_id, kind, path, name, ext)"
+                " VALUES (1, ?, ?, ?, ?)",
+                (kind, str(path), name, path.suffix.lstrip(".")))
+        con.commit()
+        hits = srch.search_assets(con, "q4-retro", mode="content")
+        assert [h["name"] for h in hits] == ["handbook", "budget"]
+        kinds = {h["kind"] for h in hits}
+        assert {"markdown", "data"} <= kinds
+    finally:
+        con.close()
 
 
 def test_snippet_content_search_flag(lib):
@@ -1128,12 +1160,14 @@ def test_collections_v2_tree_and_refs(lib, tmp_path):
     from fengrid.core import colors as core_colors
     pal = core_colors.save_palette(lib, "P", ["#101418"])
 
-    parent = db.create_sub_collection(lib, "UI Kit")
+    parent = db.create_sub_collection(lib, "UI Kit", kind="icon")
     child = db.create_sub_collection(lib, "Buttons", parent_id=parent,
                                      tags="buttons, kit")
     assert db.add_collection_ref(lib, parent, "icon", aid)
-    assert db.add_collection_ref(lib, parent, "snippet", snip)
-    assert db.add_collection_ref(lib, child, "palette", pal)
+    # collections are single-type (#141): a snippet/palette cannot join
+    # an icon collection
+    assert db.add_collection_ref(lib, parent, "snippet", snip) is False
+    assert db.add_collection_ref(lib, parent, "palette", pal) is False
     # unknown kind / missing row rejected
     assert db.add_collection_ref(lib, parent, "car", 1) is False
     assert db.add_collection_ref(lib, parent, "icon", 99999) is False
@@ -1141,8 +1175,10 @@ def test_collections_v2_tree_and_refs(lib, tmp_path):
     tree = db.collection_tree(lib)
     p = next(c for c in tree if c["id"] == parent)
     ch = next(c for c in tree if c["id"] == child)
-    assert p["counts"] == {"icon": 1, "snippet": 1}
-    assert p["total"] == 2
+    assert p["kind"] == "icon"
+    assert ch["kind"] == "icon"       # sub-collections inherit the type
+    assert p["counts"] == {"icon": 1}
+    assert p["total"] == 1
     assert ch["parent_id"] == parent
     assert ch["tags"] == "buttons, kit"
 
@@ -1150,9 +1186,10 @@ def test_collections_v2_tree_and_refs(lib, tmp_path):
     assert next(c for c in db.collection_tree(lib)
                 if c["id"] == parent)["tags"] == "ui, shared"
 
-    ref = db.refs_for(lib, parent, "snippet")[0]
+    # the snippet/palette refs were rejected above — remove the icon ref
+    ref = db.refs_for(lib, parent, "icon")[0]
     db.remove_collection_ref(lib, ref["id"])
-    assert db.refs_for(lib, parent, "snippet") == []
+    assert db.refs_for(lib, parent, "icon") == []
 
     # deleting a parent re-parents children instead of orphaning them
     db.delete_collection(lib, parent)
@@ -1269,7 +1306,7 @@ def test_demo_install_roundtrip(lib, tmp_path):
     assert summary["installed"] is True
     assert summary["projects"] == 14
     assert summary["palettes"] == 8
-    assert summary["snippets"] == 12
+    assert summary["snippets"] == 14
     assert summary["icons"] == 20
     assert summary["font"] is True
 

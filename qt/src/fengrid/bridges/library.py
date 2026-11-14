@@ -12,7 +12,10 @@ Design notes:
 from __future__ import annotations
 
 import os
+import queue
+import sqlite3
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -27,6 +30,13 @@ from ..core import db as core_db
 from ..core import export as core_export
 from ..core import taxonomy as core_tax
 from ..core import indexer, migrate, scanner, search as core_search
+
+# #61: a sources_summary call slower than this lands in crash.log — the
+# freeze dumps kept implicating this read with three contradictory
+# theories; the measured duration separates a slow read from a slow
+# QML load happening around it.
+_SLOW_SUMMARY_S = 0.25
+from ..core import paths as core_paths
 from ..core import settings
 from ..core.export import ExportError
 
@@ -40,6 +50,23 @@ _ROLE_KEYS = ("name", "path", "theme", "context", "ext", "sizePx",
               "width", "height", "mono", "bytes", "id", "starred")
 
 _MAX_FILTER_ROWS = 20000
+
+
+def _page_limit() -> int:
+    """Grid page size. FENGRID_GRID_PAGE overrides it (QA renders of the
+    pagination chip + pagination stress tests; production never sets it)."""
+    raw = os.environ.get("FENGRID_GRID_PAGE", "")
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    return _MAX_FILTER_ROWS
+
+
+# cumulative keyset-pagination ceiling for the grid model — loadMore()
+# stops appending here (each row dict ≈ 1 KB in memory; 100k ≈ 100 MB)
+_MAX_MODEL_ROWS = 100_000
 
 
 class AssetModel(QAbstractListModel):
@@ -65,11 +92,125 @@ class AssetModel(QAbstractListModel):
         self._rows = rows
         self.endResetModel()
 
+    def append_rows(self, extra: list[dict]) -> None:
+        """Keyset pagination: append a page WITHOUT resetting the model
+        (a reset would snap the grid's scroll position back to the top
+        and drop every delegate's live state)."""
+        if not extra:
+            return
+        first = len(self._rows)
+        self.beginInsertRows(QModelIndex(), first, first + len(extra) - 1)
+        self._rows.extend(extra)
+        self.endInsertRows()
+
     def row(self, i: int):
         return self._rows[i] if 0 <= i < len(self._rows) else None
 
     def rows(self) -> list[dict]:
         return self._rows
+
+
+def _lists_snapshot(db_path: str) -> dict:
+    """PERF-6 (#28): the five rail aggregates, computed on a worker-owned
+    connection (WAL reader — never touches the main thread's handle).
+    Pure data; no Qt objects cross the thread boundary."""
+    # READ-ONLY open: never run schema/migrations from a worker thread —
+    # core_db.connect()'s executescript/migrate raced the main thread's
+    # own setup and aborted the process under concurrent test startup.
+    # A bare rw-open fallback covers the read-only WAL edge case
+    # ("disk I/O error" when the -shm can't be initialised read-only).
+    try:
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True,
+                              timeout=30)
+        con.execute("SELECT 1")               # force the open to validate
+    except sqlite3.OperationalError:
+        con = sqlite3.connect(str(db_path), timeout=30)
+    con.row_factory = sqlite3.Row
+    try:
+        return _lists_queries(con)
+    finally:
+        con.close()
+
+
+def _lists_queries(con: sqlite3.Connection) -> dict:
+    # icon-scoped: font rows live in the same asset table and would
+    # otherwise pollute the icon rail with "truetype"/"opentype" themes
+    # and ttf/otf type entries (user report 2026-10-20)
+    themes = [{"name": r[0], "n": r[1]} for r in con.execute(
+        "SELECT theme, COUNT(*) FROM asset"
+        " WHERE kind = 'icon' AND theme IS NOT NULL"
+        " GROUP BY theme ORDER BY theme")]
+    contexts = [{"name": r[0], "n": r[1]} for r in con.execute(
+        "SELECT context, COUNT(*) FROM asset"
+        " WHERE kind = 'icon' AND context IS NOT NULL"
+        " GROUP BY context ORDER BY context")]
+    exts = [{"name": r[0], "n": r[1]} for r in con.execute(
+        "SELECT ext, COUNT(*) FROM asset"
+        " WHERE kind = 'icon' AND ext IS NOT NULL"
+        " GROUP BY ext ORDER BY ext")]
+    tags = []
+    kind_counts: dict[str, dict] = {}
+    for r in con.execute(
+            "SELECT t.name, it.item_kind, COUNT(*) AS n"
+            " FROM tag t JOIN item_tag it ON it.tag_id = t.id"
+            " GROUP BY t.id, it.item_kind ORDER BY t.name"):
+        kind_counts.setdefault(r["name"], {})[r["item_kind"]] = r["n"]
+    # name order preserved from the GROUP BY; n stays the ICON count
+    # (the icon rail's long-standing display), counts adds per-kind
+    for name in kind_counts:
+        tags.append({"name": name, "n": kind_counts[name].get("icon", 0),
+                     "counts": kind_counts[name]})
+    # collections v2: tree order + per-kind counts from collection_ref
+    counts: dict[int, dict] = {}
+    for r in con.execute(
+            "SELECT collection_id, item_kind, COUNT(*) AS n"
+            " FROM collection_ref GROUP BY collection_id, item_kind"):
+        counts.setdefault(r["collection_id"], {})[r["item_kind"]] = r["n"]
+    colls = []
+    for r in con.execute(
+            "SELECT id, name, parent_id, tags, kind FROM collection"
+            " ORDER BY name COLLATE NOCASE"):
+        c = {"id": r["id"], "name": r["name"],
+             "parentId": r["parent_id"] or 0, "tags": r["tags"] or "",
+             "kind": r["kind"]}
+        c["counts"] = counts.get(r["id"], {})
+        c["n"] = sum(c["counts"].values())
+        colls.append(c)
+    colls.sort(key=lambda c: (c["parentId"], c["name"].lower()))
+    return {"themes": themes, "contexts": contexts, "exts": exts,
+            "tags": tags, "collections": colls}
+
+
+class _ListsWorker(QObject):
+    """Owns the `done` signal for the PERF-6 lists worker.
+
+    The pumping side is a DAEMON `threading.Thread` (not a QThread):
+    a QThread that outlives its owner aborts the process at teardown
+    ("QThread: Destroyed while thread is still running" — qFatal), and
+    nothing forces every Library user (tests included) to call
+    _on_about_to_quit. A daemon thread dies with the process instead,
+    and emitting a QObject Signal from a foreign thread is queued to
+    the main thread as usual.
+    """
+    done = Signal(dict)
+
+    def __init__(self, db_path: str, parent=None):
+        super().__init__(parent)
+        self._db_path = db_path
+        self._queue: queue.Queue[str] = queue.Queue()
+        self._thread: threading.Thread | None = None
+
+    def pump(self) -> None:
+        while True:
+            db_path = self._queue.get()
+            if db_path is None:                   # explicit shutdown
+                break
+            try:
+                self.done.emit(_lists_snapshot(db_path))
+            except Exception:                     # noqa: BLE001
+                # an unreadable db must not hang the rail — empty lists
+                self.done.emit({"themes": [], "contexts": [], "exts": [],
+                                "tags": [], "collections": []})
 
 
 class _ScanWorker(QObject):
@@ -142,6 +283,8 @@ class Library(QObject):
     scanningChanged = Signal()
     scanCountChanged = Signal()
     scanPathChanged = Signal()
+    # grid pagination: total matching rows + whether more pages exist
+    gridTotalChanged = Signal()
     scanTotalChanged = Signal()
     lastExportDirChanged = Signal()
     sourcesChanged = Signal()
@@ -182,15 +325,52 @@ class Library(QObject):
 
         self._lists: dict[str, list] = {"themes": [], "contexts": [], "exts": [],
                                         "tags": [], "collections": []}
+        self._sources_cache: list[dict] | None = None
+        # rail-list refresh coalescing: mutations mark dirty and ONE
+        # debounced flush rebuilds the lists (at 1M assets the five
+        # GROUP BY aggregates cost real time — paying them per mutation
+        # of a 1000-item bulk star froze the UI; with the debounce the
+        # whole batch costs one refresh)
+        self._lists_dirty = False
+        self._lists_timer: QTimer | None = None
+        # PERF-6 (#28): persistent background lists worker (daemon thread)
+        self._lists_thread: threading.Thread | None = None
+        self._lists_worker = None
+        self._lists_running = False
+        # grid pagination state (idx_asset_grid keyset pages; see loadMore)
+        self._grid_total = 0
+        self._grid_capped = False
         self._apply_filters()
-        self._refresh_lists()
+        self._refresh_lists(background=True)   # PERF-6: aggregates off-main
         QCoreApplication.instance().aboutToQuit.connect(self._on_about_to_quit)
+
+    def _mark_lists_dirty(self) -> None:
+        """Coalesced refresh: mutations schedule one lists rebuild 150 ms
+        out instead of running the aggregates inline (and N times for an
+        N-item batch — a 1000-item bulk star paid the five GROUP BY
+        aggregates 1000 times). Reads that need freshness NOW call
+        _refresh_lists directly (tests do)."""
+        self._lists_dirty = True
+        if self._lists_timer is None:
+            self._lists_timer = QTimer(self)
+            self._lists_timer.setSingleShot(True)
+            self._lists_timer.setInterval(150)
+            self._lists_timer.timeout.connect(self._flush_lists)
+        self._lists_timer.start()
+
+    def _flush_lists(self) -> None:
+        if not self._lists_dirty:
+            return
+        self._lists_dirty = False
+        self._refresh_lists(background=True)   # PERF-6: aggregates off-main
 
     def _on_about_to_quit(self) -> None:
         # the scan worker runs on its own connection; give the thread a chance
         # to stop before its object is torn down, otherwise Qt logs
         # "QThread: Destroyed while thread is still running" on exit
         self._rescan_pending = False  # a queued drain must not restart a scan
+        if self._lists_worker is not None:      # stop the daemon pump
+            self._lists_worker._queue.put(None)
         if self._thread is not None:
             self._thread.quit()
             self._thread.wait(10000)
@@ -232,6 +412,19 @@ class Library(QObject):
         """Pre-counted file total for the launch splash bar (0 = not yet
         known → the bar runs indeterminate)."""
         return self._scan_total
+
+    @Property(int, notify=gridTotalChanged)
+    def gridTotal(self) -> int:
+        """Rows matching the ACTIVE filters in the database (all pages,
+        not just what the model loaded) — the pagination chip's 'of N'."""
+        return self._grid_total
+
+    @Property(bool, notify=gridTotalChanged)
+    def gridCapped(self) -> bool:
+        """True while more matching rows exist than the model holds —
+        the grid shows the 'showing X of N' chip and loadMore() on
+        scroll-end keeps appending keyset pages."""
+        return self._grid_capped
 
     @Property(str, notify=scanPathChanged)
     def scanPath(self) -> str:
@@ -333,7 +526,7 @@ class Library(QObject):
     @Slot(str, int, bool)
     def set_item_starred(self, kind: str, item_id: int, starred: bool) -> None:
         core_db.set_starred(self._con, int(item_id), bool(starred), kind=kind)
-        self._refresh_lists()
+        self._mark_lists_dirty()
         if starred:
             self.message.emit(
                 f"Starred {kind} #{item_id} — added to Starred Assets")
@@ -352,7 +545,7 @@ class Library(QObject):
     @Slot(str, str)
     def rename_tag(self, old: str, new: str) -> None:
         if core_db.rename_tag(self._con, old, new):
-            self._refresh_lists()
+            self._mark_lists_dirty()
             self._apply_filters()
             self.tagsRevision.emit()
             self.message.emit(f"Tag renamed: {new.strip()}")
@@ -362,7 +555,7 @@ class Library(QObject):
     @Slot(str)
     def delete_tag(self, name: str) -> None:
         if core_db.delete_tag(self._con, name):
-            self._refresh_lists()
+            self._mark_lists_dirty()
             if self._tag == name:
                 self._tag = ""
                 self.filtersChanged.emit()
@@ -528,6 +721,14 @@ class Library(QObject):
         QGuiApplication.clipboard().setText(row["name"])
         self.message.emit(f"Copied '{row['name']}'")
 
+    @Slot(str)
+    def copy_text(self, text: str) -> None:
+        """Clipboard helper for inspector fields (GUID copy etc.)."""
+        if not text:
+            return
+        QGuiApplication.clipboard().setText(str(text))
+        self.message.emit("Copied to clipboard")
+
     @Slot(int, result="QVariantMap")
     def get_details(self, index: int) -> dict:
         row = self._model.row(index)
@@ -546,6 +747,135 @@ class Library(QObject):
     def row_of_asset(self, asset_id: int) -> int:
         return self._index_by_id.get(int(asset_id), -1)
 
+    # ------------------------------------------------- multi-selection
+    def _clean_ids(self, ids) -> list[int]:
+        """Checkbox multi-selection ids → deduped positive ints."""
+        out = []
+        for v in ids or []:
+            try:
+                i = int(v)
+            except (TypeError, ValueError):
+                continue
+            if i > 0:
+                out.append(i)
+        return list(dict.fromkeys(out))
+
+    @Slot("QVariantList", result="QVariantMap")
+    def selection_details(self, ids) -> dict:
+        """Aggregate properties over the checkbox multi-selection — the
+        inspector's multi-select summary. One read-only query over the
+        id list (clamped to kind='icon': the grid selection is icons
+        only); ids outside the current filter still count, unknown ids
+        silently drop. Returns {} for an empty selection."""
+        id_list = self._clean_ids(ids)
+        if not id_list:
+            return {}
+        marks = ",".join("?" * len(id_list))
+        rows = self._con.execute(
+            f"SELECT id, name, path, ext, bytes, width, height, size_px,"
+            f" mono, color_count, theme, context FROM asset"
+            f" WHERE kind = 'icon' AND id IN ({marks})", id_list).fetchall()
+        if not rows:
+            return {}
+        n = len(rows)
+        total_bytes = 0
+        fmts: dict[str, int] = {}
+        widths: list[int] = []
+        heights: list[int] = []
+        sizes: set[int] = set()
+        mono = color = 0
+        color_counts: list[int] = []
+        themes: set[str] = set()
+        contexts: set[str] = set()
+        paths: list[str] = []
+        names: list[str] = []
+        for r in rows:
+            total_bytes += r["bytes"] or 0
+            ext = (r["ext"] or "").lower()
+            if ext:
+                fmts[ext] = fmts.get(ext, 0) + 1
+            if r["width"]:
+                widths.append(r["width"])
+            if r["height"]:
+                heights.append(r["height"])
+            if r["size_px"]:
+                sizes.add(r["size_px"])
+            if r["mono"] == 1:
+                mono += 1
+            elif r["mono"] == 0:
+                color += 1
+            if r["color_count"] is not None:
+                color_counts.append(r["color_count"])
+            if r["theme"]:
+                themes.add(r["theme"])
+            if r["context"]:
+                contexts.add(r["context"])
+            paths.append(r["path"])
+            names.append(r["name"])
+        # tags over the selection: 'starred' counted separately, tags
+        # applied to EVERY selected asset surface as "shared tags"
+        per_tag: dict[str, set] = {}
+        starred = 0
+        for r in self._con.execute(
+                f"SELECT it.item_id, t.name FROM item_tag it"
+                f" JOIN tag t ON t.id = it.tag_id"
+                f" WHERE it.item_kind = 'icon' AND it.item_id IN ({marks})",
+                id_list).fetchall():
+            if r["name"] == "starred":
+                starred += 1
+                continue
+            per_tag.setdefault(r["name"], set()).add(r["item_id"])
+        shared = sorted(t for t, members in per_tag.items()
+                        if len(members) == n)
+        d: dict = {
+            "count": n,
+            "names": names,
+            "paths": paths,
+            "bytes": total_bytes,
+            "formats": [{"ext": e, "n": c} for e, c in
+                        sorted(fmts.items(), key=lambda kv: (-kv[1], kv[0]))],
+            "mono": mono,
+            "color": color,
+            "starred": starred,
+            "sharedTags": shared,
+            "themes": sorted(themes),
+            "contexts": sorted(contexts),
+        }
+        if widths:
+            d["minW"] = min(widths)
+            d["maxW"] = max(widths)
+        if heights:
+            d["minH"] = min(heights)
+            d["maxH"] = max(heights)
+        if sizes:
+            d["sizes"] = sorted(sizes)
+        if color_counts:
+            d["avgColors"] = round(sum(color_counts) / len(color_counts), 1)
+        return d
+
+    @Slot("QVariantList", result="QVariantList")
+    def selection_paths(self, ids) -> list:
+        """Filesystem paths of the checkbox selection, in selection
+        order — the bulk-export job's input list."""
+        id_list = self._clean_ids(ids)
+        if not id_list:
+            return []
+        rows = self._con.execute(
+            "SELECT id, path FROM asset WHERE kind = 'icon'"
+            f" AND id IN ({','.join('?' * len(id_list))})", id_list).fetchall()
+        by_id = {r["id"]: r["path"] for r in rows}
+        # selection order, not database order
+        return [by_id[i] for i in id_list if i in by_id]
+
+    @Slot("QVariantList")
+    def copy_names(self, ids) -> None:
+        """Clipboard: one name per line for the whole selection."""
+        names = self.selection_details(ids).get("names") or []
+        if not names:
+            return
+        QGuiApplication.clipboard().setText("\n".join(str(x) for x in names))
+        self.message.emit(f"Copied {len(names)} names")
+
     # ------------------------------------------------------------ starring
     @Slot(int, result=bool)
     def is_starred(self, index: int) -> bool:
@@ -555,12 +885,20 @@ class Library(QObject):
         return core_db.is_starred(self._con, row["id"], kind="icon")
 
     @Slot(int, bool)
+    def set_starred_item(self, item_id: int, starred: bool) -> None:
+        """Star/unstar an icon asset BY ID (multi-select bulk actions)."""
+        core_db.set_starred(self._con, int(item_id), bool(starred),
+                            kind="icon")
+        self._mark_lists_dirty()
+        self.tagsRevision.emit()
+        self._apply_filters()
+
     def set_starred(self, index: int, starred: bool) -> None:
         row = self._model.row(index)
         if not row:
             return
         core_db.set_starred(self._con, row["id"], bool(starred), kind="icon")
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self.tagsRevision.emit()
         self._apply_filters()
         if starred:
@@ -583,7 +921,7 @@ class Library(QObject):
         con.execute("INSERT OR IGNORE INTO item_tag(item_id, item_kind,"
                     " tag_id) VALUES (?, 'icon', ?)", (row["id"], tid))
         con.commit()
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self.tagsRevision.emit()
         self.message.emit(f"Tagged '{row['name']}' with #{name}")
 
@@ -597,23 +935,24 @@ class Library(QObject):
             " AND tag_id = (SELECT id FROM tag WHERE name = ?)",
             (row["id"], name))
         self._con.commit()
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self.tagsRevision.emit()
 
     # ------------------------------------------------ collections v2 (tree,
     # tags, all asset kinds)
     @Slot(str, int, str, result=int)
     def create_sub_collection(self, name: str, parent_id: int = 0,
-                              tags: str = "") -> int:
-        cid = core_db.create_sub_collection(self._con, name, parent_id, tags)
-        self._refresh_lists()
+                              tags: str = "", kind: str = "") -> int:
+        cid = core_db.create_sub_collection(self._con, name, parent_id,
+                                            tags, kind)
+        self._mark_lists_dirty()
         self.message.emit(f"Collection '{(name or '').strip()}' created")
         return cid
 
     @Slot(int, str)
     def set_collection_tags(self, coll_id: int, tags: str) -> None:
         core_db.set_collection_tags(self._con, coll_id, tags)
-        self._refresh_lists()
+        self._mark_lists_dirty()
 
     @Slot(int)
     def delete_collection(self, coll_id: int) -> None:
@@ -621,7 +960,7 @@ class Library(QObject):
         if str(coll_id) == self._collection:
             self._collection = ""
             self.filtersChanged.emit()
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self._apply_filters()
         self.message.emit("Collection deleted")
 
@@ -630,7 +969,7 @@ class Library(QObject):
                 label: str = "") -> bool:
         ok = core_db.add_collection_ref(self._con, coll_id, kind, item_id,
                                         label)
-        self._refresh_lists()
+        self._mark_lists_dirty()
         if ok:
             self.message.emit(f"Added to collection ({kind})")
         else:
@@ -640,27 +979,30 @@ class Library(QObject):
     @Slot(int)
     def remove_ref(self, ref_id: int) -> None:
         core_db.remove_collection_ref(self._con, ref_id)
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self._apply_filters()
 
     @Slot(int, result="QVariant")
     def collection_members(self, coll_id: int) -> list:
         return core_db.refs_for(self._con, coll_id)
 
-    @Slot(str, result=int)
-    def create_collection(self, name: str) -> int:
+    @Slot(str, str, result=int)
+    def create_collection(self, name: str, kind: str = "") -> int:
         name = (name or "").strip()
         if not name:
             return -1
+        kind = (kind or "").strip()
         row = self._con.execute(
-            "SELECT id FROM collection WHERE name = ?", (name,)).fetchone()
+            "SELECT id FROM collection WHERE name = ? AND kind IS ?",
+            (name, kind or None)).fetchone()
         if row:
-            self._refresh_lists()
+            self._mark_lists_dirty()
             return row[0]
         cur = self._con.execute(
-            "INSERT INTO collection(name) VALUES (?)", (name,))
+            "INSERT INTO collection(name, kind) VALUES (?, ?)",
+            (name, kind or None))
         self._con.commit()
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self.message.emit(f"Collection '{name}' created")
         return cur.lastrowid
 
@@ -671,11 +1013,41 @@ class Library(QObject):
             return
         ok = core_db.add_collection_ref(self._con, coll_id, "icon",
                                         row["id"], row["name"])
-        self._refresh_lists()
+        self._mark_lists_dirty()
         if ok:
             self.message.emit(f"Added '{row['name']}' to collection")
         else:
             self.message.emit("Could not add to collection")
+
+    # ------------------------------------------------- generic (per-kind)
+    @Slot(str, int, bool)
+    def star_item(self, kind: str, item_id: int, starred: bool) -> None:
+        """Star/unstar ANY tracked kind by row id — the shared context
+        menu entry (fonts, palettes, snippets, icons…)."""
+        core_db.set_starred(self._con, int(item_id), bool(starred),
+                            kind=kind)
+        self._mark_lists_dirty()
+        self.tagsRevision.emit()
+        self.message.emit("Starred" if starred else "Unstarred")
+
+    @Slot(int, str, int, str)
+    def add_item_to_collection(self, coll_id: int, kind: str,
+                               item_id: int, name: str = "") -> None:
+        ok = core_db.add_collection_ref(self._con, int(coll_id), kind,
+                                        int(item_id), name)
+        self._mark_lists_dirty()
+        self.message.emit("Added to collection" if ok
+                          else "Could not add to collection")
+
+    @Slot(int, result=int)
+    def row_id(self, i: int) -> int:
+        """Asset id at a model row (multi-select range fills)."""
+        r = self._model.row(int(i))
+        return int(r["id"]) if r else -1
+
+    @Slot(str, int, result=bool)
+    def is_item_starred(self, kind: str, item_id: int) -> bool:
+        return core_db.is_starred(self._con, int(item_id), kind=kind)
 
     @Slot(str)
     @Slot(str, str)
@@ -683,12 +1055,16 @@ class Library(QObject):
         """Register an asset folder ('folder' = icons, 'fontroot' =
         fonts) and rescan. Icon folders rescan here; for font folders
         the caller rescans fonts (fonts bridge owns that worker)."""
-        p = str(Path(path).expanduser())
+        # dialog callers may hand over a file:// URL — QUrl.toLocalFile
+        # converts Windows drive-letter URLs (file:///D:/…) correctly;
+        # a substring slice would leave "/D:/…" and isdir would fail (#41)
+        p = str(Path(core_paths.local_path(path)).expanduser())
         if not os.path.isdir(p):
             self.message.emit(f"Not a folder: {p}")
             return
         indexer.add_folder_source(self._con, p, kind=kind)
         self.message.emit(f"Added folder: {p}")
+        self._sources_cache = None
         self.sourcesChanged.emit()
         if kind == "fontroot":
             return
@@ -702,6 +1078,7 @@ class Library(QObject):
             self.message.emit("Removed source")
         else:
             self.message.emit("Source not found")
+        self._sources_cache = None
         self.sourcesChanged.emit()
         self.refresh()
 
@@ -711,25 +1088,49 @@ class Library(QObject):
         first-run). The flag is persisted immediately; the purge or
         re-index happens in the next scan, which the caller triggers."""
         indexer.set_path_enabled(self._con, path, kind, enabled)
+        self._sources_cache = None
         self.sourcesChanged.emit()
 
     @Slot()
     def refresh(self) -> None:
         """Public model refresh for QML after source mutations that
         don't run a scan (toggles, removes)."""
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self._apply_filters()
 
     @Property("QVariantList", notify=sourcesChanged)
     def sources(self):
         """All registered sources with per-source asset counts — the
         Settings / first-run library section binds to this."""
+        if self._sources_cache is not None:
+            return self._sources_cache
+        t0 = time.perf_counter()
         out = []
         for s in indexer.sources_summary(self._con):
             s = dict(s)
             s["enabled"] = bool(s["enabled"])
             out.append(s)
+        self._sources_cache = out
+        dt = time.perf_counter() - t0
+        if dt > _SLOW_SUMMARY_S:
+            # #61: this read kept showing up in freeze dumps with
+            # contradictory theories (slow query, lock contention,
+            # storage stall — each disproven by the next dump). Record
+            # the ACTUAL duration so the next report distinguishes a
+            # genuinely slow read from a slow QML load around it.
+            self._log_slow(f"sources_summary {dt:.2f}s")
         return out
+
+    def _log_slow(self, line: str) -> None:
+        try:
+            with open(os.path.join(os.path.dirname(self._db_path)
+                                   if self._db_path else ".",
+                                   "crash.log"), "a",
+                      encoding="utf-8") as f:
+                f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} — slow: "
+                        f"{line}\n")
+        except OSError:
+            pass
 
     @Slot(str)
     def remove_folder_path(self, path: str) -> None:
@@ -755,7 +1156,7 @@ class Library(QObject):
         except Exception as e:  # user-supplied file — report, don't crash
             self.exportFailed.emit(f"Import failed: {e}")
             return
-        self._refresh_lists()
+        self._mark_lists_dirty()
         self._apply_filters()
         self.tagsRevision.emit()
         self.message.emit(
@@ -857,13 +1258,28 @@ class Library(QObject):
         self._last_scan = time.strftime("%H:%M:%S")
         settings.set(self._con, "last_scan", self._last_scan)
         self.scanningChanged.emit()
-        self._refresh_lists()
+        # #141: a scan may have just indexed a downloaded pack's clone —
+        # reconcile the download collections (idempotent, cheap when
+        # nothing new landed)
+        from ..core import presets as core_presets
+        try:
+            core_presets.sync_download_collections(self._con)
+            core_presets.sync_default_library(self._con)
+            # #141 round 2: downloaded packs become discrete libraries
+            core_presets.sync_pack_libraries(self._con)
+        except Exception:                          # noqa: BLE001
+            pass
+        self._mark_lists_dirty()
         self._apply_filters()
         self.scanFinished.emit(report)
         self.message.emit(
             f"Indexed: {report['new']} new, {report['changed']} changed,"
             f" {report['pruned']} pruned ({report['total']} files)")
-        self.sourcesChanged.emit()  # per-source counts moved
+        # Do NOT emit sourcesChanged here — the background refresh
+        # (_mark_lists_dirty -> _flush_lists -> _refresh_lists(background=True))
+        # will emit listsChanged when the aggregates are ready. Emitting
+        # sourcesChanged on the main thread triggers sources_summary()
+        # which freezes the UI on software-rendered machines (#61).
         if self._rescan_pending:
             # deferred, not direct: the finished worker's thread refs are
             # still being cleared in this signal's delivery chain, and a
@@ -871,62 +1287,64 @@ class Library(QObject):
             self._rescan_pending = False
             QTimer.singleShot(0, self.rescan)
 
-    def _refresh_lists(self) -> None:
-        con = self._con
-        # icon-scoped: font rows live in the same asset table and would
-        # otherwise pollute the icon rail with "truetype"/"opentype" themes
-        # and ttf/otf type entries (user report 2026-10-20)
-        themes = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT theme, COUNT(*) FROM asset"
-            " WHERE kind = 'icon' AND theme IS NOT NULL"
-            " GROUP BY theme ORDER BY theme")]
-        contexts = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT context, COUNT(*) FROM asset"
-            " WHERE kind = 'icon' AND context IS NOT NULL"
-            " GROUP BY context ORDER BY context")]
-        exts = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT ext, COUNT(*) FROM asset"
-            " WHERE kind = 'icon' AND ext IS NOT NULL"
-            " GROUP BY ext ORDER BY ext")]
-        tags = [{"name": r[0], "n": r[1]} for r in con.execute(
-            "SELECT t.name,"
-            " (SELECT COUNT(*) FROM item_tag it"
-            "  WHERE it.tag_id = t.id AND it.item_kind = 'icon') AS n"
-            " FROM tag t GROUP BY t.id ORDER BY t.name")]
-        # collections v2: tree order + per-kind counts from collection_ref
-        counts: dict[int, dict] = {}
-        for r in con.execute(
-                "SELECT collection_id, item_kind, COUNT(*) AS n"
-                " FROM collection_ref GROUP BY collection_id, item_kind"):
-            counts.setdefault(r["collection_id"], {})[r["item_kind"]] = r["n"]
-        colls = []
-        for r in con.execute(
-                "SELECT id, name, parent_id, tags FROM collection"
-                " ORDER BY name COLLATE NOCASE"):
-            c = {"id": r["id"], "name": r["name"],
-                 "parentId": r["parent_id"] or 0, "tags": r["tags"] or ""}
-            c["counts"] = counts.get(r["id"], {})
-            c["n"] = sum(c["counts"].values())
-            colls.append(c)
-        colls.sort(key=lambda c: (c["parentId"], c["name"].lower()))
-        self._lists = {"themes": themes, "contexts": contexts, "exts": exts,
-                       "tags": tags, "collections": colls}
-        self.listsChanged.emit()
+    def _refresh_lists(self, background: bool = False) -> None:
+        """Rebuild the five rail aggregates.
 
-    def _apply_filters(self) -> None:
-        con = self._con
-        term = (self._search or "").strip()
-        # alternate search modes bypass the FTS query path
-        if term and self._search_mode in ("fuzzy", "regex", "content"):
-            try:
-                rows = core_search.search_assets(con, term, self._search_mode)
-            except core_search.SearchError as exc:
-                self.message.emit(str(exc))
-                rows = []
-            self._model.set_rows(rows)
+        PERF-6 (#28): at six-figure asset counts the GROUP BYs cost
+        seconds — on the main thread they stall first paint and every
+        debounced flush. With ``background`` the aggregates run on a
+        PERSISTENT worker thread (one per Library, own read-only WAL
+        connection) and the result is swapped in on the main thread
+        when it lands; the UI paints with (possibly stale) lists and
+        fills in when ready. Synchronous mode (default) is kept for
+        tests and forced refreshes.
+        """
+        if not background:
+            # sync path keeps the pre-PERF-6 behaviour exactly: read via
+            # the caller's own connection (tests pass odd db_paths — a
+            # data dir, a not-yet-created file — and must keep working)
+            self._lists = _lists_queries(self._con)
             self.listsChanged.emit()
             return
+        if self._lists_running:
+            self._lists_dirty = True      # trailing refresh after it lands
+            return
+        self._ensure_lists_thread()
+        self._lists_running = True
+        self._lists_worker._queue.put(self._db_path)
 
+    def _ensure_lists_thread(self) -> None:
+        if self._lists_thread is not None:
+            return
+        worker = _ListsWorker(self._db_path)
+        worker.done.connect(self._on_lists_ready)      # queued → main thread
+        thread = threading.Thread(target=worker.pump,
+                                  name="fengrid-lists", daemon=True)
+        thread.start()
+        self._lists_thread = thread
+        self._lists_worker = worker
+
+    def _on_lists_ready(self, snapshot: dict) -> None:
+        self._lists_running = False
+        self._lists = snapshot
+        self.listsChanged.emit()
+        # a mutation may have landed while the worker ran — one trailing
+        # refresh coalesces all of them
+        if self._lists_dirty:
+            self._lists_dirty = False
+            self._refresh_lists(background=True)
+
+    @staticmethod
+    def _row_to_dict(r) -> dict:
+        d = dict(r)
+        d["sizePx"] = d.pop("size_px")
+        return d
+
+    def _grid_core(self) -> tuple[list, list, list]:
+        """Shared filter builder for the icons grid: (sql, where, params).
+        The page query and the pagination COUNT MUST see identical
+        joins/filters — they both consume this."""
+        con = self._con
         # `starred` rides along as a computed role so card badges and the
         # context menu need no extra query per delegate
         sql = ["SELECT a.*, EXISTS("
@@ -1016,20 +1434,97 @@ class Library(QObject):
                        " AND cr.item_id = a.id")
             where.append("cr.collection_id = ?")
             params.append(int(self._collection))
+        return sql, where, params
 
+    def _grid_page(self, keyset: tuple | None = None) -> tuple[str, list]:
+        """(query, params) for one grid page. `keyset` = (theme, name, id)
+        of the last loaded row — a row-value seek into
+        idx_asset_grid(kind, theme, name, id), so page N+1 costs an
+        ordered range scan instead of re-sorting the whole filtered set.
+        SQLite sorts NULLs FIRST, so a page ending inside the unthemed
+        block (user-folder assets carry no theme) can't use the row-value
+        form ('>' with a NULL member never matches) — that case gets the
+        explicit NULL-aware condition."""
+        sql, where, params = self._grid_core()
+        if keyset is not None:
+            kt, kn, kid = keyset
+            if kt is None:
+                where.append("(a.theme IS NOT NULL OR a.name > ?"
+                             " OR (a.name = ? AND a.id > ?))")
+                params += [kn, kn, kid]
+            else:
+                where.append("(a.theme, a.name, a.id) > (?, ?, ?)")
+                params += [kt, kn, kid]
         query = " ".join(sql)
         if where:
             query += " WHERE " + " AND ".join(where)
-        query += " ORDER BY a.theme, a.name LIMIT ?"
-        params.append(_MAX_FILTER_ROWS)
+        # trailing a.id tiebreak: duplicate (theme, name) pairs (same-named
+        # files in two sources) made the LIMIT boundary unstable — a row
+        # could land on two pages or on none
+        query += " ORDER BY a.theme, a.name, a.id LIMIT ?"
+        params.append(_page_limit())
+        return query, params
 
-        rows = []
-        for r in con.execute(query, params):
-            d = dict(r)
-            d["sizePx"] = d.pop("size_px")
-            rows.append(d)
+    def _grid_count(self) -> int:
+        """Rows matching the ACTIVE filters across ALL pages — identical
+        joins/filters to _grid_page, wrapped in COUNT(*)."""
+        sql, where, params = self._grid_core()
+        q = " ".join(["SELECT COUNT(*) FROM asset a"] + sql[1:])
+        if where:
+            q += " WHERE " + " AND ".join(where)
+        return self._con.execute(q, params).fetchone()[0]
+
+    def _apply_filters(self) -> None:
+        con = self._con
+        term = (self._search or "").strip()
+        # alternate search modes bypass the FTS query path
+        if term and self._search_mode in ("fuzzy", "regex", "content"):
+            try:
+                rows = core_search.search_assets(con, term, self._search_mode)
+            except core_search.SearchError as exc:
+                self.message.emit(str(exc))
+                rows = []
+            self._model.set_rows(rows)
+            self._grid_total = len(rows)
+            self._grid_capped = False
+            self.gridTotalChanged.emit()
+            self.listsChanged.emit()
+            return
+
+        query, params = self._grid_page()
+        rows = [self._row_to_dict(r) for r in con.execute(query, params)]
         self._model.set_rows(rows)
         self._index_by_id = {row["id"]: i for i, row in enumerate(rows)}
+        self._grid_total = self._grid_count()
+        self._grid_capped = (len(rows) >= _page_limit()
+                             and self._grid_total > len(rows))
+        self.gridTotalChanged.emit()
+
+    @Slot()
+    def loadMore(self) -> None:
+        """Append the next keyset page for the active filters (the grid
+        calls this at scroll end while gridCapped is true). Refuses once
+        the model holds _MAX_MODEL_ROWS rows — past that the user needs
+        a narrower filter, not an unbounded in-memory model."""
+        rows = self._model.rows()
+        if not rows or not self._grid_capped or len(rows) >= _MAX_MODEL_ROWS:
+            return
+        last = rows[-1]
+        query, params = self._grid_page(
+            (last.get("theme"), last["name"], last["id"]))
+        extra = [self._row_to_dict(r)
+                 for r in self._con.execute(query, params)]
+        if not extra:
+            self._grid_capped = False
+            self.gridTotalChanged.emit()
+            return
+        base = len(rows)
+        self._model.append_rows(extra)
+        for off, row in enumerate(extra):
+            self._index_by_id[row["id"]] = base + off
+        if len(self._model.rows()) >= self._grid_total:
+            self._grid_capped = False
+        self.gridTotalChanged.emit()
 
     def _render_svg(self, path: str, side: int) -> Path:
         # str filename: Qt 6 removed the implicit QUrl→QString conversion

@@ -36,7 +36,10 @@ MAX_RESULTS = 500
 MAX_FILE_BYTES = 256 * 1024
 MAX_SCANS = 2_000
 TEXT_EXTS = {".svg", ".xml", ".html", ".htm", ".css", ".js", ".json",
-             ".md", ".txt", ".toml", ".yaml", ".yml", ".ini"}
+             ".md", ".txt", ".toml", ".yaml", ".yml", ".ini",
+             # text-extractable members of the other tracked kinds (#30)
+             ".csv", ".tsv", ".sql", ".ndjson", ".jsonl", ".cfg", ".conf",
+             ".markdown", ".mkd", ".mdx", ".mdown", ".tex"}
 
 
 class SearchError(ValueError):
@@ -44,9 +47,21 @@ class SearchError(ValueError):
 
 
 def _candidates(con: sqlite3.Connection) -> list[tuple[int, str, str]]:
-    """(asset_id, name, path) for scoring — one query, bounded."""
+    """(asset_id, name, path) for scoring — one query, bounded.
+
+    Deterministic ORDER BY id. At six-figure+ counts the cap silently
+    narrows the candidate set; #29's concern was that OLDEST-first made
+    every newly-scanned asset invisible to fuzzy/regex above the cap.
+    The slice is now NEWEST-first (ORDER BY id DESC): the rows a user
+    just imported are always searchable, and the documented subset is
+    still stable and explainable. Older rows remain fully reachable
+    through the smart/FTS mode, which is index-backed and uncapped.
+    A fuller fix — unioning FTS token matches into the candidate set —
+    remains the follow-up for the perf backlog.
+    """
     rows = con.execute(
-        "SELECT id, name, path FROM asset LIMIT ?", (MAX_CANDIDATES,),
+        "SELECT id, name, path FROM asset ORDER BY id DESC LIMIT ?",
+        (MAX_CANDIDATES,),
     ).fetchall()
     return [(r["id"], r["name"], r["path"]) for r in rows]
 
@@ -72,11 +87,17 @@ def _fuzzy(con, term: str, limit: int) -> list[dict]:
     t = term.lower()
     rows = []
     for aid, name, path in _candidates(con):
-        # subsequence hit on the name is the fast path; ratio refines rank
-        ratio = difflib.SequenceMatcher(None, t, name.lower()).ratio()
-        sub = _subsequence(t, name.lower())
-        if not sub and ratio < 0.45:
-            continue
+        low = name.lower()
+        sub = _subsequence(t, low)
+        if not sub:
+            # quick_ratio is an upper bound on ratio and near-free —
+            # reject hopeless candidates without the quadratic pass
+            m = difflib.SequenceMatcher(None, t, low)
+            if m.quick_ratio() < 0.45:
+                continue
+            ratio = m.ratio()
+        else:
+            ratio = difflib.SequenceMatcher(None, t, low).ratio()
         path_bonus = 0.1 if t in path.lower() else 0.0
         score = ratio + (0.35 if sub else 0.0) + path_bonus
         rows.append({"id": aid, "name": name, "path": path,
@@ -120,14 +141,18 @@ def _content(con, term: str, limit: int) -> list[dict]:
         if len(hits) >= limit:
             return hits
 
-    # 2) text-like asset files — bounded I/O
+    # 2) text-like asset files — bounded I/O. The ext filter is in SQL
+    # (idx_asset_ext) across ALL kinds (#30): doc/markdown/data assets
+    # carry text files too — content search used to cover kind='icon'
+    # rows only, silently hiding every other kind's text. MAX_SCANS
+    # still bounds the read count.
+    text_exts = tuple(sorted({e.lstrip(".") for e in TEXT_EXTS}))
+    marks = ",".join("?" * len(text_exts))
     scans = 0
     for r in con.execute(
-            "SELECT id, name, path, ext FROM asset"
-            " WHERE kind = 'icon' ORDER BY id"):
-        ext = (r["ext"] or "").lstrip(".").lower()
-        if ext not in {e.lstrip(".") for e in TEXT_EXTS}:
-            continue
+            "SELECT id, kind, name, path, ext FROM asset"
+            f" WHERE ext IN ({marks})"
+            " ORDER BY id", text_exts):
         scans += 1
         if scans > MAX_SCANS:
             break
@@ -139,7 +164,7 @@ def _content(con, term: str, limit: int) -> list[dict]:
         except OSError:
             continue
         if needle in text:
-            hits.append({"kind": "asset", "id": r["id"], "name": r["name"],
+            hits.append({"kind": r["kind"], "id": r["id"], "name": r["name"],
                          "path": r["path"], "score": 1.0})
             if len(hits) >= limit:
                 break

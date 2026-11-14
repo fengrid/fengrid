@@ -12,17 +12,19 @@ Button {
     opacity: enabled ? 1 : 0.55
     background: Rectangle {
         radius: 6
-        color: btn.down ? theme.tokens.accent
-             : btn.hovered ? theme.tokens.surface2 : theme.tokens.bg
+        color: btn.down ? theme.tokens.accent : btn.hovered ? theme.tokens.surface2 : theme.tokens.bg
         border.color: theme.tokens.border
-        Behavior on color { ColorAnimation { duration: 90 } }
+        Behavior on color {
+            ColorAnimation {
+                duration: 90
+            }
+        }
     }
     contentItem: Text {
         text: btn.text
         font.family: theme.uiFont
         font.pixelSize: 11
-        color: btn.down ? theme.tokens.bg
-             : btn.hovered ? theme.tokens.text : theme.tokens.textMuted
+        color: btn.down ? theme.tokens.bg : btn.hovered ? theme.tokens.text : theme.tokens.textMuted
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }

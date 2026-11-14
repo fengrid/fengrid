@@ -18,15 +18,15 @@ ColumnLayout {
     spacing: 0
     visible: {
         if (!filterRows)
-            return true
+            return true;
         for (var i = 0; i < children.length; i++) {
-            var c = children[i]
+            var c = children[i];
             // rowMatches, NOT visible: visible reads are effective, and
             // this section's own flag gates its rows' — that deadlocks
             if (c.rowMatches !== undefined && c.rowMatches)
-                return true
+                return true;
         }
-        return false
+        return false;
     }
 
     Text {

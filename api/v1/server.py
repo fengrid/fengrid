@@ -54,6 +54,21 @@ ROUTES: list[tuple[str, re.Pattern, str]] = [
                         r"/star$"), "assets_star"),
     ("POST", re.compile(r"^/api/v1/assets/(?P<kind>[a-z]+)/(?P<item_id>\d+)"
                         r"/tags$"), "assets_tags"),
+    ("GET",  re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/points$"),
+     "data_points_get"),
+    ("POST", re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/points$"),
+     "data_points_append"),
+    ("GET",  re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_get"),
+    ("PUT",  re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_put"),
+    ("PATCH", re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_patch"),
+    ("DELETE", re.compile(r"^/api/v1/assets/data/(?P<item_id>\d+)/content$"),
+     "data_content_delete"),
+    ("GET",  re.compile(r"^/api/v1/links/resolve$"), "links_resolve"),
+    ("POST", re.compile(r"^/api/v1/links/expand$"), "links_expand"),
+    ("GET",  re.compile(r"^/api/v1/lookup$"), "assets_lookup"),
     ("POST", re.compile(r"^/api/v1/assets/(?P<kind>[a-z]+)/(?P<item_id>\d+)"
                         r"/collect$"), "assets_collect"),
     ("DELETE", re.compile(r"^/api/v1/assets/(?P<kind>[a-z]+)/(?P<item_id>\d+)"
@@ -81,6 +96,22 @@ ROUTES: list[tuple[str, re.Pattern, str]] = [
     ("GET",  re.compile(r"^/api/v1/projects$"), "projects_list"),
     ("GET",  re.compile(r"^/api/v1/projects/(?P<pid>\d+)$"),
      "projects_describe"),
+    ("GET",  re.compile(r"^/api/v1/planning/board$"), "planning_board"),
+    ("GET",  re.compile(r"^/api/v1/planning/stages$"), "planning_stages"),
+    ("POST", re.compile(r"^/api/v1/planning/tasks$"), "planning_task_create"),
+    ("GET",  re.compile(r"^/api/v1/planning/tasks/(?P<tid>\d+)$"),
+     "planning_task"),
+    ("PATCH", re.compile(r"^/api/v1/planning/tasks/(?P<tid>\d+)$"),
+     "planning_task_update"),
+    ("POST", re.compile(r"^/api/v1/planning/tasks/(?P<tid>\d+)/move$"),
+     "planning_task_move"),
+    ("DELETE", re.compile(r"^/api/v1/planning/tasks/(?P<tid>\d+)$"),
+     "planning_task_delete"),
+    ("POST", re.compile(r"^/api/v1/planning/tasks/(?P<tid>\d+)/assets$"),
+     "planning_task_link"),
+    ("DELETE", re.compile(r"^/api/v1/planning/tasks/(?P<tid>\d+)"
+                          r"/assets/(?P<row_id>\d+)$"),
+     "planning_task_unlink"),
     ("GET",  re.compile(r"^/api/v1/backups$"), "backups_list"),
     ("POST", re.compile(r"^/api/v1/backups$"), "backup_create"),
     ("POST", re.compile(r"^/api/v1/backup/restore$"), "backup_restore"),
@@ -134,6 +165,23 @@ def make_handler(api: Api, token: str | None):
                 return self.rfile.read(length)
             return b""
 
+        def _send_spec(self) -> None:
+            """The bundled openapi.yaml, served from the package dir."""
+            spec = Path(__file__).resolve().parent / "openapi.yaml"
+            try:
+                body = spec.read_bytes()
+            except OSError:
+                self._send(404, error_body(404, "not_found",
+                                           "openapi.yaml not bundled"))
+                return
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             "text/yaml; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self._cors()
+            self.end_headers()
+            self.wfile.write(body)
+
         # dispatch for every verb
         def _dispatch(self, method: str) -> None:
             path = self.path.split("?", 1)[0]
@@ -149,6 +197,11 @@ def make_handler(api: Api, token: str | None):
                     self._cors()
                     self.end_headers()
                     return
+                # #26: serve the bundled OpenAPI spec BEFORE auth — it
+                # documents the public contract and carries no secrets
+                if method == "GET" and path.endswith("/openapi.yaml"):
+                    self._send_spec()
+                    return
                 check_auth(self.headers, token)
                 status, payload = self._route(method, path, params)
             except ApiError as e:
@@ -162,8 +215,8 @@ def make_handler(api: Api, token: str | None):
             self._send(status, payload)
 
         def _route(self, method: str, path: str, params: dict):
-            body = read_json(self._body()) if method in ("POST", "PATCH") \
-                else {}
+            body = read_json(self._body()) \
+                if method in ("POST", "PATCH", "PUT") else {}
             matched_path = False
             for m, pattern, fname in ROUTES:
                 match = pattern.match(path)

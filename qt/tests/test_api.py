@@ -216,6 +216,66 @@ def test_inventory_and_projects(api_env):
     assert st == 200
 
 
+def _real_png(path, w=4, h=4):
+    """A valid tiny PNG (the seeded fixture icon is only header bytes)."""
+    import struct
+    import zlib
+    def chunk(tag, data):
+        body = tag + data
+        return (struct.pack(">I", len(data)) + body
+                + struct.pack(">I", zlib.crc32(body)))
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
+    raw = b"".join(b"\x00" + b"\xff\x00\x00\xff" * w for _ in range(h))
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr)
+                     + chunk(b"IDAT", zlib.compress(raw))
+                     + chunk(b"IEND", b""))
+
+
+def _wait_job(b, jid, timeout=15.0):
+    deadline = time.time() + timeout
+    st, body = 0, {}
+    while time.time() < deadline:
+        st, body = _req(b, "GET", f"/api/v1/jobs/{jid}")
+        if body["data"]["state"] in ("done", "failed"):
+            return st, body
+        time.sleep(0.1)
+    return st, body
+
+
+def test_ingest_indexes_materialised_assets(api_env, tmp_path):
+    """Import via the API must place files AND index them — the same
+    post-import scan the GUI bridge runs (regression: API ingest used to
+    copy files without scanning, so assets never appeared)."""
+    b = api_env["base"]
+    png = tmp_path / "ingested.png"
+    _real_png(png)
+    zip_path = tmp_path / "ingested.zip"
+    import zipfile
+    with zipfile.ZipFile(zip_path, "w") as z:
+        inner = tmp_path / "zipped.png"
+        _real_png(inner)
+        z.write(inner, "zipped.png")
+
+    st, body = _req(b, "POST", "/api/v1/assets/ingest",
+                    {"paths": [str(png)]})
+    assert st == 200
+    st, jb = _wait_job(b, body["data"]["id"])
+    assert jb["data"]["state"] == "done", jb["data"].get("error")
+    assert jb["data"]["result"].get("indexed", 0) >= 1
+
+    st, body = _req(b, "POST", "/api/v1/assets/ingest",
+                    {"zip_path": str(zip_path)})
+    assert st == 200
+    st, jb = _wait_job(b, body["data"]["id"])
+    assert jb["data"]["state"] == "done", jb["data"].get("error")
+
+    # both ingested assets are now visible in the catalog
+    st, body = _req(b, "GET", "/api/v1/assets?kind=icon")
+    assert st == 200
+    names = {i["name"] for i in body["data"]["items"]}
+    assert "ingested" in names and "zipped" in names
+
+
 # ────────────────────────────────────────────────────── scheduler + jobs
 def test_scheduler_runs_jobs_and_reports(api_env):
     b = api_env["base"]
@@ -285,3 +345,176 @@ def test_backup_job_roundtrip(api_env, tmp_path):
     st, body = _req(b, "GET", "/api/v1/backups")
     assert any(i["name"].endswith(".tar.gz")
                for i in body["data"]["items"])
+
+
+def test_openapi_spec_served_without_auth(api_env):
+    """#26: the bundled spec is public (pre-auth) and well-formed."""
+    import urllib.request
+    b = api_env["base"]
+    req = urllib.request.Request(b + "/api/v1/openapi.yaml")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            st = resp.status
+            raw = resp.read()
+    except urllib.error.HTTPError as e:      # noqa: BLE001
+        st = e.code
+    assert st == 200
+    text = raw.decode("utf-8")
+    assert text.lstrip().startswith("openapi:")
+    assert "paths:" in text
+
+
+def test_lock_ink_falls_back_on_pale_swatches():
+    """#25: amber lock tint only when it reads; pale swatches fall back
+    to the swatch's best ink."""
+    from fengrid.core import colors as core_colors
+    rgb = core_colors.hex2rgb("#EEE1C4")     # Wheat — amber is invisible
+    assert core_colors.contrast(rgb, (245, 194, 92)) < 3.0
+    con = _tmp_con()
+    from fengrid.bridges.colors import Colors
+    bridge = Colors(con)
+    pid = con.execute("INSERT INTO palette(name) VALUES ('t')").lastrowid
+    con.execute("INSERT INTO palette_color(palette_id, position, hex)"
+                " VALUES (?, 0, '#EEE1C4')", (pid,))
+    con.execute("INSERT INTO palette_color(palette_id, position, hex)"
+                " VALUES (?, 1, '#371E52')", (pid,))
+    con.commit()
+    bridge.open_palette(pid)
+    rows = bridge.swatches
+    pale = [r for r in rows if r["hex"] == "#EEE1C4"][0]
+    dark = [r for r in rows if r["hex"] == "#371E52"][0]
+    assert pale["lock_ink"] == pale["ink"]   # amber rejected → best ink
+    assert dark["lock_ink"] == "#F5C25C"     # amber reads on dark violet
+
+
+def _tmp_con():
+    from fengrid.core import db as core_db
+    import tempfile
+    import os
+    path = os.path.join(tempfile.mkdtemp(), "t.db")
+    return core_db.connect(path)
+
+
+# ─────────────────────────────────────────────── planning board (#132)
+
+def test_planning_board_and_stages(api_env):
+    """The board route reflects the same stage model the pane uses —
+    and an empty library yields eight empty stages, not an error."""
+    base = api_env["base"]
+    st, body = _req(base, "GET", "/api/v1/planning/stages")
+    assert st == 200
+    keys = [x["key"] for x in body["data"]["items"]]
+    assert keys == ["triage", "todo", "scheduled", "ready", "running",
+                    "blocked", "review", "done"]
+    st, body = _req(base, "GET", "/api/v1/planning/board")
+    assert st == 200
+    assert body["data"]["total"] == 0
+    assert [x["key"] for x in body["data"]["stages"]] == keys
+
+
+def test_planning_task_lifecycle(api_env):
+    """Create → describe → patch → move → delete over HTTP: the API can
+    drive the whole task model the Planning pane edits."""
+    base = api_env["base"]
+    st, body = _req(base, "POST", "/api/v1/planning/tasks",
+                    {"title": "Wire the footer", "stage": "todo",
+                     "priority": "normal", "due_date": "2026-11-15",
+                     "status_note": "in progress"})
+    assert st == 200, body
+    tid = body["data"]["id"]
+    assert body["data"]["stage"] == "todo"
+    assert body["data"]["shortId"] and len(body["data"]["shortId"]) == 6
+
+    st, body = _req(base, "GET", f"/api/v1/planning/tasks/{tid}")
+    assert body["data"]["status_note"] == "in progress"
+    assert body["data"]["assets"] == []
+
+    st, body = _req(base, "PATCH", f"/api/v1/planning/tasks/{tid}",
+                    {"title": "Wire the footer properly",
+                     "priority": "high"})
+    assert body["data"]["title"] == "Wire the footer properly"
+    assert body["data"]["priority"] == "high"
+
+    st, body = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/move",
+                    {"stage": "review", "index": 0})
+    assert body["data"]["stage"] == "review"
+
+    st, board = _req(base, "GET", "/api/v1/planning/board")
+    review = [s for s in board["data"]["stages"] if s["key"] == "review"][0]
+    assert [c["id"] for c in review["cards"]] == [tid]
+    assert board["data"]["total"] == 1
+
+    # the filter behaves like the pane's filter field
+    st, board = _req(base, "GET", "/api/v1/planning/board?q=properly")
+    assert sum(len(s["cards"]) for s in board["data"]["stages"]) == 1
+    st, board = _req(base, "GET", "/api/v1/planning/board?q=nomatch")
+    assert sum(len(s["cards"]) for s in board["data"]["stages"]) == 0
+
+    st, body = _req(base, "DELETE", f"/api/v1/planning/tasks/{tid}")
+    assert body["data"] == {"deleted": tid}
+    assert _req(base, "GET", f"/api/v1/planning/tasks/{tid}")[0] == 404
+
+
+def test_planning_task_validation(api_env):
+    base = api_env["base"]
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks", {"title": ""})
+    assert st == 400
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks",
+                 {"title": "x", "stage": "garbage"})
+    assert st == 400
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks",
+                 {"title": "x", "priority": "urgent"})
+    assert st == 400
+    st, _ = _req(base, "POST", "/api/v1/planning/tasks",
+                 {"title": "x", "project_id": 4242})
+    assert st == 404
+    st, body = _req(base, "POST", "/api/v1/planning/tasks",
+                    {"title": "ok"})
+    tid = body["data"]["id"]
+    st, _ = _req(base, "PATCH", f"/api/v1/planning/tasks/{tid}",
+                 {"evil": "x"})
+    assert st == 400
+    st, _ = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/move",
+                 {"stage": "nope"})
+    assert st == 400
+    st, _ = _req(base, "GET", "/api/v1/planning/tasks/99999")
+    assert st == 404
+    st, _ = _req(base, "DELETE", "/api/v1/planning/tasks/99999")
+    assert st == 404
+
+
+def test_planning_task_assets_and_project(api_env):
+    """Deep integration over HTTP: assign a project, link a library
+    asset, unlink it again."""
+    base = api_env["base"]
+    icon_id = api_env["icon_id"]
+    st, body = _req(base, "POST", "/api/v1/planning/tasks",
+                    {"title": "With assets", "stage": "running"})
+    tid = body["data"]["id"]
+
+    st, body = _req(base, "PATCH", f"/api/v1/planning/tasks/{tid}",
+                    {"project_id": None})
+    assert body["data"]["project_id"] is None
+
+    st, body = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/assets",
+                    {"kind": "icon", "asset_id": icon_id})
+    assert st == 200, body
+    assert body["data"]["assetCount"] == 1
+    row_id = body["data"]["assets"][0]["id"]
+    assert body["data"]["assets"][0]["name"] == "Test Icon"
+
+    st, _ = _req(base, "POST", f"/api/v1/planning/tasks/{tid}/assets",
+                 {"kind": "icon", "asset_id": 987654})
+    assert st == 400
+    st, _ = _req(base, "DELETE",
+                 f"/api/v1/planning/tasks/{tid}/assets/{row_id}")
+    assert st == 200
+    st, body = _req(base, "GET", f"/api/v1/planning/tasks/{tid}")
+    assert body["data"]["assetCount"] == 0
+
+
+def test_planning_auth_enforced(api_env):
+    """The planning routes sit behind the same bearer wall as the rest."""
+    base = api_env["base"]
+    st, _ = _req(base, "GET", "/api/v1/planning/board", token="")
+    assert st in (401, 403)

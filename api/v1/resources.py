@@ -18,22 +18,28 @@ import time
 from pathlib import Path
 
 try:
+    from fengrid.core import assetrefs
     from fengrid.core import backup as core_backup
     from fengrid.core import colors as core_colors
     from fengrid.core import db as core_db
     from fengrid.core import exportplus as xp
     from fengrid.core import ingest
+    from fengrid.core import kinds as core_kinds
+    from fengrid.core import planning as core_planning
     from fengrid.core import projects as core_projects
     from fengrid.core import snippets as core_snippets
     from fengrid.core import taxonomy
 except ImportError:                              # run from a plain checkout
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "qt" / "src"))
+    from fengrid.core import assetrefs
     from fengrid.core import backup as core_backup
     from fengrid.core import colors as core_colors
     from fengrid.core import db as core_db
     from fengrid.core import exportplus as xp
     from fengrid.core import ingest
+    from fengrid.core import kinds as core_kinds
+    from fengrid.core import planning as core_planning
     from fengrid.core import projects as core_projects
     from fengrid.core import snippets as core_snippets
     from fengrid.core import taxonomy
@@ -47,7 +53,7 @@ def version_fallback() -> str:
     return __version__
 
 # asset kinds that live in the `asset` table vs their own tables
-_ASSET_KINDS = ("icon", "font")
+_ASSET_KINDS = tuple(core_kinds.ALL_KINDS)
 
 
 # ─────────────────────────────────────────────────────────── context
@@ -81,10 +87,18 @@ def _row_dict(row) -> dict:
 
 
 def _require_kind(kind: str) -> str:
-    if kind not in ("icon", "font", "palette", "snippet", "project"):
+    if kind not in (*_ASSET_KINDS, "palette", "snippet", "project",
+                    "collection", "library"):
         raise ApiError(400, "bad_kind",
-                       "kind must be icon|font|palette|snippet|project")
+                       "kind must be one of: "
+                       + "|".join((*_ASSET_KINDS, "palette", "snippet",
+                                   "project", "collection", "library")))
     return kind
+
+
+_KIND_TABLE = {"palette": "palette", "snippet": "snippet",
+               "project": "projects", "collection": "collection",
+               "library": "library_view"}
 
 
 def _item_row(con, kind: str, item_id: int) -> dict:
@@ -97,8 +111,9 @@ def _item_row(con, kind: str, item_id: int) -> dict:
         d = _row_dict(r)
         d["name"] = d.get("name") or Path(d.get("path") or "").stem
         return d
-    table = "palette" if kind == "palette" else (
-        "snippet" if kind == "snippet" else "projects")
+    table = _KIND_TABLE.get(kind)
+    if table is None:
+        raise ApiError(400, "bad_kind", f"unknown kind: {kind}")
     r = con.execute(f"SELECT * FROM {table} WHERE id = ?",
                     (item_id,)).fetchone()
     if r is None:
@@ -270,6 +285,12 @@ def assets_patch(ctx: Api, body: dict, kind: str, item_id: int) -> dict:
         if isinstance(body.get("tags"), list):
             core_db.sync_item_tags(con, int(item_id), kind,
                                    ",".join(str(t) for t in body["tags"]))
+        if "slug" in body:
+            try:
+                core_db.set_slug(con, kind, int(item_id),
+                                 str(body["slug"] or ""))
+            except ValueError as e:
+                raise ApiError(409, "bad_slug", str(e))
         for fname, value in (body.get("fields") or {}).items():
             fr = con.execute("SELECT id FROM asset_field WHERE name = ?",
                              (fname,)).fetchone()
@@ -412,6 +433,8 @@ def assets_ingest(ctx: Api, body: dict) -> dict:
         def run():
             rep = ingest.import_zip(zp, ctx.data_dir, mode=mode)
             rep["last_export_dir"] = rep.get("dest")
+            rep.update(ingest.index_materialised(ctx.db_path, rep,
+                                                 mode=mode))
             return rep
         return ctx.job("import", run)
     if body.get("folder"):
@@ -431,6 +454,7 @@ def assets_ingest(ctx: Api, body: dict) -> dict:
     def run():
         rep = ingest.import_files(real, ctx.data_dir, mode=mode)
         rep["last_export_dir"] = rep.get("dest")
+        rep.update(ingest.index_materialised(ctx.db_path, rep, mode=mode))
         return rep
     return ctx.job("import", run)
 
@@ -855,3 +879,313 @@ def jobs_cancel(ctx: Api, body: dict, jid: str) -> dict:
     if not ctx.scheduler.cancel(jid):
         raise ApiError(404, "not_found", f"job {jid} not found")
     return {"cancelled": jid}
+
+
+# ──────────────────────────────── structured-data content CRUD (sensors)
+def _data_row(con, item_id: int) -> dict:
+    r = con.execute(
+        "SELECT * FROM asset WHERE id = ? AND kind IN ('data','timeseries')",
+        (item_id,)).fetchone()
+    if r is None:
+        raise ApiError(404, "not_found",
+                       f"data asset {item_id} not found")
+    return _row_dict(r)
+
+
+def data_content_get(ctx: Api, body: dict, item_id: int) -> dict:
+    con = ctx.con()
+    try:
+        _data_row(con, int(item_id))
+        doc = core_db.get_asset_data(con, int(item_id))
+        if doc is None:
+            raise ApiError(404, "no_content",
+                           "asset has no stored data payload yet")
+        return doc
+    finally:
+        con.close()
+
+
+def data_content_put(ctx: Api, body: dict, item_id: int) -> dict:
+    payload = body.get("payload")
+    if not isinstance(payload, dict):
+        raise ApiError(400, "bad_request", "body needs payload: {..}")
+    con = ctx.con()
+    try:
+        _data_row(con, int(item_id))
+        return core_db.put_asset_data(con, int(item_id), payload)
+    finally:
+        con.close()
+
+
+def data_content_patch(ctx: Api, body: dict, item_id: int) -> dict:
+    merge = body.get("payload")
+    if not isinstance(merge, dict):
+        raise ApiError(400, "bad_request", "body needs payload: {..} to merge")
+    con = ctx.con()
+    try:
+        _data_row(con, int(item_id))
+        return core_db.patch_asset_data(con, int(item_id), merge)
+    finally:
+        con.close()
+
+
+def data_content_delete(ctx: Api, body: dict, item_id: int) -> dict:
+    con = ctx.con()
+    try:
+        _data_row(con, int(item_id))
+        return {"deleted": core_db.delete_asset_data(con, int(item_id))}
+    finally:
+        con.close()
+
+
+def data_points_append(ctx: Api, body: dict, item_id: int) -> dict:
+    """Timeseries ingest: sensors POST {points: [{t, v, ...}, ...]}."""
+    points = body.get("points")
+    if not isinstance(points, list) or not points:
+        raise ApiError(400, "bad_request", "body needs points: [..]")
+    con = ctx.con()
+    try:
+        _data_row(con, int(item_id))
+        return core_db.append_asset_points(con, int(item_id), points)
+    finally:
+        con.close()
+
+
+def data_points_get(ctx: Api, body: dict, item_id: int, params: dict) -> dict:
+    con = ctx.con()
+    try:
+        _data_row(con, int(item_id))
+        doc = core_db.get_asset_data(con, int(item_id))
+        if doc is None:
+            return {"asset_id": int(item_id), "revision": 0,
+                    "payload": {"points": []}, "updated": 0.0}
+        pts = doc["payload"].get("points") or []
+        frm = params.get("from")
+        to = params.get("to")
+        def _t(p):
+            v = p.get("t") if isinstance(p, dict) else None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+        if frm is not None:
+            try:
+                frm = float(frm)
+                pts = [p for p in pts if (_t(p) is not None and _t(p) >= frm)]
+            except ValueError:
+                pass
+        if to is not None:
+            try:
+                to = float(to)
+                pts = [p for p in pts if (_t(p) is not None and _t(p) <= to)]
+            except ValueError:
+                pass
+        limit = min(int(params.get("limit") or 10000), 100000)
+        return {"asset_id": int(item_id), "revision": doc["revision"],
+                "points": pts[-limit:], "count": len(pts[-limit:]),
+                "updated": doc["updated"]}
+    finally:
+        con.close()
+
+
+# ─────────────────────────────────────────────── [[ asset reference ]]
+def links_resolve(ctx: Api, body: dict, params: dict) -> dict:
+    """Resolve one [[ ref ]] (slug | GUID | type/…/name) to its target."""
+    ref = params.get("ref") or ""
+    con = ctx.con()
+    try:
+        hit = assetrefs.resolve(con, ref)
+        if hit is None:
+            raise ApiError(404, "not_found",
+                           f"no asset matches the reference {ref!r}")
+        hit["url"] = assetrefs.url_for(hit)
+        return hit
+    finally:
+        con.close()
+
+
+def links_expand(ctx: Api, body: dict) -> dict:
+    """Expand every [[ … ]] reference in a text block."""
+    text = body.get("text")
+    if text is None:
+        raise ApiError(400, "bad_request", "body needs text: '..'")
+    con = ctx.con()
+    try:
+        expanded, unresolved = assetrefs.expand(con, str(text))
+        return {"text": expanded, "unresolved": unresolved}
+    finally:
+        con.close()
+
+
+def assets_lookup(ctx: Api, body: dict, params: dict) -> dict:
+    """Slug or GUID → the tracked object (for link authoring/UI)."""
+    slug = params.get("slug") or ""
+    guid = params.get("guid") or ""
+    if not slug and not guid:
+        raise ApiError(400, "bad_request", "pass ?slug= or ?guid=")
+    con = ctx.con()
+    try:
+        hit = (core_db.lookup_by_slug(con, slug) if slug
+               else core_db.lookup_by_guid(con, guid))
+        if hit is None:
+            raise ApiError(404, "not_found", "no match")
+        kind, iid = hit["kind"], hit["id"]
+        return _describe(con, kind, iid)
+    finally:
+        con.close()
+
+
+# ─────────────────────────────────────────────── planning board (#132)
+
+_TASK_FIELDS = ("title", "description", "status_note", "due_date",
+                "priority", "project_id")
+
+
+def planning_board(ctx: Api, body: dict, params: dict | None = None) -> dict:
+    """The full Kanban board: every stage with its position-ordered
+    cards and per-stage colors. `?q=` filters like the pane's filter."""
+    con = ctx.con()
+    try:
+        q = (params or {}).get("q", "")
+        return {"stages": core_planning.board(con, q),
+                "total": core_planning.total(con)}
+    finally:
+        con.close()
+
+
+def planning_stages(ctx: Api, body: dict) -> dict:
+    """Stage metadata: keys, labels, dark/light dot colors."""
+    con = ctx.con()
+    try:
+        return {"items": core_planning.stages(con)}
+    finally:
+        con.close()
+
+
+def planning_task(ctx: Api, body: dict, tid: int) -> dict:
+    con = ctx.con()
+    try:
+        t = core_planning.task(con, int(tid))
+        if t is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        return t
+    finally:
+        con.close()
+
+
+def planning_task_create(ctx: Api, body: dict) -> dict:
+    title = (body.get("title") or "").strip()
+    if not title:
+        raise ApiError(400, "bad_request", "title required")
+    stage = body.get("stage") or "triage"
+    if stage not in core_planning.STAGE_KEYS:
+        raise ApiError(400, "bad_request", f"unknown stage: {stage}")
+    priority = body.get("priority") or ""
+    if priority and priority not in core_planning.PRIORITIES:
+        raise ApiError(400, "bad_request", f"unknown priority: {priority}")
+    con = ctx.con()
+    try:
+        pid = body.get("project_id")
+        if pid not in (None, "", 0):
+            row = con.execute("SELECT id FROM projects WHERE id = ?",
+                              (int(pid),)).fetchone()
+            if row is None:
+                raise ApiError(404, "not_found",
+                               f"project {pid} not found")
+            pid = int(pid)
+        else:
+            pid = None
+        tid = core_planning.create_task(
+            con, title, stage, pid,
+            description=body.get("description") or "",
+            priority=priority,
+            due_date=body.get("due_date") or "")
+        note = body.get("status_note") or ""
+        if note:
+            core_planning.update_task(con, tid, status_note=note)
+        return core_planning.task(con, tid)
+    finally:
+        con.close()
+
+
+def planning_task_update(ctx: Api, body: dict, tid: int) -> dict:
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        fields = {k: v for k, v in body.items() if k in _TASK_FIELDS}
+        if "priority" in fields:
+            pr = fields["priority"] or ""
+            if pr and pr not in core_planning.PRIORITIES:
+                raise ApiError(400, "bad_request",
+                               f"unknown priority: {pr}")
+        if not fields:
+            raise ApiError(400, "bad_request",
+                           "no updatable fields in body")
+        core_planning.update_task(con, int(tid), **fields)
+        return core_planning.task(con, int(tid))
+    finally:
+        con.close()
+
+
+def planning_task_move(ctx: Api, body: dict, tid: int) -> dict:
+    stage = body.get("stage") or ""
+    if stage not in core_planning.STAGE_KEYS:
+        raise ApiError(400, "bad_request", f"unknown stage: {stage}")
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        index = int(body.get("index", 10 ** 9))
+        if not core_planning.move_task(con, int(tid), stage, index):
+            raise ApiError(400, "bad_request", "move rejected")
+        return core_planning.task(con, int(tid))
+    finally:
+        con.close()
+
+
+def planning_task_delete(ctx: Api, body: dict, tid: int) -> dict:
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        core_planning.delete_task(con, int(tid))
+        return {"deleted": int(tid)}
+    finally:
+        con.close()
+
+
+def planning_task_link(ctx: Api, body: dict, tid: int) -> dict:
+    kind = body.get("kind") or ""
+    try:
+        asset_id = int(body.get("asset_id"))
+    except (TypeError, ValueError):
+        raise ApiError(400, "bad_request", "asset_id required")
+    con = ctx.con()
+    try:
+        if core_planning.task(con, int(tid)) is None:
+            raise ApiError(404, "not_found", f"task {tid} not found")
+        if not core_planning.link_asset(con, int(tid), kind, asset_id,
+                                        body.get("label") or ""):
+            raise ApiError(400, "bad_request",
+                           f"asset not found in the library: "
+                           f"{kind} #{asset_id}")
+        return core_planning.task(con, int(tid))
+    finally:
+        con.close()
+
+
+def planning_task_unlink(ctx: Api, body: dict, tid: int,
+                         row_id: int) -> dict:
+    con = ctx.con()
+    try:
+        row = con.execute(
+            "SELECT id FROM project_task_asset WHERE id = ?"
+            " AND task_id = ?", (int(row_id), int(tid))).fetchone()
+        if row is None:
+            raise ApiError(404, "not_found",
+                           f"link {row_id} on task {tid} not found")
+        core_planning.unlink_asset(con, int(row_id))
+        return {"deleted": int(row_id)}
+    finally:
+        con.close()

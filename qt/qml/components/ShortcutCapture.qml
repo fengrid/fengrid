@@ -15,9 +15,7 @@ Rectangle {
     height: 30
     radius: 6
     color: theme.tokens.surface2
-    border.color: capturing ? theme.tokens.accent
-                 : (tap.containsMouse || activeFocus
-                    ? theme.tokens.text : theme.tokens.border)
+    border.color: capturing ? theme.tokens.accent : (tap.containsMouse || activeFocus ? theme.tokens.text : theme.tokens.border)
     border.width: capturing ? 2 : 1
 
     property bool capturing: false
@@ -28,22 +26,23 @@ Rectangle {
     // live-follow prefs (Reset from the sibling button must update us)
     function syncFromPrefs() {
         if (!capturing)
-            seqRaw = prefs !== null ? prefs.commandShortcut : "Alt+/"
+            seqRaw = prefs !== null ? prefs.commandShortcut : "Alt+/";
     }
     Component.onCompleted: syncFromPrefs()
     onCapturingChanged: {
-        Shell.capturing = capturing
+        Shell.capturing = capturing;
         if (!capturing)
-            invalidHint = ""
+            invalidHint = "";
     }
     Connections {
         target: prefs
-        function onCommandShortcutChanged() { box.syncFromPrefs() }
+        function onCommandShortcutChanged() {
+            box.syncFromPrefs();
+        }
     }
 
     // human display: "Alt+/" → "Alt + /"
-    readonly property string display:
-        seqRaw !== "" ? seqRaw.split("+").join(" + ") : ""
+    readonly property string display: seqRaw !== "" ? seqRaw.split("+").join(" + ") : ""
 
     Text {
         anchors.centerIn: parent
@@ -56,13 +55,11 @@ Rectangle {
     Text {
         anchors.centerIn: parent
         visible: box.capturing
-        text: box.invalidHint !== "" ? box.invalidHint
-              : qsTr("press shortcut…")
+        text: box.invalidHint !== "" ? box.invalidHint : qsTr("Press Shortcut…")
         font.family: theme.uiFont
         font.pixelSize: 11
         font.italic: box.invalidHint === ""
-        color: box.invalidHint !== "" ? theme.tokens.litPane
-               : theme.tokens.textMuted
+        color: box.invalidHint !== "" ? theme.tokens.litPane : theme.tokens.textMuted
     }
 
     MouseArea {
@@ -71,65 +68,67 @@ Rectangle {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            box.forceActiveFocus()
-            box.capturing = true
-            box.invalidHint = ""
+            box.forceActiveFocus();
+            box.capturing = true;
+            box.invalidHint = "";
         }
     }
 
     onActiveFocusChanged: {
         if (!activeFocus && capturing) {
-            capturing = false        // click-away disarms cleanly
-            Shell.capturing = false
+            capturing = false;        // click-away disarms cleanly
+            Shell.capturing = false;
         }
     }
 
     Keys.onPressed: function (event) {
         if (!box.capturing) {
-            return
+            return;
         }
-        event.accepted = true
-        var k = event.key
+        event.accepted = true;
+        var k = event.key;
         if (k === Qt.Key_Escape) {
-            box.capturing = false    // cancel — keep the old sequence
-            Shell.capturing = false
-            return
+            box.capturing = false;    // cancel — keep the old sequence
+            Shell.capturing = false;
+            return;
         }
         // pure modifier presses: keep waiting for the real key
-        if (k === Qt.Key_Control || k === Qt.Key_Alt
-                || k === Qt.Key_Shift || k === Qt.Key_Meta)
-            return
-
-        var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-        var alt = (event.modifiers & Qt.AltModifier) !== 0
-        var shift = (event.modifiers & Qt.ShiftModifier) !== 0
-        var meta = (event.modifiers & Qt.MetaModifier) !== 0
-        var isFunctionKey = k >= Qt.Key_F1 && k <= Qt.Key_F24
+        if (k === Qt.Key_Control || k === Qt.Key_Alt || k === Qt.Key_Shift || k === Qt.Key_Meta)
+            return;
+        var ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
+        var alt = (event.modifiers & Qt.AltModifier) !== 0;
+        var shift = (event.modifiers & Qt.ShiftModifier) !== 0;
+        var meta = (event.modifiers & Qt.MetaModifier) !== 0;
+        var isFunctionKey = k >= Qt.Key_F1 && k <= Qt.Key_F24;
         if (!ctrl && !alt && !meta && !isFunctionKey) {
             // bare letters would hijack typing app-wide (the reason "/"
             // and friends gate on focus) — demand a real modifier
-            box.invalidHint = qsTr("needs Ctrl / Alt / Meta or F-key")
-            return
+            box.invalidHint = qsTr("Needs Ctrl / Alt / Meta or F-Key");
+            return;
         }
 
-        var seq = ""
-        if (ctrl) seq += "Ctrl+"
-        if (alt) seq += "Alt+"
-        if (shift) seq += "Shift+"
-        if (meta) seq += "Meta+"
+        var seq = "";
+        if (ctrl)
+            seq += "Ctrl+";
+        if (alt)
+            seq += "Alt+";
+        if (shift)
+            seq += "Shift+";
+        if (meta)
+            seq += "Meta+";
 
-        var keyName = ""
-        var text = event.text
+        var keyName = "";
+        var text = event.text;
         if (text && text.length === 1 && text >= " ")
-            keyName = /[a-z0-9]/i.test(text) ? text.toUpperCase() : text
+            keyName = /[a-z0-9]/i.test(text) ? text.toUpperCase() : text;
         else
-            keyName = Qt.keyToString(k)
+            keyName = Qt.keyToString(k);
         if (keyName === "")
-            return
-        seq += keyName
+            return;
+        seq += keyName;
 
-        box.capturing = false
-        Shell.capturing = false
-        box.sequenceEdited(seq)      // caller persists via prefs
+        box.capturing = false;
+        Shell.capturing = false;
+        box.sequenceEdited(seq);      // caller persists via prefs
     }
 }

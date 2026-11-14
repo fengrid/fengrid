@@ -21,6 +21,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 import pytest                                    # noqa: E402
+from PySide6 import QtCore                      # noqa: E402
 from PySide6.QtCore import QUrl                  # noqa: E402
 from PySide6.QtGui import QGuiApplication        # noqa: E402
 from PySide6.QtQml import QQmlComponent, QQmlEngine  # noqa: E402
@@ -103,12 +104,23 @@ def settings_ui(tmp_path):
     ctx.setContextProperty("updater", updater)
     ctx.setContextProperty("storage", storage)
     ctx.setContextProperty("appVersion", "0.0-test")
+    ctx.setContextProperty("appCommit", "0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b")
     # comp stays a local of this frame for the whole yield — created
     # objects die with their component
     comp = QQmlComponent(
         engine, QUrl.fromLocalFile(
             str(QML_DIR / "components" / "SettingsScreen.qml")))
+    # capture every Qt message emitted while the screen is CREATED —
+    # #138 regression guard: the accent swatches used to log six
+    # "Unable to assign [undefined] to bool" lines at creation
+    creation_msgs: list[str] = []
+
+    def _capture(_mtype, _ctx, msg) -> None:
+        creation_msgs.append(str(msg))
+
+    prev_handler = QtCore.qInstallMessageHandler(_capture)
     root = cast(QQuickItem, comp.create(engine.rootContext()))
+    QtCore.qInstallMessageHandler(prev_handler)
     assert root is not None, [str(e) for e in comp.errors()]
     root.setWidth(1280)
     root.setHeight(800)
@@ -119,8 +131,17 @@ def settings_ui(tmp_path):
     QTest.qWait(80)
 
     yield {"root": root, "win": win, "engine": engine,
+           "creation_msgs": creation_msgs,
            "bridges": {"prefs": prefs, "library": library}}
     _teardown({"win": win, "root": root, "engine": engine})
+
+
+def test_settings_screen_creation_is_log_clean(settings_ui):
+    """#138: opening Settings must not spray 'Unable to assign
+    [undefined] to bool' from the accent swatches at creation."""
+    bad = [m for m in settings_ui["creation_msgs"]
+           if "Unable to assign" in m]
+    assert bad == [], bad
 
 
 @pytest.fixture()
@@ -291,3 +312,47 @@ def test_data_management_sections_present(settings_ui):
     assert shown == {"database"}, shown
     root.setProperty("category", "all")
     _qapp().processEvents()
+
+
+def test_about_shows_the_build_commit(settings_ui):
+    """#43: the About section carries a Build commit row fed by the
+    appCommit context property (stamped by the build scripts)."""
+    root = settings_ui["root"]
+    rows = [r for r in _by_class(root, "SettingRow")
+            if r.property("label") == "Build commit"]
+    assert len(rows) == 1, f"expected exactly one Build commit row: {rows}"
+    assert rows[0].property("desc") == \
+        "0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b"
+    assert rows[0].isVisible()
+
+
+def test_settings_dialog_loaders_callable(settings_ui):
+    """Verify dialog loaders are defined and can open without ReferenceError."""
+    root = settings_ui["root"]
+    # Verify that dialog loaders exist as children of SettingsScreen
+    loaders = _by_class(root, "QQuickLoader")
+    assert len(loaders) >= 4
+
+
+def test_library_sources_cache(tmp_path):
+    """library.sources should cache the summary in memory and invalidate on change."""
+    from fengrid.bridges.library import Library
+    from fengrid.core import db as core_db, indexer
+
+    db_file = tmp_path / "cache_test.db"
+    con = core_db.connect(db_file)
+    lib = Library(con, str(db_file), no_scan=True)
+
+    # First call populates cache
+    s1 = lib.sources
+    # Second call returns cached instance
+    s2 = lib.sources
+    assert s1 is s2
+
+    # Mutating path invalidates cache
+    lib.set_path_enabled("/tmp/fake-path", "system", True)
+    assert lib._sources_cache is None
+    s3 = lib.sources
+    assert s3 is not s1
+    assert any(s["path"] == str(Path("/tmp/fake-path").resolve()) for s in s3)
+

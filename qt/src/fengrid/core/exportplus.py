@@ -496,3 +496,167 @@ def read_bundle(zip_path: str | Path) -> dict:
     if data.get("fengrid") != "bundle":
         raise ExportError("not a fengrid bundle")
     return data
+
+
+# ── fonts.css package: multi-family, editable CSS, relative paths ─────
+def _family_dir(family: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", family).strip("_") or "fonts"
+
+
+def css_face(meta: dict, rel_path: str, flavor: str) -> str:
+    """One @font-face rule pointing at a RELATIVE package path."""
+    weight = int(meta.get("weight") or 400)
+    style = "italic" if meta.get("italic") else "normal"
+    fam = (meta.get("family") or "").replace('"', '\\"')
+    fmt = {"woff": "woff", "woff2": "woff2", "ttf": "truetype",
+           "otf": "opentype"}.get(flavor, "truetype")
+    return ("@font-face {\n"
+            f"  font-family: \"{fam}\";\n"
+            f"  src: url(\"{rel_path}\") format(\"{fmt}\");\n"
+            f"  font-weight: {weight};\n"
+            f"  font-style: {style};\n"
+            "  font-display: swap;\n}")
+
+
+def css_preview(con, families: list[str],
+                fmts: list[str] | None = None) -> dict:
+    """The fonts.css text for the given families — nothing is written.
+
+    Every face references its file by RELATIVE package path
+    (fonts/<Family>/<file>.<flavor>), so the CSS survives the folder
+    moving anywhere. Returns {"css": str, "plan": [ {family, src,
+    rel, flavor} … ]} — the plan is what export_css_package writes."""
+    from . import fonts as core_fonts
+
+    fmts = [f for f in (fmts or ["woff2", "woff"])
+            if f in ("woff2", "woff", "ttf", "otf")] or ["woff2"]
+    plan: list[dict] = []
+    rules: list[str] = []
+    used: set[str] = set()
+    for family in families:
+        files = core_fonts.family_files(con, family)
+        fam_dir = _family_dir(family)
+        for meta in files:
+            src = Path(meta["path"])
+            if not src.is_file():
+                continue
+            base = re.sub(r"[^A-Za-z0-9._-]+", "_", src.stem).strip("_") \
+                or "font"
+            for flavor in fmts:
+                # flat per the spec: fonts/<FILE>.<flavor>; a family-dir
+                # prefix only when a name would collide across families
+                rel = f"fonts/{base}.{flavor}"
+                if rel in used:
+                    rel = f"fonts/{fam_dir}/{base}.{flavor}"
+                n = 2
+                while rel in used:
+                    rel = f"fonts/{fam_dir}/{base}-{n}.{flavor}"
+                    n += 1
+                used.add(rel)
+                plan.append({"family": family, "src": str(src),
+                             "rel": rel, "flavor": flavor})
+                rules.append(css_face(meta, rel, flavor))
+    css = "/* fengrid webfont package — paths are relative to this file */"
+    if rules:
+        css += "\n\n" + "\n\n".join(rules) + "\n"
+    return {"css": css, "plan": plan}
+
+
+def export_css_package(con, dest_dir: str | Path, css_text: str,
+                       families: list[str],
+                       fmts: list[str] | None = None) -> Path:
+    """Write the user's (possibly edited) fonts.css PLUS the referenced
+    font files, converted to the chosen flavors, laid out exactly as the
+    CSS URLs expect: fonts/<Family>/<file>.<flavor> next to fonts.css."""
+    preview = css_preview(con, families, fmts)
+    plan = preview["plan"]
+    if not plan:
+        raise ExportError("no font files found for the selected families")
+    dest = Path(dest_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    stage = dest / ".fonts-stage"   # convert_font names outputs its own
+    stage.mkdir(parents=True, exist_ok=True)
+    try:
+        for item in plan:
+            conv = convert_font(item["src"], stage, item["flavor"])
+            target = dest / item["rel"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if conv != target:
+                os.replace(conv, target)
+    finally:
+        if stage.is_dir():
+            for left in stage.iterdir():
+                left.unlink(missing_ok=True)
+            stage.rmdir()
+    css_out = dest / "fonts.css"
+    tmp = css_out.with_suffix(".css.tmp")
+    tmp.write_text(css_text if (css_text or "").strip()
+                   else preview["css"], encoding="utf-8")
+    os.replace(tmp, css_out)
+    return css_out
+
+
+def export_fonts_zip(con, families: list[str], dest_dir: str | Path, *,
+                     fmts: list[str] | None = None,
+                     include_original: bool = False,
+                     css_text: str = "") -> Path:
+    """ZIP the webfont package: fonts.css at the root (RELATIVE URLs) +
+    fonts/<Name>.<flavor> for every selected family's files.
+
+    Layout (per spec):
+        /fonts.css
+        /fonts/[SELECTED_FONT_NAME].woff|.woff2[.ttf|.otf]
+
+    flavors: any of woff2/woff/ttf/otf (woff2+woff by default). With
+    include_original the source ttf/otf files are added too, so a
+    'convert' choice never *loses* the originals unless asked.
+    css_text: when non-empty, stored VERBATIM (the user-edited dialog
+    text); otherwise the freshly generated CSS is used."""
+    from . import fonts as core_fonts
+
+    fmts = [f for f in (fmts or ["woff2", "woff"])
+            if f in ("woff2", "woff", "ttf", "otf")] or ["woff2"]
+    preview = css_preview(con, families, fmts)
+    plan = preview["plan"]
+    if not plan:
+        raise ExportError("no font files found for the selected families")
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    stem = _family_dir("+".join(families)).strip("_")[:60] or "fonts"
+    out = dest_dir / f"{stem}-webfonts.zip"
+    stage = dest_dir / ".fonts-zip-stage"
+    stage.mkdir(parents=True, exist_ok=True)
+    try:
+        originals: list[tuple[Path, str]] = []
+        seen: set[str] = set()
+        for item in plan:
+            src = Path(item["src"])
+            conv = convert_font(src, stage, item["flavor"])
+            arcname = item["rel"]                # fonts/<Family>/<file>
+            if arcname in seen:                  # same file, two families
+                base = Path(arcname)
+                arcname = str(base.with_name(
+                    base.stem + "-2" + base.suffix))
+            seen.add(arcname)
+            originals.append((conv, arcname))
+        tmp = out.with_suffix(".zip.tmp")
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("fonts.css",
+                        (css_text or "").strip() or preview["css"])
+            for conv, arcname in originals:
+                zf.write(conv, arcname)
+            if include_original:
+                done: set[str] = set()
+                for item in plan:
+                    src = Path(item["src"])
+                    if src.suffix.lower() in (".ttf", ".otf") and \
+                            src.name not in done:
+                        zf.write(src, f"fonts/{src.name}")
+                        done.add(src.name)
+        os.replace(tmp, out)
+    finally:
+        if stage.is_dir():
+            for left in stage.iterdir():
+                left.unlink(missing_ok=True)
+            stage.rmdir()
+    return out
