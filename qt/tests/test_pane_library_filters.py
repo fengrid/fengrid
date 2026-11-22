@@ -34,8 +34,13 @@ from fengrid.core import taxonomy as core_tax             # noqa: E402
 def env(tmp_path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtGui import QGuiApplication
-    if QGuiApplication.instance() is None:
-        QGuiApplication([])
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication([])
+    assert isinstance(app, QGuiApplication), (
+        "QGuiApplication.instance() is not a QGuiApplication — a "
+        "lingering bare QCoreApplication poisons QML component "
+        "creation (#168)")
     con = core_db.connect(str(tmp_path / "t.db"))
     yield con, tmp_path
     con.close()

@@ -19,8 +19,13 @@ from fengrid.core import presets as core_presets   # noqa: E402
 def con():
     from PySide6.QtGui import QGuiApplication
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    if QGuiApplication.instance() is None:
-        QGuiApplication([])
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication([])
+    assert isinstance(app, QGuiApplication), (
+        "QGuiApplication.instance() is not a QGuiApplication — a "
+        "lingering bare QCoreApplication poisons QML component "
+        "creation (#168)")
     c = core_db.connect(":memory:")
     core_presets.ensure_presets(c)
     yield c
