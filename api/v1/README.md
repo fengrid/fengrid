@@ -35,6 +35,7 @@ carries the operation's report.
 | Tags      | `GET /tags`, `PATCH/DELETE /tags/{name}` |
 | Fields    | `GET/POST /fields`, `DELETE /fields/{id}` (custom field defs) |
 | Projects  | `GET /projects`, `GET /projects/{id}` |
+| Boards    | `GET/POST /projects/{id}/boards`, `GET/PATCH/DELETE /boards/{id}` (snapshot), `GET/POST /boards/{id}/ops` (collaboration), `POST /boards/{id}/place`, `GET/POST /boards/{id}/presence`, `GET/POST /boards/{id}/comments`, `GET /boards/{id}/export?fmt=html|svg`, `GET /usage/{kind}/{id}` |
 | Planning  | `GET /planning/board?q=`, `GET /planning/stages`, `POST /planning/tasks`, `GET/PATCH/DELETE /planning/tasks/{id}`, `POST /planning/tasks/{id}/move`, `POST /planning/tasks/{id}/assets`, `DELETE /planning/tasks/{id}/assets/{row}` |
 | Backup    | `GET/POST /backups`, `POST /backup/restore` |
 | DB admin  | `POST /db/{check,vacuum,checkpoint,optimize,rebuild_fts,sweep}` |
@@ -75,3 +76,22 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   thread-affine); it never shares the desktop app's live connection.
   Run the API against a database the app is *not* writing to, or accept
   WAL-mode concurrent access.
+
+## Joining a canvas board (collaboration)
+
+Boards are op logs with per-field last-writer-wins merging (see
+`docs/architecture/0003-canvas-collaboration.md`). A client needs only:
+
+```bash
+B=http://127.0.0.1:8642/api/v1/boards/1
+curl -s -H "Authorization: Bearer $TOKEN" $B          # snapshot + head + clock
+# send edits with your own actor id and a Lamport clock above the board's
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"actor":"a-cli","ops":[{"node":"n1","clock":42,
+          "fields":{"type":"sticky","x":0,"y":0,"p.text":"Hello"}}]}' $B/ops
+# poll what others did since the head you last saw
+curl -s -H "Authorization: Bearer $TOKEN" "$B/ops?since=17&exclude=a-cli"
+```
+
+The desktop app picks up API edits within a second and shows the client
+as a collaborator once it posts `POST $B/presence`.

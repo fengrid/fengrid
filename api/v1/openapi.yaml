@@ -1045,3 +1045,175 @@ paths:
           description: OK
         '404':
           $ref: '#/components/responses/Err'
+  # ─── canvas boards: the collaborative design + code canvas ─────────────
+  # Ops are last-writer-wins per field: {node, fields, clock}. `fields`
+  # keys are x/y/w/h/rot/z/type/parent/name/bind/locked/hidden/deleted or
+  # `p.<prop>` (a null p.* value removes the prop). Each client keeps its
+  # own Lamport clock (start above the board's `clock`, +1 per op).
+  /projects/{pid}/boards:
+    parameters:
+      - name: pid
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: List a project's canvas boards
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    post:
+      summary: Create a board — body {name?}
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+  /boards/{bid}:
+    parameters:
+      - name: bid
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Snapshot — board, live nodes, head op seq (join point)
+      responses:
+        '200':
+          description: OK
+        '404':
+          $ref: '#/components/responses/Err'
+    patch:
+      summary: Rename / update settings — body {name?, settings?}
+      responses:
+        '200':
+          description: OK
+    delete:
+      summary: Delete a board (library assets are untouched)
+      responses:
+        '200':
+          description: OK
+  /boards/{bid}/ops:
+    parameters:
+      - name: bid
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Ops after a sequence number
+      parameters:
+        - name: since
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: exclude
+          in: query
+          description: drop this actor's own ops (echo suppression)
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 2000
+      responses:
+        '200':
+          description: '{ops: [{seq, actor, clock, node, fields}], head}'
+    post:
+      summary: >-
+        Merge ops — body {actor, ops: [{node, fields, clock}]}. Returns the
+        ops that won (superseded ones are dropped), head and board clock.
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+  /boards/{bid}/place:
+    post:
+      summary: >-
+        Drop a library object as a bound node — body {ref} ([[ slug ]],
+        GUID or path form) or {kind, id}; optional x, y, actor.
+        Collections land as a laid-out frame of bound nodes.
+      parameters:
+        - name: bid
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+        '400':
+          $ref: '#/components/responses/Err'
+  /boards/{bid}/presence:
+    parameters:
+      - name: bid
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Collaborators seen in the last 30 s (cursor, selection)
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: "Heartbeat — body {actor, name?, color?, cursor?: [x, y], selection?}"
+      responses:
+        '200':
+          description: OK
+  /boards/{bid}/comments:
+    parameters:
+      - name: bid
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Open comments (?all=1 includes resolved)
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Add a comment — body {body, node?, x?, y?, author?}
+      responses:
+        '200':
+          description: OK
+  /boards/{bid}/export:
+    get:
+      summary: Render the board — ?fmt=html|svg (&frame=<node id> for HTML)
+      parameters:
+        - name: bid
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: fmt
+          in: query
+          schema:
+            type: string
+            enum: [html, svg]
+      responses:
+        '200':
+          description: '{fmt, content}'
+  /usage/{kind}/{id}:
+    get:
+      summary: Boards that use a tracked object (bound canvas nodes)
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK

@@ -6,6 +6,50 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Projects Canvas (collaborative design + code boards)
+
+- **Canvas screen** (now the Projects pane's default): infinite pan/zoom
+  boards per project with frames, shapes, lines, text, stickies, code
+  cells and connectors; marquee/multi-select, live drag + 8-handle resize
+  with grid snapping (Alt disables), align/distribute, group/frame,
+  restack, lock/hide, inline text editing, comments and a layers panel.
+- **Library integration:** drag icons, images, fonts, palettes, snippets,
+  media, collections, smart collections and saved libraries onto a board
+  as *bound* nodes that render live from the library (GUID-first
+  resolution, visible "missing" placeholders); bind any node to a
+  `[[ ref ]]`; promote a code cell to a Code-pane snippet; per-asset
+  "used on" boards, mirrored into Links (role `canvas`).
+- **Collaboration:** every edit is a Lamport-stamped op merged
+  last-writer-wins per field (order-independent; deletes can't be
+  resurrected; undo is an inverse edit). Other windows, scripts and REST
+  clients appear live, with presence avatars and cursors.
+- **REST:** `/projects/{id}/boards`, `/boards/{id}` snapshot,
+  `/boards/{id}/ops` (merge + since), `/place`, `/presence`, `/comments`,
+  `/export?fmt=html|svg`, `/usage/{kind}/{id}` (OpenAPI updated).
+- **Export:** board bundle (`index.html` + `board.svg` + `board.json` +
+  copied assets); the live preview renders the open board.
+- Design record: `docs/architecture/0003-canvas-collaboration.md`.
+
+### Changed — Projects pane layout
+
+- Screen area no longer capped at 420 px (wide windows had a dead band
+  between the screens and the inspector); segmented screen rail.
+- Draggable, per-screen split between the screens and the preview/dock,
+  with a one-click collapse; collapsible project list.
+
+### Fixed (dev-qt review, `docs/review/2026-11-dev-qt-review.md`)
+
+- Studio snippet blocks always rendered as "missing" (query read a
+  nonexistent `body` column behind a bare `except`).
+- Studio image/icon block `src` URLs are now HTML-escaped (SEC-2 class).
+- REST router bound query params positionally ahead of path ids —
+  `GET /assets/data/{id}/points` answered 500 on every call; query strings
+  are now fully percent/plus-decoded.
+- Theme tokens are strings: translucent tints in the toast, header
+  gradient and command palette read `.r/.g/.b` off a string and never
+  applied.
+- Deleting a project now removes its typed links.
+
 ### Security (pre-release review, issues #3–#11)
 
 - **SEC-1 (high, #3)** — fiddle preview: expanded asset paths are

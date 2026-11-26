@@ -339,6 +339,9 @@ def main(argv=None) -> int:
     # as the guid/slug backfill: run after connect, before any bridge
     from fengrid.core import studio as core_studio
     core_studio.migrate(con)
+    # canvas boards (collaborative design + code canvas) — same rule
+    from fengrid.core import canvas as core_canvas
+    core_canvas.migrate(con)
     core_registry.seed_globals(con, reg_con)
     core_registry.set_active(reg_con, db_path)
     prefs_bridge = Prefs(con, db_path)
@@ -393,6 +396,10 @@ def main(argv=None) -> int:
     from fengrid.bridges.studio import Studio
     studio_bridge = Studio(con)
     studio_bridge.bind_projects(projects_bridge)
+    # canvas boards: Projects pane → Canvas screen (live-collab poll)
+    from fengrid.bridges.canvas import Canvas
+    canvas_bridge = Canvas(con)
+    canvas_bridge.bind_projects(projects_bridge)
     # source control: one git repo per Project/Library under <data>/repos;
     # projects.save() commits to fengrid-main through this bridge
     from fengrid.bridges.source_control import SourceControl
@@ -474,6 +481,7 @@ def main(argv=None) -> int:
     ctx.setContextProperty("projects", projects_bridge)
     ctx.setContextProperty("planning", planning_bridge)
     ctx.setContextProperty("studio", studio_bridge)
+    ctx.setContextProperty("canvasBoard", canvas_bridge)
     ctx.setContextProperty("sc", sc_bridge)
     ctx.setContextProperty("undoProjects", projects_undo)
     ctx.setContextProperty("undoColors", colors_undo)

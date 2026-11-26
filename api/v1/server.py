@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import sys
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -96,6 +97,33 @@ ROUTES: list[tuple[str, re.Pattern, str]] = [
     ("GET",  re.compile(r"^/api/v1/projects$"), "projects_list"),
     ("GET",  re.compile(r"^/api/v1/projects/(?P<pid>\d+)$"),
      "projects_describe"),
+    # canvas boards (collaborative design + code canvas, Projects pane)
+    ("GET",  re.compile(r"^/api/v1/projects/(?P<pid>\d+)/boards$"),
+     "boards_list"),
+    ("POST", re.compile(r"^/api/v1/projects/(?P<pid>\d+)/boards$"),
+     "boards_create"),
+    ("GET",  re.compile(r"^/api/v1/boards/(?P<bid>\d+)$"), "board_get"),
+    ("PATCH", re.compile(r"^/api/v1/boards/(?P<bid>\d+)$"), "board_patch"),
+    ("DELETE", re.compile(r"^/api/v1/boards/(?P<bid>\d+)$"),
+     "board_delete"),
+    ("GET",  re.compile(r"^/api/v1/boards/(?P<bid>\d+)/ops$"),
+     "board_ops_get"),
+    ("POST", re.compile(r"^/api/v1/boards/(?P<bid>\d+)/ops$"),
+     "board_ops_post"),
+    ("POST", re.compile(r"^/api/v1/boards/(?P<bid>\d+)/place$"),
+     "board_place"),
+    ("GET",  re.compile(r"^/api/v1/boards/(?P<bid>\d+)/presence$"),
+     "board_presence_get"),
+    ("POST", re.compile(r"^/api/v1/boards/(?P<bid>\d+)/presence$"),
+     "board_presence_post"),
+    ("GET",  re.compile(r"^/api/v1/boards/(?P<bid>\d+)/comments$"),
+     "board_comments_get"),
+    ("POST", re.compile(r"^/api/v1/boards/(?P<bid>\d+)/comments$"),
+     "board_comments_post"),
+    ("GET",  re.compile(r"^/api/v1/boards/(?P<bid>\d+)/export$"),
+     "board_export"),
+    ("GET",  re.compile(r"^/api/v1/usage/(?P<kind>[a-z]+)/(?P<item_id>\d+)$"),
+     "asset_usage"),
     ("GET",  re.compile(r"^/api/v1/planning/board$"), "planning_board"),
     ("GET",  re.compile(r"^/api/v1/planning/stages$"), "planning_stages"),
     ("POST", re.compile(r"^/api/v1/planning/tasks$"), "planning_task_create"),
@@ -186,10 +214,10 @@ def make_handler(api: Api, token: str | None):
         def _dispatch(self, method: str) -> None:
             path = self.path.split("?", 1)[0]
             query = self.path.split("?", 1)[1] if "?" in self.path else ""
-            params = dict(pair.split("=", 1) for pair in
-                          (kv for kv in query.split("&") if "=" in kv)) \
-                if query else {}
-            params = {k: v.replace("%20", " ") for k, v in params.items()}
+            # full percent/plus decoding — the old split only undid %20,
+            # so ?q=a%26b or ?q=c%2B%2B reached handlers still encoded
+            params = dict(urllib.parse.parse_qsl(query,
+                                                 keep_blank_values=True))
             self._rlog.start(method, path)
             try:
                 if method == "OPTIONS":
@@ -228,13 +256,18 @@ def make_handler(api: Api, token: str | None):
                 handler = getattr(resources, fname)
                 kwargs = match.groupdict()
                 sig = inspect.signature(handler)
-                args = [api, body]
+                # bind path + query params BY NAME: appending them
+                # positionally put `params` ahead of path ids, so every
+                # handler shaped (ctx, body, item_id, params) — e.g.
+                # GET /assets/data/{id}/points — got its arguments
+                # swapped and answered 500
+                call: dict = {}
                 if "params" in sig.parameters:
-                    args.append(params)
+                    call["params"] = params
                 for k, v in kwargs.items():
                     if k in sig.parameters:
-                        args.append(int(v) if v.isdigit() else v)
-                out = handler(*args)
+                        call[k] = int(v) if v.isdigit() else v
+                out = handler(api, body, **call)
                 # job submissions answer 202 Accepted with the job handle
                 if fname.startswith("jobs"):
                     done = isinstance(out, dict) and out.get("state") in (

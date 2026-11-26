@@ -30,7 +30,11 @@ so you stop wrestling file managers and image-conversion websites.
 - **Code** — snippet library with a real syntax-highlighted editor
   (HTML/CSS/JS/Markdown), live preview, import/export in bundle,
   VS Code and massCode formats.
-- **Projects** — a multi-screen studio: a block-canvas **Design** screen
+- **Projects** — a multi-screen studio: a collaborative **Canvas**
+  (infinite boards whose frames, shapes, text and code cells sit next to
+  live-bound icons, fonts, images, palettes, snippets and whole
+  collections — co-editable by other windows and REST clients), a
+  block-page **Design** screen
   whose blocks bind Fengrid assets via `[[ slug ]]` references, the token
   **Theme** configurator, **Templates** for tenant/multi-instance
   variants, **Docker** packaging (build/run/inspect containers, browse

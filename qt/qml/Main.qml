@@ -121,9 +121,12 @@ ApplicationWindow {
         gradient: Gradient {
             GradientStop { position: 0; color: theme.tokens.surface }
             GradientStop { position: 0.82; color: theme.tokens.surface }
-            GradientStop { position: 1; color: Qt.rgba(
-                theme.tokens.surface.r, theme.tokens.surface.g,
-                theme.tokens.surface.b, 0.86) }
+            // tokens are strings — convert before reading r/g/b
+            // (string.r is undefined, so this stop never got its tint)
+            GradientStop { position: 1; color: {
+                var q = Qt.lighter(theme.tokens.surface, 1.0);
+                return Qt.rgba(q.r, q.g, q.b, 0.86);
+            } }
         }
         Rectangle {
             anchors.bottom: parent.bottom

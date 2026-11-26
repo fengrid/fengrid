@@ -114,6 +114,12 @@ def update_project(con: sqlite3.Connection, pid: int, name=None,
 
 def delete_project(con: sqlite3.Connection, pid: int) -> None:
     con.execute("DELETE FROM project_asset WHERE project_id = ?", (pid,))
+    # typed links are polymorphic (no FK): drop both directions so the
+    # Properties panel never lists a link to a project that is gone
+    # (canvas boards record project→asset links with role 'canvas')
+    con.execute("DELETE FROM asset_link WHERE (from_kind = 'project' AND"
+                " from_id = ?) OR (to_kind = 'project' AND to_id = ?)",
+                (pid, pid))
     con.execute("DELETE FROM projects WHERE id = ?", (pid,))
     con.commit()
 

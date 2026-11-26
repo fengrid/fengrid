@@ -17,7 +17,12 @@ Popup {
     padding: 0
     background: Rectangle {
         // translucent panel: dark glass look with an accent hairline
-        color: Qt.rgba(theme.tokens.surface2.r, theme.tokens.surface2.g, theme.tokens.surface2.b, 0.88)
+        // tokens are strings ("#1D242B"): .r/.g/.b on a string is
+        // undefined, so the glass tint never applied — convert first
+        color: {
+            var q = Qt.lighter(theme.tokens.surface2, 1.0);
+            return Qt.rgba(q.r, q.g, q.b, 0.88);
+        }
         border.color: theme.tokens.accent
         border.width: 1
         radius: 8

@@ -416,7 +416,7 @@ Item {
                             text: rowRect.sub
                             font.family: theme.monoFont
                             font.pixelSize: 10
-                            color: ListView.isCurrentItem ? Qt.rgba(theme.tokens.bg.r, theme.tokens.bg.g, theme.tokens.bg.b, 0.75) : theme.tokens.textMuted
+                            color: ListView.isCurrentItem ? Qt.rgba(Qt.lighter(theme.tokens.bg, 1.0).r, Qt.lighter(theme.tokens.bg, 1.0).g, Qt.lighter(theme.tokens.bg, 1.0).b, 0.75) : theme.tokens.textMuted
                             elide: Text.ElideRight
                             Layout.maximumWidth: 260
                             horizontalAlignment: Text.AlignRight

@@ -276,10 +276,11 @@ def _esc(s: str) -> str:
 
 
 def _ref(con, val: str, attr: str = "src") -> str:
-    """Resolve a [[ ref ]] prop value; returns the attribute value."""
+    """Resolve a [[ ref ]] prop value; returns the attribute value,
+    HTML-escaped either way (a path may legally contain a quote — SEC-2)."""
     hit = assetrefs.resolve(con, val)
     if hit:
-        return assetrefs.url_for(hit)
+        return _esc(assetrefs.url_for(hit))
     return _esc(val)
 
 
@@ -380,19 +381,27 @@ def _palette_hexes(con, ref: str) -> list[str]:
 
 
 def _snippet_body(con, ref: str):
-    try:
-        if ref.isdigit():
-            row = con.execute("SELECT body FROM snippet WHERE id = ?",
-                              (int(ref),)).fetchone()
-            return row[0] if row else None
+    """A snippet's markup for a page block: its HTML plus its CSS in a
+    <style> element. (The snippet table has html/css/js columns — the
+    old query read a nonexistent `body` column and the bare except hid
+    the OperationalError, so every snippet block rendered as missing.)"""
+    ref = (ref or "").strip()
+    sid = None
+    if ref.isdigit():
+        sid = int(ref)
+    else:
         hit = assetrefs.resolve(con, ref)
         if hit and hit.get("kind") == "snippet":
-            row = con.execute("SELECT body FROM snippet WHERE id = ?",
-                              (int(hit["id"]),)).fetchone()
-            return row[0] if row else None
-    except Exception:
-        pass
-    return None
+            sid = int(hit["id"])
+    if sid is None:
+        return None
+    row = con.execute("SELECT html, css FROM snippet WHERE id = ?",
+                      (sid,)).fetchone()
+    if row is None:
+        return None
+    css = (row["css"] or "").replace("</", "<\\/")
+    style = f"<style>{css}</style>" if css.strip() else ""
+    return style + (row["html"] or "")
 
 
 # ──────────────────────────────────────────────────────── templates

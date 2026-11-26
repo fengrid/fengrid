@@ -518,3 +518,91 @@ def test_planning_auth_enforced(api_env):
     base = api_env["base"]
     st, _ = _req(base, "GET", "/api/v1/planning/board", token="")
     assert st in (401, 403)
+
+
+# ─────────────────────────────────────────── canvas boards (collaboration)
+def test_canvas_board_collaboration_roundtrip(api_env):
+    """Two clients share one board over HTTP: snapshot, ops, merge."""
+    from fengrid.core import db as core_db
+    from fengrid.core import projects as core_projects
+    con = core_db.connect(api_env["api"].db_path)
+    pid = core_projects.create_project(con, "Collab")
+    con.close()
+    base = api_env["base"]
+
+    st, body = _req(base, "POST", f"/api/v1/projects/{pid}/boards",
+                    {"name": "Wireframes"})
+    assert st == 200, body
+    bid = body["data"]["id"]
+
+    # client A creates a node, client B edits a different field of it
+    st, body = _req(base, "POST", f"/api/v1/boards/{bid}/ops", {
+        "actor": "a-alice", "ops": [{"node": "hero", "clock": 1, "fields": {
+            "type": "frame", "x": 0, "y": 0, "w": 800, "h": 400}}]})
+    assert st == 200 and body["data"]["head"] == 1, body
+    st, body = _req(base, "POST", f"/api/v1/boards/{bid}/ops", {
+        "actor": "a-bob", "ops": [{"node": "hero", "clock": 2,
+                                   "fields": {"p.fill": "#101418"}}]})
+    assert st == 200
+    st, body = _req(base, "POST", f"/api/v1/boards/{bid}/ops", {
+        "actor": "a-alice", "ops": [{"node": "hero", "clock": 2,
+                                     "fields": {"x": 40}}]})
+
+    # bob pulls what he hasn't seen
+    st, body = _req(base, "GET",
+                    f"/api/v1/boards/{bid}/ops?since=0&exclude=a-bob")
+    assert [o["actor"] for o in body["data"]["ops"]] == ["a-alice"] * 2
+
+    st, body = _req(base, "GET", f"/api/v1/boards/{bid}")
+    node = body["data"]["nodes"][0]
+    assert node["x"] == 40 and node["props"]["fill"] == "#101418"
+
+    # library placement by kind/id + usage index
+    st, body = _req(base, "POST", f"/api/v1/boards/{bid}/place", {
+        "kind": "icon", "id": api_env["icon_id"], "x": 10, "y": 10})
+    assert st == 200, body
+    st, body = _req(base, "GET", f"/api/v1/usage/icon/{api_env['icon_id']}")
+    assert body["data"]["items"][0]["board_id"] == bid
+
+    st, body = _req(base, "GET", f"/api/v1/boards/{bid}/export?fmt=svg")
+    assert body["data"]["content"].startswith("<svg")
+
+    # presence + bad input
+    st, body = _req(base, "POST", f"/api/v1/boards/{bid}/presence",
+                    {"actor": "a-bob", "name": "Bob", "cursor": [1, 2]})
+    assert st == 200
+    st, body = _req(base, "GET", f"/api/v1/boards/{bid}/presence")
+    assert body["data"]["items"][0]["name"] == "Bob"
+    st, body = _req(base, "POST", f"/api/v1/boards/{bid}/ops",
+                    {"actor": "a-x", "ops": [{"node": "n", "fields": {
+                        "x": 1}}]})
+    assert st == 400                         # remote ops need a clock
+    st, _ = _req(base, "GET", "/api/v1/boards/9999")
+    assert st == 404
+
+
+def test_query_params_fully_decoded(api_env):
+    """?q= used to undo only %20 — %26/+ reached handlers encoded."""
+    st, body = _req(api_env["base"], "GET",
+                    "/api/v1/assets?kind=icon&q=Test+Icon")
+    assert st == 200
+    names = [i.get("name") for i in body["data"].get("items", [])]
+    assert "Test Icon" in names
+
+
+def test_points_get_route_binds_params_by_name(api_env, tmp_path):
+    """(ctx, body, item_id, params) handlers used to receive their args
+    swapped by the router — GET .../points always answered 500."""
+    from fengrid.core import db as core_db
+    con = core_db.connect(api_env["api"].db_path)
+    src = con.execute("SELECT id FROM source LIMIT 1").fetchone()[0]
+    p = tmp_path / "series.csv"
+    p.write_text("t,v\n")
+    aid = con.execute("INSERT INTO asset(source_id, kind, path, name)"
+                      " VALUES (?, 'data', ?, 'series')",
+                      (src, str(p))).lastrowid
+    con.commit()
+    con.close()
+    st, body = _req(api_env["base"], "GET",
+                    f"/api/v1/assets/data/{aid}/points?from=0")
+    assert st == 200, body

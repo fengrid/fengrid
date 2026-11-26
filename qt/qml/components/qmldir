@@ -13,6 +13,7 @@ FgButton 1.0 FgButton.qml
 FgSlider 1.0 FgSlider.qml
 SourceControlPanel 1.0 SourceControlPanel.qml
 StudioDesign 1.0 StudioDesign.qml
+StudioCanvas 1.0 StudioCanvas.qml
 StudioAssets 1.0 StudioAssets.qml
 StudioTemplates 1.0 StudioTemplates.qml
 StudioDocker 1.0 StudioDocker.qml

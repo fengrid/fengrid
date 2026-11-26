@@ -24,7 +24,9 @@ fengrid/                     # repo root
 │   │   │   ├── export.py / exportplus.py   # multi-format export
 │   │   │   ├── watch.py     # watch folders (rsync/scp/sftp/ftp/http)
 │   │   │   ├── backup.py    # tar.gz backup/restore + restore scripts
-│   │   │   ├── projects.py / studio.py     # project model, block canvas
+│   │   │   ├── projects.py / studio.py     # project model, block pages
+│   │   │   ├── canvas.py    # collaborative boards: op log, LWW merge,
+│   │   │   │                # library bindings, HTML/SVG export
 │   │   │   ├── projects_git.py / history.py # git repos, undo/redo stack
 │   │   │   ├── docker.py    # docker CLI integration
 │   │   │   ├── assetrefs.py # [[ slug ]] / [[ GUID ]] resolution
@@ -93,6 +95,15 @@ that allowlists exactly the scan index via `fengrid-asset://` URLs.
 `[[ slug ]]`, `[[ GUID ]]` and `[[ kind/library/collection/name ]]`
 references resolve through `core/assetrefs.py` — unresolved refs render
 as visible placeholders, never raw.
+
+### Canvas (Projects pane → Canvas screen)
+
+`core/canvas.py` stores boards as flat node rows folded from an op log
+(`canvas_op`); every field carries a `(Lamport clock, actor)` stamp and
+merges last-writer-wins, so the desktop bridge, the REST API and remote
+peers can edit one board concurrently. Bound nodes resolve through the
+same GUID/slug fabric as `[[ refs ]]`. See
+`docs/architecture/0003-canvas-collaboration.md`.
 
 ### Studio (Projects pane)
 

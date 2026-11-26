@@ -146,7 +146,16 @@ Item {
     // ------------------------------------------------------------- sidebar
     Rectangle {
         id: sidebar
-        width: 250
+        // collapsible: the Canvas screen wants the width
+        width: projectsRoot.sidebarCollapsed ? 0 : 250
+        visible: width > 0
+        clip: true
+        Behavior on width {
+            NumberAnimation {
+                duration: 140
+                easing.type: Easing.OutCubic
+            }
+        }
         color: theme.tokens.surface
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -397,6 +406,12 @@ Item {
                 anchors.rightMargin: 8
                 spacing: 6
 
+                IconButton {
+                    icon_name: "menu"
+                    active: !projectsRoot.sidebarCollapsed
+                    ToolTip.text: projectsRoot.sidebarCollapsed ? qsTr("Show the project list") : qsTr("Hide the project list")
+                    onClicked: projectsRoot.sidebarCollapsed = !projectsRoot.sidebarCollapsed
+                }
                 TextField {
                     id: nameField
                     Layout.preferredWidth: 220
@@ -532,7 +547,7 @@ Item {
                     left: parent.left
                     right: parent.right
                 }
-                height: parent.height * 0.55 - 0.5
+                height: Math.round(parent.height * projectsRoot.activeSplit) - 3
                 spacing: 0
                 // ---- studio screen rail + screen area
                 ColumnLayout {
@@ -541,66 +556,91 @@ Item {
                     Layout.preferredWidth: 360
                     // minimums must SUM below the available width at the
                     // default window (1280 - rail - sidebar ≈ 819px) or the
-                    // row overflows past the window edge
+                    // row overflows past the window edge. No maximum: the
+                    // old 420px cap stranded every pixel past it as dead
+                    // space between the screens and the inspector.
                     Layout.minimumWidth: 300
-                    Layout.maximumWidth: 420
                     spacing: 0
 
-                    // screen rail: Design · Theme · Assets · Templates ·
-                    // Docker · Docs (Revisions lives in the bottom dock)
-                    RowLayout {
+                    // screen rail: Canvas · Design · Theme · Assets ·
+                    // Templates · Docker · Docs (Revisions lives in the
+                    // bottom dock) — one segmented control
+                    Rectangle {
                         Layout.fillWidth: true
-                        spacing: 2
-                        Repeater {
-                            model: [
-                                {
-                                    k: "design",
-                                    l: qsTr("Design")
-                                },
-                                {
-                                    k: "theme",
-                                    l: qsTr("Theme")
-                                },
-                                {
-                                    k: "assets",
-                                    l: qsTr("Assets")
-                                },
-                                {
-                                    k: "templates",
-                                    l: qsTr("Templates")
-                                },
-                                {
-                                    k: "docker",
-                                    l: qsTr("Docker")
-                                },
-                                {
-                                    k: "docs",
-                                    l: qsTr("Docs")
-                                }
-                            ]
-                            Button {
-                                id: screenBtn
-                                required property var modelData
-                                required property int index
-                                property int idx: index
-                                Layout.preferredHeight: 22
-                                text: modelData.l
-                                font.family: theme.uiFont
-                                font.pixelSize: 10
-                                onClicked: studioScreen = idx
-                                background: Rectangle {
-                                    radius: 5
-                                    color: studioScreen === screenBtn.idx ? theme.tokens.accentProject : theme.tokens.surface2
-                                    border.color: theme.tokens.border
-                                }
-                                contentItem: Text {
-                                    text: screenBtn.text
+                        Layout.preferredHeight: 34
+                        color: theme.tokens.surface
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            height: 1
+                            color: theme.tokens.border
+                        }
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 2
+                            Repeater {
+                                model: [
+                                    {
+                                        k: "canvas",
+                                        l: qsTr("Canvas")
+                                    },
+                                    {
+                                        k: "design",
+                                        l: qsTr("Design")
+                                    },
+                                    {
+                                        k: "theme",
+                                        l: qsTr("Theme")
+                                    },
+                                    {
+                                        k: "assets",
+                                        l: qsTr("Assets")
+                                    },
+                                    {
+                                        k: "templates",
+                                        l: qsTr("Templates")
+                                    },
+                                    {
+                                        k: "docker",
+                                        l: qsTr("Docker")
+                                    },
+                                    {
+                                        k: "docs",
+                                        l: qsTr("Docs")
+                                    }
+                                ]
+                                Button {
+                                    id: screenBtn
+                                    required property var modelData
+                                    required property int index
+                                    property int idx: index
+                                    Layout.preferredHeight: 26
+                                    text: modelData.l
                                     font.family: theme.uiFont
-                                    font.pixelSize: 10
-                                    color: studioScreen === screenBtn.idx ? theme.tokens.bg : theme.tokens.text
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
+                                    font.pixelSize: 11
+                                    hoverEnabled: true
+                                    leftPadding: 12
+                                    rightPadding: 12
+                                    onClicked: studioScreen = idx
+                                    background: Rectangle {
+                                        radius: 6
+                                        color: studioScreen === screenBtn.idx ? theme.tokens.accentProject : (screenBtn.hovered ? theme.tokens.surface2 : "transparent")
+                                    }
+                                    contentItem: Text {
+                                        text: screenBtn.text
+                                        font.family: theme.uiFont
+                                        font.pixelSize: 11
+                                        font.weight: studioScreen === screenBtn.idx ? Font.DemiBold : Font.Normal
+                                        color: studioScreen === screenBtn.idx ? theme.tokens.bg : theme.tokens.text
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
                                 }
+                            }
+                            Item {
+                                Layout.fillWidth: true
                             }
                         }
                     }
@@ -610,7 +650,14 @@ Item {
                         Layout.fillHeight: true
                         currentIndex: studioScreen
 
-                        // 0 · DESIGN — block canvas + inspector
+                        // 0 · CANVAS — collaborative design + code board
+                        // (its own inspector; bound to library assets)
+                        StudioCanvas {
+                            cb: typeof canvasBoard !== "undefined" ? canvasBoard : null
+                            onMessage: text => toast.show(text)
+                        }
+
+                        // 1 · DESIGN — block page builder + inspector
                         StudioDesign {
                             st: studio
                             prj: projects
@@ -1054,16 +1101,20 @@ Item {
                 }               // screen-area column
 
                 Rectangle {
+                    visible: projectsRoot.screenKey !== "canvas"
                     Layout.preferredWidth: 1
                     Layout.fillHeight: true
                     color: theme.tokens.border
                 }
                 // ---- property inspector (right panel): project facts + the
-                // selected preview element with quick parameter edits
+                // selected preview element with quick parameter edits.
+                // The Canvas screen carries its own node inspector.
                 Rectangle {
+                    visible: projectsRoot.screenKey !== "canvas"
                     Layout.fillHeight: true
-                    Layout.preferredWidth: 250
-                    Layout.minimumWidth: 180
+                    Layout.preferredWidth: 260
+                    Layout.minimumWidth: 220
+                    Layout.maximumWidth: 260
                     color: theme.tokens.surface
                     ColumnLayout {
                         anchors.fill: parent
@@ -1190,14 +1241,62 @@ Item {
                 }
             }
 
+            // split handle: drag to resize the preview band (remembered
+            // per screen), double-click or the chevron to collapse it
             Rectangle {
+                id: splitHandle
                 anchors {
                     top: studioRow.bottom
                     left: parent.left
                     right: parent.right
                 }
-                height: 1
-                color: theme.tokens.border
+                height: 6
+                color: splitMa.containsMouse || splitMa.pressed ? theme.tokens.surface2 : theme.tokens.surface
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: 1
+                    color: splitMa.pressed ? theme.tokens.accent : theme.tokens.border
+                }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 36
+                    height: 3
+                    radius: 2
+                    color: theme.tokens.border
+                }
+                MouseArea {
+                    id: splitMa
+                    anchors.fill: parent
+                    anchors.topMargin: -3
+                    anchors.bottomMargin: -3
+                    hoverEnabled: true
+                    cursorShape: Qt.SplitVCursor
+                    onPositionChanged: mouse => {
+                        if (!pressed)
+                            return;
+                        var host = splitHandle.parent;
+                        var y = mapToItem(host, mouse.x, mouse.y).y;
+                        var r = Math.max(0.2, Math.min(0.94, y / Math.max(1, host.height)));
+                        projectsRoot.dockCollapsed = false;
+                        if (projectsRoot.screenKey === "canvas")
+                            projectsRoot.canvasSplit = r;
+                        else
+                            projectsRoot.studioSplit = r;
+                    }
+                    onDoubleClicked: projectsRoot.dockCollapsed = !projectsRoot.dockCollapsed
+                }
+                IconButton {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitWidth: 22
+                    implicitHeight: 16
+                    icon_px: 12
+                    icon_name: projectsRoot.dockCollapsed ? "chevron-up" : "chevron-down"
+                    ToolTip.text: projectsRoot.dockCollapsed ? qsTr("Show the preview & dock") : qsTr("Collapse the preview & dock")
+                    onClicked: projectsRoot.dockCollapsed = !projectsRoot.dockCollapsed
+                }
             }
 
             // ---- lower row: live preview + bottom dock + status bar
@@ -1205,7 +1304,7 @@ Item {
             // row, so nothing squeezes the preview now
             Rectangle {
                 anchors {
-                    top: studioRow.bottom
+                    top: splitHandle.bottom
                     left: parent.left
                     right: parent.right
                     bottom: parent.bottom
@@ -1616,9 +1715,22 @@ Item {
     // shared preview state
     property string previewDoc: ""
     property bool previewActive: false
-    // studio screens: 0 Design · 1 Theme · 2 Assets · 3 Templates ·
-    // 4 Docker · 5 Docs (Revisions stays in the bottom dock)
+    // studio screens: 0 Canvas · 1 Design · 2 Theme · 3 Assets ·
+    // 4 Templates · 5 Docker · 6 Docs (Revisions stays in the bottom
+    // dock). Compare KEYS, not indices, so inserting a screen never
+    // silently retargets a check again.
+    readonly property var screenKeys: ["canvas", "design", "theme", "assets", "templates", "docker", "docs"]
     property int studioScreen: 0
+    readonly property string screenKey: screenKeys[studioScreen] || ""
+    // vertical split between the screens and the preview band: the
+    // canvas wants room, the form screens want the preview
+    property real canvasSplit: 0.74
+    property real studioSplit: 0.55
+    property bool dockCollapsed: false
+    property bool sidebarCollapsed: false
+    readonly property real activeSplit: dockCollapsed ? Math.max(0.5, 1 - 34 / Math.max(1, height)) : (screenKey === "canvas" ? canvasSplit : studioSplit)
+    onScreenKeyChanged: if (live)
+        liveDebounce.restart()
     // live mode: every settings/meta change regenerates the preview
     // (debounced) — the old behaviour needed a manual Run click and the
     // user read it as "edits don't reach the preview"
@@ -1655,9 +1767,15 @@ Item {
         if (previewProfile === null)
             // no WebEngine: the sandboxed view can't run
             return;
-        // Design screen renders the block canvas page; other screens
-        // render the boilerplate site as before
-        var html = (studio !== null && studioScreen === 0 && studio.currentPageId >= 0) ? studio.pageHtml() : projects.preview_html();
+        // Canvas screen renders the open board, Design the block page;
+        // other screens render the boilerplate site as before
+        var html;
+        if (screenKey === "canvas" && typeof canvasBoard !== "undefined" && canvasBoard !== null && canvasBoard.boardId > 0)
+            html = canvasBoard.previewHtml();
+        else if (studio !== null && screenKey === "design" && studio.currentPageId >= 0)
+            html = studio.pageHtml();
+        else
+            html = projects.preview_html();
         // WYSIWYG hooks: hover/click/contextmenu capture + console capture,
         // consumed by the inspector poller. Appended only to the PREVIEW
         // doc — exports never carry them.
@@ -1678,11 +1796,20 @@ Item {
     Connections {
         target: studio
         function onPageChanged() {
-            if (studioScreen === 0)
+            if (screenKey === "design")
                 liveDebounce.restart();
         }
         function onPagesChanged() {
-            if (studioScreen === 0)
+            if (screenKey === "design")
+                liveDebounce.restart();
+        }
+    }
+    // board edits (local or from collaborators) refresh the preview too
+    Connections {
+        target: typeof canvasBoard !== "undefined" ? canvasBoard : null
+        ignoreUnknownSignals: true
+        function onNodesChanged() {
+            if (projectsRoot.screenKey === "canvas" && projectsRoot.live && !projectsRoot.dockCollapsed)
                 liveDebounce.restart();
         }
     }

@@ -18,6 +18,7 @@ from PySide6.QtCore import QCoreApplication, QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtQml import QQmlComponent, QQmlEngine
 from PySide6.QtQuick import QQuickItem  # noqa: F401 — ensures shiboken
+from PySide6.QtQuick import QQuickWindow
 
 # casts component roots to QQuickItem (setWidth/childItems resolve)
 
@@ -76,6 +77,7 @@ def projects_qml(tmp_path):
     from fengrid.bridges.library import Library
     from fengrid.bridges.projects import Projects
     from fengrid.bridges.studio import Studio
+    from fengrid.bridges.canvas import Canvas
     from fengrid.bridges.theme import Theme
     from fengrid.core import db as core_db
 
@@ -84,6 +86,8 @@ def projects_qml(tmp_path):
     theme = Theme(con, str(FONTS))
     projects = Projects(con)
     studio = Studio(con)
+    canvas = Canvas(con, poll=False)
+    canvas.bind_projects(projects)
     fonts = Fonts(con, db_path)
     colors = Colors(con)
     library = Library(con, db_path, no_scan=True)
@@ -94,6 +98,7 @@ def projects_qml(tmp_path):
     ctx.setContextProperty("theme", theme)
     ctx.setContextProperty("projects", projects)
     ctx.setContextProperty("studio", studio)
+    ctx.setContextProperty("canvasBoard", canvas)
     ctx.setContextProperty("fonts", fonts)
     ctx.setContextProperty("colors", colors)
     ctx.setContextProperty("library", library)
@@ -109,12 +114,20 @@ def projects_qml(tmp_path):
     # setWidth/setHeight don't resolve; QML properties do
     root.setWidth(1280)
     root.setHeight(800)
+    # host in a window: Qt Quick Layouts only re-lay out on polish, which
+    # needs a window — without one, switching screens (which toggles the
+    # pane inspector's visibility) leaves stale 0-width geometry
+    win = QQuickWindow()
+    root.setParentItem(win.contentItem())
+    win.show()
     _pump(120)
 
-    yield {"root": root, "engine": engine, "projects": projects,
-           "studio": studio, "con": con}
+    yield {"root": root, "win": win, "engine": engine, "projects": projects,
+           "studio": studio, "canvas": canvas, "con": con}
 
     # teardown in the proven order (bridges alive while the engine dies)
+    win.hide()
+    win.close()
     root.setParentItem(None)
     engine.collectGarbage()
     del engine
@@ -125,6 +138,7 @@ def projects_qml(tmp_path):
 def test_preview_is_bottom_band(projects_qml):
     """The preview Loader's band sits in the lower half and spans ~full width."""
     root = projects_qml["root"]
+    root.setProperty("studioScreen", 1)          # Design (form screens)
     _pump(120)
     root_w = root.property("width")
     root_h = root.property("height")
@@ -168,6 +182,7 @@ def test_preview_is_bottom_band(projects_qml):
 def test_inspector_in_upper_row(projects_qml):
     """The property inspector stays in the upper row, pinned right."""
     root = projects_qml["root"]
+    root.setProperty("studioScreen", 1)          # Design (form screens)
     _pump(120)
     root_w = root.property("width")
     root_h = root.property("height")
@@ -175,7 +190,8 @@ def test_inspector_in_upper_row(projects_qml):
     texts = _walk(root, ["QQuickText"])
     target = None
     for t in texts:
-        if t.property("text") == "INSPECTOR":
+        # the Canvas screen has its own (hidden here) INSPECTOR header
+        if t.property("text") == "INSPECTOR" and t.property("visible"):
             target = t
             break
     assert target is not None, "INSPECTOR header not found"
@@ -194,3 +210,34 @@ def test_inspector_in_upper_row(projects_qml):
         f"root_h={root_h})")
     # pinned right
     assert x + w > root_w * 0.6, f"inspector not on the right (x={x}, w={w})"
+
+
+def test_canvas_is_default_screen_and_gets_the_room(projects_qml):
+    """Canvas opens first; its board gets most of the height and the
+    pane inspector steps aside (the canvas brings its own)."""
+    root = projects_qml["root"]
+    _pump(120)
+    assert root.property("screenKey") == "canvas"
+    assert root.property("activeSplit") > 0.7
+    # StudioCanvas's section headers are inline `PanelLabel: Text` types
+    texts = _walk(root, ["QQuickText", "PanelLabel"])
+    assert any((t.property("text") or "") == "BOARDS" and t.property("visible")
+               for t in texts), "canvas left panel not shown"
+
+
+def test_screen_column_has_no_width_cap(projects_qml):
+    """#layout: the screen column was capped at 420px, leaving dead space
+    on wide windows between the screens and the inspector."""
+    root = projects_qml["root"]
+    root.setProperty("width", 1920)
+    root.setProperty("studioScreen", 1)
+    _pump(150)
+    texts = _walk(root, ["QQuickText"])
+    insp = next(t for t in texts if t.property("text") == "INSPECTOR"
+                and t.property("visible"))
+    rect = insp
+    while rect is not None and "QQuickRectangle" not in rect.metaObject().className():
+        rect = rect.parentItem()
+    x, _ = _map_to_root(rect, root)
+    # inspector sits flush right: nothing but the inspector past it
+    assert x + rect.property("width") > 1920 - 4, (x, rect.property("width"))

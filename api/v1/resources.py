@@ -19,6 +19,7 @@ from pathlib import Path
 
 try:
     from fengrid.core import assetrefs
+    from fengrid.core import canvas as core_canvas
     from fengrid.core import backup as core_backup
     from fengrid.core import colors as core_colors
     from fengrid.core import db as core_db
@@ -33,6 +34,7 @@ except ImportError:                              # run from a plain checkout
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "qt" / "src"))
     from fengrid.core import assetrefs
+    from fengrid.core import canvas as core_canvas
     from fengrid.core import backup as core_backup
     from fengrid.core import colors as core_colors
     from fengrid.core import db as core_db
@@ -1187,5 +1189,237 @@ def planning_task_unlink(ctx: Api, body: dict, tid: int,
                            f"link {row_id} on task {tid} not found")
         core_planning.unlink_asset(con, int(row_id))
         return {"deleted": int(row_id)}
+    finally:
+        con.close()
+
+
+# ─────────────────────────────────────────────────────── canvas boards
+# The collaboration surface: any client that can speak HTTP can join a
+# board — fetch a snapshot, then exchange ops (GET ?since=seq / POST).
+# Ops are LWW-per-field (see core/canvas.py), so clients never need to
+# lock or coordinate; they just send what they changed with their own
+# Lamport clock and actor id.
+def _canvas_con(ctx: Api):
+    con = ctx.con()
+    core_canvas.migrate(con)
+    return con
+
+
+def _canvas_call(fn):
+    try:
+        return fn()
+    except core_canvas.CanvasError as e:
+        raise ApiError(400, "bad_request", str(e))
+
+
+def _board_or_404(con, bid: int) -> dict:
+    b = core_canvas.get_board(con, int(bid))
+    if b is None:
+        raise ApiError(404, "not_found", f"board {bid} not found")
+    return b
+
+
+def boards_list(ctx: Api, body: dict, pid: int) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        if core_projects.get_project(con, int(pid)) is None:
+            raise ApiError(404, "not_found", f"project {pid} not found")
+        return {"items": core_canvas.list_boards(con, int(pid))}
+    finally:
+        con.close()
+
+
+def boards_create(ctx: Api, body: dict, pid: int) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        bid = _canvas_call(lambda: core_canvas.create_board(
+            con, int(pid), body.get("name") or ""))
+        return core_canvas.get_board(con, bid)
+    finally:
+        con.close()
+
+
+def board_get(ctx: Api, body: dict, bid: int) -> dict:
+    """Snapshot: board + live nodes + head seq (join point for peers)."""
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        return core_canvas.snapshot(con, int(bid))
+    finally:
+        con.close()
+
+
+def board_patch(ctx: Api, body: dict, bid: int) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        if body.get("name"):
+            _canvas_call(lambda: core_canvas.rename_board(
+                con, int(bid), body["name"]))
+        if isinstance(body.get("settings"), dict):
+            core_canvas.set_board_settings(con, int(bid), body["settings"])
+        return core_canvas.get_board(con, int(bid))
+    finally:
+        con.close()
+
+
+def board_delete(ctx: Api, body: dict, bid: int) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        core_canvas.delete_board(con, int(bid))
+        return {"deleted": int(bid)}
+    finally:
+        con.close()
+
+
+def board_ops_get(ctx: Api, body: dict, bid: int, params: dict) -> dict:
+    """Ops after ?since=<seq> (default 0); ?exclude=<actor> drops a
+    client's own echoes."""
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        try:
+            since = int(params.get("since") or 0)
+            limit = int(params.get("limit") or 2000)
+        except ValueError:
+            raise ApiError(400, "bad_request", "since/limit must be integers")
+        ops = core_canvas.ops_since(con, int(bid), since, limit,
+                                    params.get("exclude") or "")
+        return {"ops": ops, "head": core_canvas.head(con, int(bid))}
+    finally:
+        con.close()
+
+
+def board_ops_post(ctx: Api, body: dict, bid: int) -> dict:
+    """Merge a client's ops: {"actor": "a-…", "ops": [{node, fields,
+    clock}]} — each op's clock is the client's Lamport clock. Returns
+    the ops that won (some may be superseded) and the new head."""
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        actor = str(body.get("actor") or "")
+        ops = body.get("ops")
+        if not actor or not isinstance(ops, list):
+            raise ApiError(400, "bad_request", "actor and ops[] required")
+        for op in ops:
+            if isinstance(op, dict):
+                op.setdefault("actor", actor)
+        applied = _canvas_call(lambda: core_canvas.apply_remote(
+            con, int(bid), ops))
+        return {"applied": applied, "head": core_canvas.head(con, int(bid)),
+                "clock": core_canvas.get_board(con, int(bid))["clock"]}
+    finally:
+        con.close()
+
+
+def board_place(ctx: Api, body: dict, bid: int) -> dict:
+    """Drop a library object: {"ref": "[[ slug ]]"} or {"kind", "id"},
+    optional x/y. Collections land as a laid-out frame."""
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        x, y = float(body.get("x") or 0), float(body.get("y") or 0)
+        actor = str(body.get("actor") or "") or None
+        if body.get("ref"):
+            nid, logged, _ = _canvas_call(lambda: core_canvas.place_ref(
+                con, int(bid), str(body["ref"]), x, y, actor=actor))
+        else:
+            kind = str(body.get("kind") or "")
+            try:
+                iid = int(body.get("id"))
+            except (TypeError, ValueError):
+                raise ApiError(400, "bad_request", "ref or kind+id required")
+            if kind == "collection":
+                nid, logged, _ = _canvas_call(
+                    lambda: core_canvas.place_collection(
+                        con, int(bid), iid, x, y, actor=actor))
+            else:
+                nid, logged, _ = _canvas_call(
+                    lambda: core_canvas.place_asset(
+                        con, int(bid), kind, iid, x, y, actor=actor))
+        core_canvas.sync_links(con, int(bid))
+        return {"node": nid, "ops": logged,
+                "head": core_canvas.head(con, int(bid))}
+    finally:
+        con.close()
+
+
+def board_presence_get(ctx: Api, body: dict, bid: int, params: dict) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        return {"items": core_canvas.presence(
+            con, int(bid), params.get("exclude") or "")}
+    finally:
+        con.close()
+
+
+def board_presence_post(ctx: Api, body: dict, bid: int) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        actor = str(body.get("actor") or "")
+        if not actor:
+            raise ApiError(400, "bad_request", "actor required")
+        cur = body.get("cursor")
+        cursor = tuple(cur[:2]) if isinstance(cur, list) and len(cur) >= 2 \
+            else None
+        core_canvas.touch_presence(con, int(bid), actor,
+                                   body.get("name") or "",
+                                   body.get("color") or "", cursor,
+                                   body.get("selection") or [])
+        return {"items": core_canvas.presence(con, int(bid), actor)}
+    finally:
+        con.close()
+
+
+def board_comments_get(ctx: Api, body: dict, bid: int, params: dict) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        allc = (params.get("all") or "") in ("1", "true")
+        return {"items": core_canvas.comments(con, int(bid), allc)}
+    finally:
+        con.close()
+
+
+def board_comments_post(ctx: Api, body: dict, bid: int) -> dict:
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        cid = _canvas_call(lambda: core_canvas.add_comment(
+            con, int(bid), body.get("body") or "", body.get("node") or "",
+            float(body.get("x") or 0), float(body.get("y") or 0),
+            body.get("author") or ""))
+        return {"id": cid}
+    finally:
+        con.close()
+
+
+def board_export(ctx: Api, body: dict, bid: int, params: dict) -> dict:
+    """?fmt=html|svg. HTML here is self-contained (file-backed assets
+    render as labelled placeholders — use the app's bundle export for
+    copied assets); SVG is the vector layer."""
+    con = _canvas_con(ctx)
+    try:
+        _board_or_404(con, bid)
+        fmt = (params.get("fmt") or "html").lower()
+        if fmt == "svg":
+            return {"fmt": "svg", "content": core_canvas.render_svg(
+                con, int(bid))}
+        if fmt == "html":
+            return {"fmt": "html", "content": core_canvas.render_html(
+                con, int(bid), params.get("frame") or "")}
+        raise ApiError(400, "bad_request", "fmt must be html or svg")
+    finally:
+        con.close()
+
+
+def asset_usage(ctx: Api, body: dict, kind: str, item_id: int) -> dict:
+    """Which boards use a tracked object (bound canvas nodes)."""
+    con = _canvas_con(ctx)
+    try:
+        return {"items": core_canvas.usage(con, kind, int(item_id))}
     finally:
         con.close()
