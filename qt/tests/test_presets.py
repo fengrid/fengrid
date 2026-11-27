@@ -25,8 +25,13 @@ def env(tmp_path):
     # needs the GUI stack even in tests
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtGui import QGuiApplication
-    if QGuiApplication.instance() is None:
-        QGuiApplication([])
+    app = QGuiApplication.instance()
+    if app is None:
+        app = QGuiApplication([])
+    assert isinstance(app, QGuiApplication), (
+        "QGuiApplication.instance() is not a QGuiApplication — a "
+        "lingering bare QCoreApplication poisons QML component "
+        "creation (#168)")
     con = core_db.connect(str(tmp_path / "t.db"))
     core_presets.ensure_presets(con)
     bridge = Presets(con, str(tmp_path))

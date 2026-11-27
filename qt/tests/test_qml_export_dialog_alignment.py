@@ -42,6 +42,10 @@ def _qapp():
     global _APP
     if _APP is None:
         _APP = QGuiApplication.instance() or QGuiApplication(sys.argv)
+        assert isinstance(_APP, QGuiApplication), (
+            "QGuiApplication.instance() is not a QGuiApplication — a "
+            "lingering bare QCoreApplication poisons QML component "
+            "creation (#168)")
     return _APP
 
 
