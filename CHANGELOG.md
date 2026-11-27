@@ -6,8 +6,293 @@ adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security (pre-release review, issues #3–#11)
+
+- **SEC-1 (high, #3)** — fiddle preview: expanded asset paths are
+  context-escaped so `</script`/`</style` cannot break out of the
+  script/style elements and inject markup.
+- **SEC-2 (high, #4)** — markdown URLs and display text are
+  HTML-escaped before `src`/`href` embedding; project preview escapes
+  substituted `fengrid-asset://` paths in attribute values.
+- **SEC-3 (high, #5)** — raster identification caps declared
+  dimensions at 256 Mpix *before* decoding; a small file with a huge
+  header can no longer force a ~30 GB allocation.
+- **SEC-4 (high, #6)** — SVG parsing is fail-secure: without
+  `defusedxml`, SVGs carrying DOCTYPE/entity declarations are not
+  parsed (billion-laughs hardening).
+- **SEC-5 (medium, #7)** — import/watch directory walks no longer
+  follow symlinks (`rglob` → `os.walk(followlinks=False)`).
+- **SEC-6 (medium, #8)** — ZIP imports enforce 512 MB per-member and
+  2 GB total uncompressed budgets, aborting disk-fill bombs.
+- **SEC-8 (medium, #10)** — the `fengrid-asset://` scheme re-verifies
+  at serve time that the real path (symlink-resolved) lies under an
+  enabled source root — crafted DB rows and post-scan symlink swaps
+  cannot serve arbitrary local files.
+- **SEC-9 (medium, #11)** — exports cap the working raster at
+  128 Mpix before conversion ('orig' exports downscale, not OOM).
+
+### Performance (issues #12–#14)
+
+- Font rescan: single shared directory walk for pre-count + scan
+  (was: two walks per launch); fontTools identification of
+  changed/new files parallelised across 4 workers (#12, partial).
+- Rescan straggler sweep fetches only the current root's `scan_state`
+  rows (index-assisted LIKE) instead of the whole table (#13).
+- Markdown preview regeneration debounced to 150 ms (#14).
+
+### Accessibility (issues #15–#18)
+
+- Rail rows and section headers are keyboard-reachable (Tab, Return/
+  Space to activate, arrows to walk; visible focus rings).
+- Icon-only controls expose accessible names/descriptions.
+- Collapse state, repo clean/dirty and uncommitted-changes state are
+  announced to assistive technology.
+- LIGHT theme `text_muted` and code `ink_faint` darkened to meet
+  WCAG AA contrast on their surfaces.
+
+### Fixed
+
+- **WOFF2 webfont exports were broken in every environment** — the default
+  `font_fmts: ["woff2"]` export path (`exportplus.convert_font`) saves
+  through fontTools' WOFF2 encoder, which hard-requires brotli, but no
+  manifest ever declared it: dev venvs raised `ImportError: No module
+  named brotli` (6 tests) and every frozen bundle shipped without the
+  extension. brotli is now a declared runtime dependency, so uv installs
+  it everywhere and PyInstaller bundles it.
+
+### Changed
+
+- **Packaging moved to uv** (project mode, replacing pip + the two floating
+  requirements files). `qt/pyproject.toml` is now the single source of
+  truth: the runtime dependency list absorbs the app's actual imports
+  (`fonttools`, `platformdirs`), the never-imported `watchdog` entry is
+  dropped, and build/QA tooling moved to dependency-groups (`build` =
+  PyInstaller, `dev` = pytest/ruff). The committed `qt/uv.lock` freezes
+  every install — pipelines and local dev run `uv sync --frozen`, so two
+  builds of the same commit ship identical dependency versions. Source
+  installs become `uv sync` (+ `uv run`) instead of venv + `pip install
+  -e .`; `build/requirements-build.txt` / `build/requirements-dev.txt`
+  are deleted.
+
+### Removed
+
+- **The 0.x web interface is retired** — Qt 6 is now the only Fengrid.
+  Deleted: the five single-file HTML panes (`index.html`, `fonts.html`,
+  `code.html`, `colors.html`, `projects.html`), the old webshare server
+  (`server/` — serve.py, import_engine, connect page, vendored QR lib),
+  the web-app installers and updater (`install.sh`, `install.ps1`,
+  `update.sh`), and the 0.x shell tooling (`scan-icons.sh`,
+  `scan-fonts.sh`, `icon-meta.sh`, `refresh-icons.sh`) whose behaviour
+  lives on as in-process Python (`core/scanner.py`, `core/fonts.py`,
+  `core/indexer.py`). The GitHub Pages landing page and 0.x screenshots
+  are removed too; README/QUICKSTART/DEVELOPMENT are rewritten for the
+  Qt6 app. Migration note: 0.x installs are detected by the restore
+  script (running `serve.py` refuses a restore).
+
 ### Added
 
+- **REST API v1** — `api/v1`: stdlib `ThreadingHTTPServer` with bearer-token
+  middleware, CORS, request logging; `TaskScheduler` thread pool; long
+  operations return `202` with a pollable job (`GET /jobs/{id}`). 29+
+  endpoints: health/version, inventory, assets (list/describe/PATCH
+  edit-update-save/star/tags/collect/copy), ingest (files/zip/folder —
+  imports are indexed automatically), export (icons/webfonts/palettes/
+  snippets/bundle), collections + refs, libraries, tags, custom fields,
+  projects, backups/restore, DB admin (check/vacuum/checkpoint/optimize/
+  rebuild_fts/sweep), watch folders. Ships with `openapi.yaml` (29 paths)
+  and a Postman collection covering every endpoint.
+- **Asset identity: GUID + slug** — every tracked object (asset, snippet,
+  palette, collection, library, project) carries a generated GUID
+  (assigned at first ingest, backfilled on migration) and a user-settable
+  `slug` (empty by default, globally unique). Slugs and GUIDs power
+  `[[ … ]]` asset references in snippets and projects.
+- **Multi-kind assets** — `core/kinds.py` registry: beyond icons and
+  fonts, Fengrid now tracks images, video, audio, documents, structured
+  data (json/xml/yml/csv/sql…), spatial (GeoJSON/KML/GPX/SHP…),
+  timeseries (HDF5/Arrow/…) and markdown files. Folder scans and imports
+  classify all kinds; non-rasters skip pixel identification.
+- **`[[ asset ]]` references** — link to any tracked object from
+  snippets and project code: `[[ slug ]]`, `[[ GUID ]]`, or path form
+  `[[ icon/adwaita/devices/audio-headphones-symbolic ]]`; expansion to
+  `fengrid-asset://` URLs in markdown previews, the web fiddle Run ▸
+  preview and the Projects preview; unresolved refs stay visible.
+  API: `/links/resolve`, `/links/expand`, `/lookup?slug=|guid=`.
+- **Structured-data content CRUD** — `asset_data` revisioned JSON payload
+  per data/timeseries asset; REST `GET/PUT/PATCH/DELETE
+  /assets/data/{id}/content` and `GET/POST /assets/data/{id}/points`
+  for sensor/service pushes (timeseries append, 100k-point cap).
+- **UI**: Fonts rail — Types above Families, all rail sections collapse
+  via chevron headers; Colors — 7-color schemes with an add-swatch tile
+  (5 default), contextual top bar in Terminal mode, single Save/Export
+  drop-down; inspector Identity section (GUID copy, slug edit with
+  uniqueness validation); Source tab in the Projects bottom dock.
+
+### Fixed
+
+- REST API ingest (files/zip) now indexes materialised imports — assets
+  are visible immediately after the import job completes, matching the
+  GUI bridge behaviour.
+- Smart collections resolve for every asset kind (legacy code used an
+  `asset_tag` join and grouped on the wrong column).
+
+### Fixed
+
+- Terminal no longer floods with `qt.svg: Duplicate unique style id`
+  warnings while viewing icon sets whose SVGs redeclare paint/gradient
+  ids (dev-qt). Qt re-logs that warning on every render; a scoped Qt
+  message handler now drops exactly that line while every other
+  diagnostic still reaches stderr (`FENGRID_DEBUG_QT_SVG=1` shows them).
+
+- **Font details cramped in the properties panel** — variant cards for
+  many-weight families (27+ variants) rendered flush against each other
+  with clipped specimen lines: cards hand-bound `height` (racing the
+  layout's sizing pass and freezing stale one-line measurements) at a
+  10 px column spacing that vanished against the near-identical darks.
+  Cards now size via `implicitHeight` (layout-owned, re-queried on every
+  font/weight/width change) with an even 14 px column rhythm, 12 px card
+  padding and 8 px internal gaps.
+- **Linux bundle failed to launch** (`ImportError: libxcb-9065bb12.so.1.1.0`
+  out of `PIL/Image.py`) — the GLX-crash strip in `build-linux.sh`
+  removed Pillow's *auditwheel-hashed* vendored `libxcb`/`libXau` copies,
+  but Pillow 13's `_imaging` hard-links them (`DT_NEEDED`); wheels' hashed
+  copies have non-system sonames and cannot shadow the end machine's
+  libraries, so only **unhashed** `libX11.so.1`/`libxcb.so.1`/`libGL*`
+  are stripped now. Also: the docker pipeline's `FENGRID_SMOKE` knob was
+  read but never forwarded into the build container — container artifacts
+  shipped unsmoked; the wrapper now passes it as a build arg and both
+  Dockerfiles export it, so every build gates on the frozen binary
+  actually starting.
+
+### Added
+
+- **Data management suite — import, export, backup, database** (dev-qt):
+  four new Settings categories drive a `dataio` bridge. *Import*: files /
+  ZIP / folder ingest in **copy (embedded) or link (symlink)** modes with
+  permission reporting; on-the-fly format conversion (png/bmp/ico/webp,
+  SVG rasterised first); automated renaming — template tokens
+  (`{name} {ext} {n} {guid} {rand} {csv}`), prefix/suffix, regex
+  find/replace that never aborts a batch, cardinal/random/GUID
+  enumeration, CSV-supplied names; memory-safe by construction (64 KB
+  streamed copies, one file in memory, chunked index commits).
+  *Watch folders*: periodic signature-checked scans over local paths,
+  Storage mounts (SMB/NFS/SSHFS/S3) and pull transports
+  (rsync/scp/sftp/ftp/http via argv-only commands, probed for
+  availability); **OneDrive · iCloud · Google Drive listed as coming
+  soon**. *Export*: multi-format icon batches with resize +
+  **alpha-preserving tint** (the cross-set recolor Photoshop was needed
+  for) and optional per-file script hooks (argv, injectable runner,
+  never a shell); webfont packaging (woff2/woff + relative @font-face
+  CSS via fontTools); HEX·HSL·RGB·CMYK code lists (txt/csv/md); snippet
+  exports (bundle/VS Code/massCode/files); **library·collection·project
+  bundles** round-trip with tags, collections and project membership.
+  *Backup*: one self-contained **`*.tar.gz` restore package** — a
+  structured manifest (version/build details incl. release tag +
+  Qt/Python, system settings, user preferences, configuration options
+  incl. sources/mounts/watches/opts, local environment details,
+  SHA-256 file checksums, and log/debug tails **when present**), full
+  consistent copies of both SQLite databases (online-backup API — safe
+  mid-scan, registry included), and **generated platform restore
+  scripts** (`restore.sh` POSIX + `restore.ps1` Windows): they download
+  Fengrid pinned to the backup's recorded release tag, refuse to run
+  where any Fengrid install/process/server is detected (exit code 2
+  with the reason), copy databases + configuration into the *target*
+  machine's per-OS data dir (usernames recomputed — XDG /
+  `Application Support` / `%LOCALAPPDATA%`), handle permissions
+  gracefully (no auto-sudo; numbered error codes 2–7 with clear
+  reasons), and SHA-256-verify the restored database. In-app
+  auto-backup on quit, restore with `.pre-restore` rollback +
+  checksum verification, relaunch. Legacy zip backups still restore. *Database*: stats, integrity check, VACUUM,
+  WAL checkpoint, optimize, FTS rebuild, orphan sweep — all threaded
+  with progress and inline results.
+
+- **Command bar / palette** (dev-qt) — a Spotlight/Alfred/VS-Code-style
+  command bar over the main UI: opens with **Alt+`** (Option+` on macs)
+  or the header's magnifier, grouped results for commands (navigate,
+  rescan, theme, settings categories, database management), assets
+  (searching the SQLite catalog without disturbing the grid's own
+  search/filters — picking an asset reveals it, clearing filters if
+  needed), snippets (title + body search), and recent databases; a
+  no-match query falls through to the grid's quick search. The hotkey
+  is user-rebindable and persisted as a GLOBAL pref
+  (`command_shortcut` in the app registry, so it survives database
+  switches); it is configured in **first-run setup** (Behavior
+  section) and Settings → General via a custom `ShortcutCapture` box
+  (click → press combination; KeySequenceEdit is absent from the
+  PySide6 6.9.3 Controls build), with the current binding advertised
+  in the header placeholder ("search assets ( / ) · Alt + `") and in
+  the palette's own input.
+
+- **Multiple databases** (dev-qt) — one Fengrid database (one SQLite
+  file holding projects, libraries, collections, assets and metadata)
+  active at a time. A new app registry (`registry.db` beside the
+  library file) tracks every database ever opened: the hamburger menu
+  shows the current database, a starred **Quick access** list, and
+  **Recent** with last-opened times — picking any entry relaunches
+  Fengrid into it (the only safe swap, since every bridge holds the
+  single connection; `FENGRID_NO_RELAUNCH` suppresses the exec for
+  tests). New/Open database… use native file dialogs (new databases
+  build their schema via `db.connect`), vanished entries dim as
+  "(missing)", Clear recent forgets history but keeps the active entry.
+  User preferences (theme, icon size, search mode, keymap, palette
+  rule, startup pane, update check, last export dir) moved to the
+  registry as GLOBAL keys — switching databases no longer repaints the
+  app, and existing databases seed the registry on first open. The
+  window title carries the active database's name.
+- **Storage backends** (dev-qt) — a new Settings → Storage section
+  attaches content from local directories (folder picker), SMB/CIFS
+  (gio + session keyring), NFS, SSHFS (ssh agent) and S3-compatible
+  buckets (s3fs). Mount-based attach resolves every backend to a local
+  path, so scan/preview/export work unchanged and credentials never
+  pass through Fengrid. Registered mounts persist per database
+  (`storage_mount`), remount automatically before the first scan at
+  startup, and list with health + Eject in Settings. Backend rows show
+  honest availability (missing tool ⇒ install hint + disabled Attach),
+  and any backend accepts an already-mounted local path as the
+  no-root fallback (the supported route for NFS). Includes the
+  callout: syncing data with personal cloud storage services (Dropbox,
+  Google Drive, OneDrive) is coming soon.
+- **Settings screen + first-run setup** (dev-qt) — a VS Code-style
+  Settings surface behind a new header main menu (hamburger → Settings…,
+  Check for updates, About; also Ctrl+,): category tree + live search
+  over rows that apply immediately, covering every persisted option —
+  search mode, icon size, startup pane, theme, editor keymap, palette
+  rule, update check, detected system icon/font paths with per-path
+  toggles, and asset folder add/remove/enable + rescan controls. A
+  one-time setup screen (shown until `first_run_done`, re-runnable from
+  Settings) walks through system paths, folders, look and behavior in a
+  single modal while the initial ingest runs in the background —
+  finishing saves to the same keys and points back at the menu. Core
+  fixes this exposed: user folder sources are actually scanned now
+  (the worker's default `kinds` skipped them), scans chunk-commit so
+  settings saves never block behind one whole-scan transaction,
+  disabled sources are swept from the library at the next scan, asset
+  ids survive re-identification (tags/links no longer orphan on touch),
+  and rescan requests queue instead of dropping when a folder is added
+  mid-scan.
+
+- **QT6 taxonomy layer** (dev-qt) — the organizational backbone of the
+  Qt port:
+  - **Saved libraries** — named tag sets (match any or all tags) that
+    resolve to a live asset view; add/configure from the left rail
+    (`+ New library…`, right-click → Configure…/Delete).
+  - **Smart collections** — stored criteria (tags any/all, theme,
+    context, ext, starred, name-contains) evaluated live at query time;
+    per-kind rows in the rail's Smart section with an editor dialog and
+    click-to-filter on every pane that carries the kind.
+  - **Custom fields** — global definitions of type text / number / bool
+    / date / select / id, edited in the asset inspector (FIELDS
+    section); right-click a field label to delete.
+  - **Generated IDs** — id-type fields mint `prefix` + zero-padded
+    counters (suffix-scan based; manual high values push the counter);
+    Generate ID ▸ in the asset context menu.
+  - **Typed links** — directed, role-labelled links between assets,
+    collections, libraries, projects (one-to-many / many-to-one /
+    many-to-many all expressible); Link to… in the asset context menu,
+    both-direction listing in the inspector.
+  - **Tag management** — right-click a tag to rename or delete it.
+  - **Projects × collections** — a project can now collect an entire
+    collection (its refs follow live); Attach collection… in the
+    project context menu.
 - **Snippet import from VSCode and massCode** — the Code pane's new
   **Import** button reads `.code-snippets` / per-language `.json`
   snippet files (JSONC: comments and trailing commas tolerated) and
